@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import Link from "next/link"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
@@ -20,8 +21,6 @@ interface DialogState {
 
 export default function FormB() {
   const [context, setContext] = useState("")
-  const [extraInfo, setExtraInfo] = useState("")
-  const [pdfFile, setPdfFile] = useState<File | null>(null)
   const [dialogState, setDialogState] = useState<DialogState>({
     active: false,
     questionIndex: 0,
@@ -32,19 +31,12 @@ export default function FormB() {
   const [userInput, setUserInput] = useState("")
   const [loading, setLoading] = useState(false)
 
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (file && file.type === "application/pdf") {
-      setPdfFile(file)
-    }
-  }
-
   const handleStartDialog = async () => {
     setLoading(true)
     try {
+      // Verwende den gleichen Ansatz wie Variante A
       const formData = new FormData()
-      if (pdfFile) formData.append("pdf", pdfFile)
-      formData.append("extraInfo", extraInfo)
+      formData.append("extraInfo", context || "")
 
       const result = await startDialog(formData)
       
@@ -58,7 +50,7 @@ export default function FormB() {
       setChatHistory([
         {
           role: "assistant",
-          content: "Willkommen! Ich freue mich, dass ich Ihnen helfen kann, das Formular gemeinsam auszufüllen."
+          content: "Willkommen! Ich führe Sie durch das Formular. Lassen Sie uns beginnen."
         },
         {
           role: "assistant", 
@@ -92,232 +84,240 @@ export default function FormB() {
         totalQuestions: dialogState.questions.length
       })
 
-      // Antwort speichern
-      const newAnswers = {
-        ...dialogState.answers,
-        [currentQuestion.feld]: userInput
-      }
+      // LLM-Antwort zur Chat-Historie hinzufügen
+      setChatHistory(prev => [...prev, {
+        role: "assistant",
+        content: response.response
+      }])
 
-      // Dialog-State aktualisieren
-      let newQuestionIndex = dialogState.questionIndex
+      // Nur wenn es KEINE Nachfrage war, Antwort speichern und weiter
       if (response.nextQuestion && !userInput.endsWith("?")) {
-        newQuestionIndex = dialogState.questionIndex + 1
+        // Antwort speichern
+        const newAnswers = {
+          ...dialogState.answers,
+          [currentQuestion.feld]: userInput
+        }
+
+        // Zur nächsten Frage
+        const newQuestionIndex = dialogState.questionIndex + 1
+        
+        setDialogState(prev => ({
+          ...prev,
+          questionIndex: newQuestionIndex,
+          answers: newAnswers
+        }))
+
+        // Nächste Frage nach kurzer Verzögerung anzeigen
+        if (newQuestionIndex < dialogState.questions.length) {
+          setTimeout(() => {
+            setChatHistory(prev => [...prev, {
+              role: "assistant",
+              content: dialogState.questions[newQuestionIndex]?.frage || "Dialog beendet."
+            }])
+          }, 1000)
+        }
       }
-
-      setDialogState({
-        ...dialogState,
-        questionIndex: newQuestionIndex,
-        answers: newAnswers
-      })
-
-      // Assistent-Antwort hinzufügen
-      setChatHistory([
-        ...newChatHistory,
-        { role: "assistant", content: response.message }
-      ])
+      // Bei Nachfragen (userInput endet mit "?") wird nicht weitergeschaltet
 
     } catch (error) {
-      console.error("Fehler beim Senden der Nachricht:", error)
-      setChatHistory([
-        ...newChatHistory,
-        { role: "assistant", content: "Entschuldigung, es gab einen Fehler. Bitte versuchen Sie es erneut." }
-      ])
+      console.error("Fehler beim Senden:", error)
+      setChatHistory(prev => [...prev, {
+        role: "assistant",
+        content: "Entschuldigung, ein Fehler ist aufgetreten. Bitte versuchen Sie es erneut."
+      }])
     }
 
     setUserInput("")
   }
 
-  const handleSaveData = async () => {
+  const handleSave = async () => {
     try {
-      await saveDialogData({
+      const dialogData = {
         questions: dialogState.questions,
         answers: dialogState.answers,
         chatHistory: chatHistory
-      })
-      alert("Dialog-Daten wurden erfolgreich gespeichert.")
+      }
+      const result = await saveDialogData(dialogData)
+      alert(`Dialog-Daten gespeichert: ${result.filename}`)
     } catch (error) {
-      console.error("Fehler beim Speichern:", error)
-      alert("Fehler beim Speichern der Daten")
+      console.error("Speicher-Fehler:", error)
+      alert("Fehler beim Speichern")
     }
   }
 
-  const isDialogComplete = dialogState.questionIndex >= dialogState.questions.length
+  const progress = dialogState.questions.length > 0 
+    ? (dialogState.questionIndex / dialogState.questions.length) * 100 
+    : 0
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-sky-50 via-white to-blue-100 text-gray-900 font-sans">
-      <div className="max-w-7xl mx-auto px-6 py-10">
-        <h1 className="text-4xl font-extrabold tracking-tight text-center mb-10">
-          Dialogbasiertes Gebäudeformular (Variante B)
-        </h1>
+    <div className="min-h-screen bg-gray-50">
+      {/* Navigation */}
+      <nav className="bg-white border-b border-gray-200 sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto px-6 py-4">
+          <div className="flex items-center justify-between">
+            <Link href="/" className="flex items-center space-x-3 hover:opacity-80 transition-opacity">
+              <div className="w-10 h-10 bg-emerald-600 rounded-lg flex items-center justify-center">
+                <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-2v2h2V9zM9 9h2v2H9V9z"/>
+                </svg>
+              </div>
+              <div>
+                <h1 className="text-xl font-semibold text-gray-900">FormularIQ</h1>
+                <p className="text-sm text-gray-500">Variante B - Dialog-basiert</p>
+              </div>
+            </Link>
+            
+            <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-2 text-sm text-gray-600">
+                <div className="w-8 h-8 bg-emerald-100 rounded-lg flex items-center justify-center">
+                  <span className="text-emerald-600 font-semibold text-sm">B</span>
+                </div>
+                <span>Innovativer Ansatz</span>
+              </div>
+              <Link href="/form-a">
+                <Button variant="outline" className="text-sm">
+                  Zu Variante A
+                </Button>
+              </Link>
+            </div>
+          </div>
+        </div>
+      </nav>
+
+      <main className="max-w-4xl mx-auto px-6 py-8">
+        {/* Header */}
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-sm font-medium mb-4">
+            Konversationelle Formularerfassung
+          </div>
+          <h1 className="text-3xl font-bold text-gray-900 mb-4">
+            Dialog-basierte Erfassung
+          </h1>
+          <p className="text-lg text-gray-600 max-w-2xl mx-auto">
+            Optional können Sie Kontextinformationen eingeben und die KI durch einen natürlichen Dialog führen lassen.
+          </p>
+        </div>
 
         {!dialogState.active ? (
-          <div className="max-w-2xl mx-auto space-y-6">
-            {/* Schritt 1: Upload und Kontext */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Schritt 1: PDF oder Kontextinformationen</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium mb-2">
-                    PDF-Formular hochladen (optional)
-                  </label>
-                  <input
-                    type="file"
-                    accept=".pdf"
-                    onChange={handleFileUpload}
-                    className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-                  />
-                  {pdfFile && (
-                    <p className="text-sm text-green-600 mt-2">
-                      PDF ausgewählt: {pdfFile.name}
-                    </p>
-                  )}
+          /* Setup-Bereich - Gleich wie Variante A */
+          <Card className="bg-white border border-gray-200 max-w-2xl mx-auto">
+            <CardHeader>
+              <CardTitle className="text-xl text-gray-900 text-center">Dialog vorbereiten</CardTitle>
+              <p className="text-gray-600 text-center">
+                Optional können Sie Kontextinformationen eingeben, bevor der Dialog startet.
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Kontext-Eingabe */}
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-700">
+                  Kontext eingeben (optional)
+                </label>
+                <p className="text-sm text-gray-500">
+                  Beschreiben Sie spezifische Anforderungen oder lassen Sie das Feld leer für Standard-Fragen.
+                </p>
+                <Textarea
+                  value={context}
+                  onChange={(e) => setContext(e.target.value)}
+                  placeholder="z.B. Beschreiben Sie das zu erfassende Gebäude oder geben Sie zusätzliche Informationen ein..."
+                  className="min-h-[120px]"
+                />
+              </div>
+
+              {/* Start Button */}
+              <Button 
+                onClick={handleStartDialog}
+                disabled={loading}
+                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-3 text-lg"
+              >
+                {loading ? "Dialog wird gestartet..." : "Dialog starten"}
+              </Button>
+            </CardContent>
+          </Card>
+        ) : (
+          /* Dialog-Bereich */
+          <div className="space-y-6">
+            {/* Fortschritt */}
+            <Card className="bg-white border border-gray-200">
+              <CardContent className="py-4">
+                <div className="flex items-center justify-between text-sm text-gray-600 mb-2">
+                  <span>Fortschritt</span>
+                  <span>{dialogState.questionIndex} von {dialogState.questions.length} Fragen</span>
                 </div>
-                
-                <div>
-                  <label className="block text-sm font-medium mb-2">
-                    Zusätzliche Kontextinformationen (optional)
-                  </label>
-                  <Textarea
-                    placeholder="Zusätzliche Informationen zum Gebäude..."
-                    value={extraInfo}
-                    onChange={(e) => setExtraInfo(e.target.value)}
-                    className="min-h-[100px]"
+                <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div 
+                    className="bg-emerald-600 h-2 rounded-full transition-all duration-300"
+                    style={{ width: `${progress}%` }}
                   />
                 </div>
               </CardContent>
             </Card>
 
-            {/* Schritt 2: Dialog starten */}
-            <Card>
+            {/* Chat-Bereich */}
+            <Card className="bg-white border border-gray-200">
               <CardHeader>
-                <CardTitle>Schritt 2: Dialog starten</CardTitle>
+                <CardTitle className="text-lg text-gray-900">Dialog</CardTitle>
               </CardHeader>
               <CardContent>
-                <Button 
-                  onClick={handleStartDialog}
-                  disabled={loading}
-                  className="w-full"
-                >
-                  {loading ? "Dialog wird gestartet..." : "Dialog starten"}
-                </Button>
+                {/* Chat-Verlauf */}
+                <div className="space-y-4 mb-6 max-h-96 overflow-y-auto">
+                  {chatHistory.map((message, index) => (
+                    <div key={index} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                      <div className={`max-w-xs lg:max-w-md px-4 py-3 rounded-lg ${
+                        message.role === 'user' 
+                          ? 'bg-emerald-600 text-white' 
+                          : 'bg-gray-100 text-gray-900'
+                      }`}>
+                        <p className="text-sm leading-relaxed">{message.content}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Eingabe-Bereich */}
+                <div className="border-t border-gray-200 pt-4">
+                  <div className="flex space-x-3">
+                    <input
+                      type="text"
+                      value={userInput}
+                      onChange={(e) => setUserInput(e.target.value)}
+                      onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+                      placeholder="Ihre Antwort eingeben..."
+                      className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                    <Button 
+                      onClick={handleSendMessage}
+                      disabled={!userInput.trim()}
+                      className="px-6 py-2 bg-emerald-600 hover:bg-emerald-700"
+                    >
+                      Senden
+                    </Button>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-2">
+                    💡 <strong>Tipp:</strong> Beenden Sie Ihre Nachricht mit "?" um eine Rückfrage zu stellen, ohne zur nächsten Frage zu wechseln
+                  </p>
+                </div>
               </CardContent>
             </Card>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Chat-Interface */}
-            <div className="lg:col-span-2">
-              <Card className="h-[600px] flex flex-col">
-                <CardHeader>
-                  <CardTitle>
-                    Formular-Dialog
-                    {dialogState.questions.length > 0 && (
-                      <span className="text-sm font-normal text-gray-600 ml-2">
-                        ({dialogState.questionIndex + 1} von {dialogState.questions.length})
-                      </span>
-                    )}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="flex-1 flex flex-col">
-                  {/* Chat-Verlauf */}
-                  <div className="flex-1 overflow-y-auto space-y-4 mb-4 p-4 bg-gray-50 rounded-lg">
-                    {chatHistory.map((msg, index) => (
-                      <div
-                        key={index}
-                        className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
-                      >
-                        <div
-                          className={`max-w-[80%] p-3 rounded-lg ${
-                            msg.role === "user"
-                              ? "bg-blue-600 text-white"
-                              : "bg-white border border-gray-200"
-                          }`}
-                        >
-                          <div className="text-sm font-medium mb-1">
-                            {msg.role === "user" ? "Du" : "Assistent"}
-                          </div>
-                          <div className="whitespace-pre-wrap">{msg.content}</div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
 
-                  {/* Eingabefeld */}
-                  {!isDialogComplete && (
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={userInput}
-                        onChange={(e) => setUserInput(e.target.value)}
-                        onKeyPress={(e) => e.key === "Enter" && handleSendMessage()}
-                        placeholder="Ihre Antwort..."
-                        className="flex-1 border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                      <Button onClick={handleSendMessage} disabled={!userInput.trim()}>
-                        Senden
-                      </Button>
-                    </div>
-                  )}
-
-                  {isDialogComplete && (
-                    <div className="text-center p-4 bg-green-50 rounded-lg">
-                      <p className="text-green-800 font-medium">
-                        ✅ Formular vollständig ausgefüllt!
-                      </p>
-                      <Button onClick={handleSaveData} className="mt-2">
-                        Daten speichern
-                      </Button>
-                    </div>
-                  )}
+            {/* Speichern */}
+            {dialogState.questionIndex >= dialogState.questions.length && (
+              <Card className="bg-white border border-gray-200">
+                <CardContent className="py-6 text-center">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Dialog abgeschlossen!</h3>
+                  <p className="text-gray-600 mb-4">Alle Fragen wurden beantwortet. Sie können die Daten jetzt speichern.</p>
+                  <Button 
+                    onClick={handleSave}
+                    className="bg-green-600 hover:bg-green-700 text-white px-6 py-2"
+                  >
+                    Ergebnisse speichern
+                  </Button>
                 </CardContent>
               </Card>
-            </div>
-
-            {/* Fortschritt und gesammelte Antworten */}
-            <div className="space-y-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Fortschritt</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span>Abgeschlossen:</span>
-                      <span>{Object.keys(dialogState.answers).length} von {dialogState.questions.length}</span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div 
-                        className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                        style={{
-                          width: `${(Object.keys(dialogState.answers).length / dialogState.questions.length) * 100}%`
-                        }}
-                      />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Bisherige Antworten</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2 max-h-[400px] overflow-y-auto">
-                    {Object.entries(dialogState.answers).map(([field, answer]) => (
-                      <div key={field} className="p-2 bg-gray-50 rounded text-sm">
-                        <div className="font-medium text-gray-700">{field}:</div>
-                        <div className="text-gray-600">{answer}</div>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
+            )}
           </div>
         )}
-      </div>
-    </main>
+      </main>
+    </div>
   )
 }

@@ -1,0 +1,71 @@
+{
+  "instructions": {
+    "gebäude": {
+      "instruction": "Bitte geben Sie den Namen oder die Bezeichnung Ihres Gebäudes an.",
+      "value": ""
+    },
+    "energieträger": {
+      "instruction": "Wählen Sie den Haupt-Energieträger Ihres Gebäudes (z.B. Erdgas, Heizöl, Solarthermie).",
+      "value": ""
+    },
+    "wohnungsbezeichnung": {
+      "instruction": "Bitte geben Sie die Bezeichnung oder das Nummernsystem Ihrer Wohnungen an.",
+      "value": ""
+    },
+    "gebäudeseite": {
+      "instruction": "Wählen Sie die Richtung der Gebäudefront (z.B. Süd, West, Ost).",
+      "value": ""
+    },
+    "himmelsrichtung": {
+      "instruction": "Bitte geben Sie die Himmelsrichtung des Gebäudes an (z.B. Nordost, Südsüdwest).",
+      "value": ""
+    },
+    "bestand_wände": {
+      "instruction": "Wählen Sie den Bestand der Gebäudewände (z.B. Mauerwerk, Holzbalken).",
+      "value": ""
+    },
+    "dicke_mm": {
+      "instruction": "Bitte geben Sie die Dicke der Gebäudewände in Millimetern an.",
+      "value": ""
+    },
+    "material": {
+      "instruction": "Wählen Sie das Material, aus dem Ihre Gebäudewände bestehen (z.B. Ziegel, Beton).",
+      "value": ""
+    },
+    "modernisiert": {
+      "instruction": "Ja/Nein: Ist Ihr Gebäude modernisiert?",
+      "value": ""
+    },
+    "modernisierungsmaßnahmen": {
+      "instruction": "Bitte beschreiben Sie die Maßnahmen, die bei der Modernisierung Ihres Gebäudes durchgeführt wurden.",
+      "value": ""
+    },
+    "maßnahme_art": {
+      "instruction": "Wählen Sie den Typ der Modernisierungsmaßnahmen (z.B. Heizung, Dach, Fenster).",
+      "value": ""
+    },
+    "u_wert": {
+      "instruction": "Bitte geben Sie den U-Wert Ihres Gebäudes in W/m²K an.",
+      "value": ""
+    },
+    "optik": {
+      "instruction": "Wählen Sie die Optik der Fassade Ihres Gebäudes (z.B. Glas, Holz, Mauerwerk).",
+      "value": ""
+    }
+  },
+  "values": {
+    "gebäude": "",
+    "energieträger": "",
+    "wohnungsbezeichnung": "",
+    "gebäudeseite": "",
+    "himmelsrichtung": "",
+    "bestand_wände": "",
+    "dicke_mm": "",
+    "material": "",
+    "modernisiert": "",
+    "modernisierungsmaßnahmen": "",
+    "maßnahme_art": "",
+    "u_wert": "",
+    "optik": ""
+  }
+}
