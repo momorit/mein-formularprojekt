@@ -1,103 +1,139 @@
-import Image from "next/image";
+"use client"
+
+import { useState } from "react"
+import { Textarea } from "@/components/ui/textarea"
+import { Button } from "@/components/ui/button"
+import { getInstructions, saveFormData, sendChatMessage } from "@/lib/api"
 
 export default function Home() {
-  return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  const [context, setContext] = useState("")
+  const [instructions, setInstructions] = useState<any>(null)
+  const [values, setValues] = useState<any>({})
+  const [loading, setLoading] = useState(false)
+  const [chat, setChat] = useState<{ sender: string; text: string }[]>([])
+  const [chatInput, setChatInput] = useState("")
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
+  const handleGenerate = async () => {
+    setLoading(true)
+    try {
+      const result = await getInstructions(context)
+      setInstructions(result)
+    } catch (e) {
+      alert("Fehler bei der Verarbeitung")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleSave = async () => {
+    try {
+      await saveFormData(instructions, values)
+      alert("Daten wurden gespeichert.")
+    } catch {
+      alert("Speichern fehlgeschlagen")
+    }
+  }
+
+  const handleChatSend = async () => {
+    if (!chatInput.trim()) return
+    const newChat = [...chat, { sender: "user", text: chatInput }]
+    setChat(newChat)
+    setChatInput("")
+    const res = await sendChatMessage(chatInput)
+    setChat([...newChat, { sender: "bot", text: res.response }])
+  }
+
+  return (
+    <main className="min-h-screen bg-gradient-to-br from-sky-50 via-white to-blue-100 text-gray-900 font-sans">
+      <div className="max-w-7xl mx-auto px-6 py-10">
+        <h1 className="text-4xl font-extrabold tracking-tight text-center mb-10">
+          Formular-Assistent
+        </h1>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Formularseite */}
+          <div className="lg:col-span-2 space-y-6">
+            <Textarea
+              placeholder="Zusatzinformationen (optional)..."
+              value={context}
+              onChange={(e) => setContext(e.target.value)}
+              className="min-h-[100px]"
             />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+            <div className="flex flex-wrap gap-4">
+              <Button onClick={handleGenerate} disabled={loading}>
+                {loading ? "Wird geladen..." : "Anweisungen generieren"}
+              </Button>
+              {instructions && (
+                <Button onClick={handleSave} variant="secondary">
+                  Als JSON speichern
+                </Button>
+              )}
+            </div>
+
+            {instructions && (
+              <div className="grid md:grid-cols-2 gap-6">
+                {Object.entries(instructions).map(([key, obj]) => (
+                  <div
+                    key={key}
+                    className="bg-white p-6 rounded-xl shadow-md border border-slate-200 hover:shadow-lg transition"
+                  >
+                    <label className="font-bold text-slate-800 text-sm mb-1 block">
+                      {key.toUpperCase()}
+                    </label>
+                    <p className="text-sm text-slate-600 mb-2 leading-snug">
+                      {obj.instruction}
+                    </p>
+                    <input
+                      type="text"
+                      className="border border-slate-300 rounded px-3 py-2 w-full"
+                      value={values[key] || ""}
+                      onChange={(e) =>
+                        setValues({ ...values, [key]: e.target.value })
+                      }
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Chatbereich */}
+          <div className="bg-white p-6 rounded-xl shadow-md h-fit sticky top-10 flex flex-col max-h-[80vh] border border-slate-200">
+            <h2 className="font-semibold text-lg mb-3 text-slate-800">
+              Chat mit dem Assistenten
+            </h2>
+            <div className="flex-1 overflow-y-auto space-y-2 mb-3 pr-1 custom-scrollbar">
+              {chat.map((msg, i) => (
+                <div
+                  key={i}
+                  className={`text-sm whitespace-pre-wrap ${
+                    msg.sender === "user" ? "text-right" : "text-left text-gray-700"
+                  }`}
+                >
+                  <span
+                    className={`block px-3 py-2 rounded-xl inline-block ${
+                      msg.sender === "user"
+                        ? "bg-blue-100 text-blue-900"
+                        : "bg-slate-100"
+                    }`}
+                  >
+                    {msg.text}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <input
+                className="flex-1 border border-slate-300 rounded px-3 py-2"
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                placeholder="Frage stellen..."
+              />
+              <Button onClick={handleChatSend}>Senden</Button>
+            </div>
+          </div>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
-  );
+      </div>
+    </main>
+  )
 }
