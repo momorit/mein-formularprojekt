@@ -59,7 +59,7 @@ export default function Home() {
                   </div>
                   <div>
                     <CardTitle className="text-xl text-gray-900">Sichtbares Formular</CardTitle>
-                    <p className="text-sm text-gray-500">Traditioneller Ansatz</p>
+                    <p className="text-sm text-gray-500">erzeugte Hinweise</p>
                   </div>
                 </div>
               </div>
@@ -112,7 +112,7 @@ export default function Home() {
                   </div>
                   <div>
                     <CardTitle className="text-xl text-gray-900">Dialog-basiert</CardTitle>
-                    <p className="text-sm text-gray-500">Innovativer Ansatz</p>
+                    <p className="text-sm text-gray-500">Interaktiver Ansatz</p>
                   </div>
                 </div>
               </div>

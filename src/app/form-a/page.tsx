@@ -96,7 +96,7 @@ export default function FormA() {
                 <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
                   <span className="text-blue-600 font-semibold text-sm">A</span>
                 </div>
-                <span>Traditioneller Ansatz</span>
+                <span>Sichtbares Formular</span>
               </div>
               <Link href="/form-b">
                 <Button variant="outline" className="text-sm">

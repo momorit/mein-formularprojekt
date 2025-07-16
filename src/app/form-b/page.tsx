@@ -5,7 +5,7 @@ import Link from "next/link"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
-import { startDialog, sendDialogMessage, saveDialogData } from "@/lib/api"
+import { startDialog, sendDialogMessage, saveDialogData, saveQuestionsOnly } from "@/lib/api"
 
 interface ChatMessage {
   role: "user" | "assistant"
@@ -30,39 +30,69 @@ export default function FormB() {
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([])
   const [userInput, setUserInput] = useState("")
   const [loading, setLoading] = useState(false)
+  
+  // Neue States für Fragen-Download
+  const [questionsGenerated, setQuestionsGenerated] = useState(false)
+  const [questionsDownloaded, setQuestionsDownloaded] = useState(false)
 
   const handleStartDialog = async () => {
     setLoading(true)
     try {
-      // Verwende den gleichen Ansatz wie Variante A
       const formData = new FormData()
       formData.append("extraInfo", context || "")
 
       const result = await startDialog(formData)
       
       setDialogState({
-        active: true,
+        active: false, // WICHTIG: Dialog noch nicht aktiv!
         questionIndex: 0,
         questions: result.questions,
         answers: {}
       })
 
-      setChatHistory([
-        {
-          role: "assistant",
-          content: "Willkommen! Ich führe Sie durch das Formular. Lassen Sie uns beginnen."
-        },
-        {
-          role: "assistant", 
-          content: result.questions[0]?.frage || "Keine Fragen generiert."
-        }
-      ])
+      // Fragen wurden generiert - zeige Download-Option
+      setQuestionsGenerated(true)
+
     } catch (error) {
       console.error("Fehler beim Dialog-Start:", error)
       alert("Fehler beim Starten des Dialogs")
     } finally {
       setLoading(false)
     }
+  }
+
+  // Neue Funktion zum Fragen-Download
+  const handleDownloadQuestions = async () => {
+    try {
+      const result = await saveQuestionsOnly({
+        questions: dialogState.questions,
+        context: context
+      })
+      alert(`Fragen gespeichert: ${result.filename}`)
+      setQuestionsDownloaded(true)
+    } catch (error) {
+      console.error("Fehler beim Speichern der Fragen:", error)
+      alert("Fehler beim Speichern der Fragen")
+    }
+  }
+
+  // Neue Funktion zum eigentlichen Dialog-Start
+  const handleBeginDialog = () => {
+    setDialogState(prev => ({
+      ...prev,
+      active: true // Jetzt wird der Dialog aktiviert
+    }))
+
+    setChatHistory([
+      {
+        role: "assistant",
+        content: "Willkommen! Ich führe Sie durch das Formular. Lassen Sie uns beginnen."
+      },
+      {
+        role: "assistant", 
+        content: dialogState.questions[0]?.frage || "Keine Fragen generiert."
+      }
+    ])
   }
 
   const handleSendMessage = async () => {
@@ -172,7 +202,7 @@ export default function FormB() {
                 <div className="w-8 h-8 bg-emerald-100 rounded-lg flex items-center justify-center">
                   <span className="text-emerald-600 font-semibold text-sm">B</span>
                 </div>
-                <span>Innovativer Ansatz</span>
+                <span>Dialogbasiert</span>
               </div>
               <Link href="/form-a">
                 <Button variant="outline" className="text-sm">
@@ -188,7 +218,7 @@ export default function FormB() {
         {/* Header */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-sm font-medium mb-4">
-            Konversationelle Formularerfassung
+            Interaktive Formularerfassung
           </div>
           <h1 className="text-3xl font-bold text-gray-900 mb-4">
             Dialog-basierte Erfassung
@@ -199,41 +229,139 @@ export default function FormB() {
         </div>
 
         {!dialogState.active ? (
-          /* Setup-Bereich - Gleich wie Variante A */
-          <Card className="bg-white border border-gray-200 max-w-2xl mx-auto">
-            <CardHeader>
-              <CardTitle className="text-xl text-gray-900 text-center">Dialog vorbereiten</CardTitle>
-              <p className="text-gray-600 text-center">
-                Optional können Sie Kontextinformationen eingeben, bevor der Dialog startet.
-              </p>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {/* Kontext-Eingabe */}
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">
-                  Kontext eingeben (optional)
-                </label>
-                <p className="text-sm text-gray-500">
-                  Beschreiben Sie spezifische Anforderungen oder lassen Sie das Feld leer für Standard-Fragen.
-                </p>
-                <Textarea
-                  value={context}
-                  onChange={(e) => setContext(e.target.value)}
-                  placeholder="z.B. Beschreiben Sie das zu erfassende Gebäude oder geben Sie zusätzliche Informationen ein..."
-                  className="min-h-[120px]"
-                />
-              </div>
+          questionsGenerated ? (
+            /* NEUER BEREICH: Fragen generiert - Download möglich */
+            <div className="space-y-6">
+              <Card className="bg-white border border-gray-200 max-w-2xl mx-auto">
+                <CardHeader>
+                  <CardTitle className="text-xl text-green-700 text-center">
+                    ✅ Fragen erfolgreich generiert!
+                  </CardTitle>
+                  <p className="text-gray-600 text-center">
+                    {dialogState.questions.length} Fragen wurden basierend auf Ihrem Kontext erstellt.
+                  </p>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  {/* Fragen-Vorschau */}
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-gray-700">
+                      Generierte Fragen (Vorschau):
+                    </label>
+                    <div className="bg-gray-50 p-4 rounded-lg max-h-40 overflow-y-auto">
+                      <ol className="list-decimal list-inside space-y-1 text-sm text-gray-700">
+                        {dialogState.questions.map((q, index) => (
+                          <li key={index}>
+                            <strong>{q.feld}:</strong> {q.frage}
+                          </li>
+                        ))}
+                      </ol>
+                    </div>
+                  </div>
 
-              {/* Start Button */}
-              <Button 
-                onClick={handleStartDialog}
-                disabled={loading}
-                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-3 text-lg"
-              >
-                {loading ? "Dialog wird gestartet..." : "Dialog starten"}
-              </Button>
-            </CardContent>
-          </Card>
+                  {/* Download-Aktionen */}
+                  <div className="space-y-3">
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                      <div className="flex items-start space-x-3">
+                        <svg className="w-5 h-5 text-blue-500 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"/>
+                        </svg>
+                        <div>
+                          <h4 className="font-medium text-blue-900">Fragen speichern (empfohlen)</h4>
+                          <p className="text-sm text-blue-700 mt-1">
+                            Speichern Sie die generierten Fragen als JSON-Datei im Ordner "Dialog Questions" 
+                            für späteren Vergleich und Analyse.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Download Button */}
+                    <Button 
+                      onClick={handleDownloadQuestions}
+                      disabled={questionsDownloaded}
+                      className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3"
+                    >
+                      {questionsDownloaded ? (
+                        <>
+                          <svg className="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"/>
+                          </svg>
+                          Fragen gespeichert
+                        </>
+                      ) : (
+                        <>
+                          <svg className="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z"/>
+                          </svg>
+                          Fragen als JSON speichern
+                        </>
+                      )}
+                    </Button>
+
+                    {/* Dialog starten Button */}
+                    <Button 
+                      onClick={handleBeginDialog}
+                      className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-3"
+                    >
+                      Dialog jetzt starten
+                      <svg className="w-4 h-4 ml-2" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z"/>
+                      </svg>
+                    </Button>
+
+                    {/* Zurück-Option */}
+                    <Button 
+                      onClick={() => {
+                        setQuestionsGenerated(false)
+                        setQuestionsDownloaded(false)
+                        setDialogState({ active: false, questionIndex: 0, questions: [], answers: {} })
+                      }}
+                      variant="outline"
+                      className="w-full"
+                    >
+                      Zurück zur Kontexteingabe
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          ) : (
+            /* URSPRÜNGLICHER Setup-Bereich */
+            <Card className="bg-white border border-gray-200 max-w-2xl mx-auto">
+              <CardHeader>
+                <CardTitle className="text-xl text-gray-900 text-center">Dialog vorbereiten</CardTitle>
+                <p className="text-gray-600 text-center">
+                  Optional können Sie Kontextinformationen eingeben, bevor der Dialog startet.
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* Kontext-Eingabe */}
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Kontext eingeben (optional)
+                  </label>
+                  <p className="text-sm text-gray-500">
+                    Beschreiben Sie spezifische Anforderungen oder lassen Sie das Feld leer für Standard-Fragen.
+                  </p>
+                  <Textarea
+                    value={context}
+                    onChange={(e) => setContext(e.target.value)}
+                    placeholder="z.B. Beschreiben Sie das zu erfassende Gebäude oder geben Sie zusätzliche Informationen ein..."
+                    className="min-h-[120px]"
+                  />
+                </div>
+
+                {/* Start Button */}
+                <Button 
+                  onClick={handleStartDialog}
+                  disabled={loading}
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-3 text-lg"
+                >
+                  {loading ? "Dialog wird gestartet..." : "Dialog starten"}
+                </Button>
+              </CardContent>
+            </Card>
+          )
         ) : (
           /* Dialog-Bereich */
           <div className="space-y-6">

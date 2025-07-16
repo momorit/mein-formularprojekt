@@ -1,0 +1,126 @@
+{
+  "metadata": {
+    "variant": "B - Fragen generiert",
+    "timestamp": "2025-07-16T21:40:13.690443",
+    "total_questions": 10,
+    "context_provided": false,
+    "status": "questions_generated"
+  },
+  "context": "",
+  "generated_questions": [
+    {
+      "feld": "gebäude",
+      "frage": "Was für ein Gebäude möchten Sie erfassen?"
+    },
+    {
+      "feld": "energieträger",
+      "frage": "Welche Art von Energieversorgung nutzt das Gebäude?"
+    },
+    {
+      "feld": "wohnungsbezeichnung",
+      "frage": "Wie wird das Gebäude im Sinne der Wohnungsbezeichnung kategorisiert?"
+    },
+    {
+      "feld": "himmelsrichtung",
+      "frage": "In welche Himmelsrichtung orientiert sich das Gebäude?"
+    },
+    {
+      "feld": "material",
+      "frage": "Welches Material wurde für den Bau des Gebäudes verwendet?"
+    },
+    {
+      "feld": "modernisiert",
+      "frage": "Ist das Gebäude modernisiert worden? Wenn ja, in welchem Jahr?"
+    },
+    {
+      "feld": "modernisierungsmaßnahmen",
+      "frage": "Welche Modernisierungsmaßnahmen wurden am Gebäude durchgeführt?"
+    },
+    {
+      "feld": "u_wert",
+      "frage": "Was ist der aktuelle Nutzungswert des Gebäudes?"
+    },
+    {
+      "feld": "optik",
+      "frage": "Wie wird die Optik des Gebäudes beschrieben? (z.B. modern, historisch, minimalistisch)"
+    },
+    {
+      "feld": "gebäudeseite",
+      "frage": "Welche Seite des Gebäudes möchten Sie erfassen? (Vorder- oder Rückseite)?"
+    }
+  ],
+  "field_names": [
+    "gebäude",
+    "energieträger",
+    "wohnungsbezeichnung",
+    "himmelsrichtung",
+    "material",
+    "modernisiert",
+    "modernisierungsmaßnahmen",
+    "u_wert",
+    "optik",
+    "gebäudeseite"
+  ],
+  "questions_overview": {
+    "gebäude": {
+      "question": "Was für ein Gebäude möchten Sie erfassen?",
+      "generated": true,
+      "answered": false,
+      "answer": ""
+    },
+    "energieträger": {
+      "question": "Welche Art von Energieversorgung nutzt das Gebäude?",
+      "generated": true,
+      "answered": false,
+      "answer": ""
+    },
+    "wohnungsbezeichnung": {
+      "question": "Wie wird das Gebäude im Sinne der Wohnungsbezeichnung kategorisiert?",
+      "generated": true,
+      "answered": false,
+      "answer": ""
+    },
+    "himmelsrichtung": {
+      "question": "In welche Himmelsrichtung orientiert sich das Gebäude?",
+      "generated": true,
+      "answered": false,
+      "answer": ""
+    },
+    "material": {
+      "question": "Welches Material wurde für den Bau des Gebäudes verwendet?",
+      "generated": true,
+      "answered": false,
+      "answer": ""
+    },
+    "modernisiert": {
+      "question": "Ist das Gebäude modernisiert worden? Wenn ja, in welchem Jahr?",
+      "generated": true,
+      "answered": false,
+      "answer": ""
+    },
+    "modernisierungsmaßnahmen": {
+      "question": "Welche Modernisierungsmaßnahmen wurden am Gebäude durchgeführt?",
+      "generated": true,
+      "answered": false,
+      "answer": ""
+    },
+    "u_wert": {
+      "question": "Was ist der aktuelle Nutzungswert des Gebäudes?",
+      "generated": true,
+      "answered": false,
+      "answer": ""
+    },
+    "optik": {
+      "question": "Wie wird die Optik des Gebäudes beschrieben? (z.B. modern, historisch, minimalistisch)",
+      "generated": true,
+      "answered": false,
+      "answer": ""
+    },
+    "gebäudeseite": {
+      "question": "Welche Seite des Gebäudes möchten Sie erfassen? (Vorder- oder Rückseite)?",
+      "generated": true,
+      "answered": false,
+      "answer": ""
+    }
+  }
+}
