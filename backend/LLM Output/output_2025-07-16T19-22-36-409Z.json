@@ -1,4 +1,8 @@
 {
+  "Du bist ein Experte für Gebäudeformulare und hilfst Nutzern beim Ausfüllen komplexer Formulare. 
+        Du gibst präzise, hilfreiche und kontextbezogene Anweisungen auf Deutsch. 
+        Deine Antworten sind klar, verständlich und praxisorientiert."
+
   "instructions": {
     "gebäude": {
       "instruction": "Bitte geben Sie den Namen Ihres Gebäudes ein.",
