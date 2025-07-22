@@ -174,31 +174,40 @@ export default function FormA() {
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  {Object.entries(instructions).map(([fieldKey, fieldData]: [string, any], index) => (
-                    <div key={index} className="space-y-2">
-                      <label className="block text-sm font-medium text-gray-700">
-                        {fieldKey}
-                        {fieldData?.pflicht && <span className="text-red-500 ml-1">*</span>}
+                  {Object.entries(instructions).map(([fieldName, fieldData]: [string, any]) => (
+                    <div key={fieldName} className="mb-4">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        {fieldName}
                       </label>
-                      <p className="text-sm text-gray-500">{fieldData?.instruction || "Keine Beschreibung verfügbar"}</p>
-                      {fieldData?.typ === "textarea" ? (
-                        <Textarea
-                          value={values[fieldKey] || ""}
-                          onChange={(e) => setValues(prev => ({
-                            ...prev,
-                            [fieldKey]: e.target.value
-                          }))}
-                          className="min-h-[80px]"
+                      <p className="text-xs text-gray-500 mb-2">{fieldData.instruction}</p>
+                      
+                      {fieldData.type === "dropdown" ? (
+                        <select
+                          value={values[fieldName] || ""}
+                          onChange={(e) => setValues(prev => ({ ...prev, [fieldName]: e.target.value }))}
+                          className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                          required={fieldData.required}
+                        >
+                          <option value="">Bitte wählen...</option>
+                          {fieldData.options?.map((option: string) => (
+                            <option key={option} value={option}>{option}</option>
+                          ))}
+                        </select>
+                      ) : fieldData.type === "number" ? (
+                        <input
+                          type="number"
+                          value={values[fieldName] || ""}
+                          onChange={(e) => setValues(prev => ({ ...prev, [fieldName]: e.target.value }))}
+                          className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                          required={fieldData.required}
                         />
                       ) : (
                         <input
-                          type={fieldData?.typ || "text"}
-                          value={values[fieldKey] || ""}
-                          onChange={(e) => setValues(prev => ({
-                            ...prev,
-                            [fieldKey]: e.target.value
-                          }))}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          type="text"
+                          value={values[fieldName] || ""}
+                          onChange={(e) => setValues(prev => ({ ...prev, [fieldName]: e.target.value }))}
+                          className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                          required={fieldData.required}
                         />
                       )}
                     </div>
