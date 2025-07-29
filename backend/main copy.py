@@ -1,9 +1,8 @@
-# backend/main.py - Optimiertes FastAPI Backend mit LLM-Integration
+# backend/main.py - Online-Ready FastAPI Backend
 
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-import ollama
 import json
 import os
 from datetime import datetime
@@ -16,10 +15,14 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# CORS konfigurieren
+# CORS für Online-Deployment konfigurieren
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=[
+        "http://localhost:3000",  # Local development
+        "https://*.vercel.app",   # Vercel domains
+        "https://*.railway.app",  # Railway domains
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -54,193 +57,211 @@ os.makedirs("LLM Output", exist_ok=True)
 
 def call_llm(prompt: str, context: str = "") -> str:
     """
-    Optimierte LLM-Anfrage mit besserem Prompt Engineering
+    LLM-Aufruf mit Fallback für Online-Deployment
     """
     try:
-        # Erweiterte System-Nachricht für bessere Antworten
-        system_prompt = """Du bist ein Experte für Gebäudeformulare und hilfst Nutzern beim Ausfüllen komplexer Formulare. 
-        Du gibst präzise, hilfreiche und kontextbezogene Anweisungen auf Deutsch. 
-        Deine Antworten sind klar, verständlich und praxisorientiert."""
+        # 1. Versuche Groq (für Online-Deployment)
+        groq_key = os.getenv("GROQ_API_KEY")
+        if groq_key and groq_key.startswith('gsk_'):
+            try:
+                from groq import Groq
+                client = Groq(api_key=groq_key)
+                
+                system_prompt = """Du bist ein Experte für Gebäudeformulare und hilfst Nutzern beim Ausfüllen komplexer Formulare. 
+                Du gibst präzise, hilfreiche und kontextbezogene Anweisungen auf Deutsch. 
+                Deine Antworten sind klar, verständlich und praxisorientiert."""
+                
+                response = client.chat.completions.create(
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": f"Kontext: {context}\n\nAufgabe: {prompt}"}
+                    ],
+                    model="llama3-8b-8192",
+                    temperature=0.7,
+                    max_tokens=2048
+                )
+                return response.choices[0].message.content
+            except Exception as groq_error:
+                print(f"Groq-Fehler: {groq_error}")
         
-        full_prompt = f"{system_prompt}\n\nKontext: {context}\n\nAufgabe: {prompt}"
-        
-        response = ollama.chat(
-            model='llama3',
-            messages=[
-                {
-                    'role': 'user',
-                    'content': full_prompt
+        # 2. Fallback zu Ollama (für Local Development)
+        try:
+            import ollama
+            response = ollama.chat(
+                model='llama3',
+                messages=[
+                    {
+                        'role': 'user',
+                        'content': f"Du bist ein Experte für Gebäudeformulare. Kontext: {context}\n\nAufgabe: {prompt}"
+                    }
+                ],
+                options={
+                    'temperature': 0.7,
+                    'top_p': 0.9,
+                    'max_tokens': 2048
                 }
-            ],
-            options={
-                'temperature': 0.7,  # Ausgewogenheit zwischen Kreativität und Konsistenz
-                'top_p': 0.9,
-                'max_tokens': 2048
-            }
-        )
-        return response['message']['content']
+            )
+            return response['message']['content']
+        except Exception as ollama_error:
+            print(f"Ollama-Fehler: {ollama_error}")
+        
+        # 3. Demo-Fallback für Testing/Demo
+        if "formular" in prompt.lower() or "anweisungen" in prompt.lower():
+            return json.dumps({
+                "GEBÄUDEART": "Bitte geben Sie die Art Ihres Gebäudes an (z.B. Einfamilienhaus, Mehrfamilienhaus)",
+                "BAUJAHR": "In welchem Jahr wurde das Gebäude errichtet?",
+                "WOHNFLÄCHE": "Wie groß ist die Wohnfläche in Quadratmetern?",
+                "HEIZUNGSART": "Welche Art der Heizung ist installiert? (z.B. Gas, Öl, Wärmepumpe)",
+                "DACHTYP": "Beschreiben Sie die Art des Daches (z.B. Satteldach, Flachdach)",
+                "ANZAHL_STOCKWERKE": "Wie viele Stockwerke hat das Gebäude?",
+                "KELLER_VORHANDEN": "Ist ein Keller vorhanden? (Ja/Nein)",
+                "ISOLIERUNG": "Welche Art der Dämmung ist vorhanden?",
+                "FENSTERTYP": "Welche Art von Fenstern sind installiert?",
+                "ENERGIEAUSWEIS": "Liegt ein Energieausweis vor? Wenn ja, welche Energieklasse?"
+            }, ensure_ascii=False, indent=2)
+        
+        return "Demo-Antwort: LLM temporär nicht verfügbar. Bitte versuchen Sie es später erneut."
+        
     except Exception as e:
-        print(f"LLM-Fehler: {e}")
-        return "Entschuldigung, ich konnte Ihre Anfrage nicht verarbeiten."
+        print(f"Allgemeiner LLM-Fehler: {e}")
+        return "Entschuldigung, es gab einen technischen Fehler. Bitte versuchen Sie es erneut."
 
 @app.get("/")
 async def root():
-    return {"message": "FormularIQ Backend läuft", "status": "OK"}
+    return {
+        "message": "FormularIQ Backend läuft", 
+        "status": "OK",
+        "environment": "production" if os.getenv("RAILWAY_ENVIRONMENT") else "development"
+    }
+
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy", "timestamp": datetime.now().isoformat()}
 
 @app.post("/api/instructions")
 async def generate_instructions(request: ContextRequest):
     """
-    Generiert Formularfelder mit optimierten LLM-Prompts
+    Generiert Formularfelder basierend auf Kontext
     """
     try:
-        # Verbesserter Prompt für Formularfeld-Generierung
         if request.context.strip():
             prompt = f"""
 Erstelle ein Gebäudeformular basierend auf folgendem Kontext: {request.context}
 
-Generiere 10-15 relevante Formularfelder im JSON-Format. Jedes Feld soll haben:
-- Einen aussagekräftigen Feldnamen (kleinbuchstaben, unterstriche statt leerzeichen)
-- Eine hilfreiche, spezifische Anweisung für den Nutzer
-- Alle Anweisungen auf Deutsch
-
-Berücksichtige den gegebenen Kontext und erstelle passende Felder.
+Generiere 8-12 relevante Formularfelder im JSON-Format.
+Jeder Feldname sollte in GROSSBUCHSTABEN sein.
+Jeder Wert sollte eine hilfreiche Eingabeanweisung auf Deutsch sein.
 
 Beispiel-Format:
 {{
-  "gebäude_typ": {{
-    "instruction": "Geben Sie den Gebäudetyp ein (z.B. Einfamilienhaus, Mehrfamilienhaus, Bürogebäude)",
-    "value": ""
-  }}
+    "GEBÄUDEART": "Bitte geben Sie die Art Ihres Gebäudes an",
+    "BAUJAHR": "In welchem Jahr wurde das Gebäude errichtet?"
 }}
-            """
+
+Kontext: {request.context}
+"""
         else:
             prompt = """
-Erstelle ein Standard-Gebäudeformular mit 13 wichtigen Feldern im JSON-Format:
-
-Felder: gebäude, energieträger, wohnungsbezeichnung, gebäudeseite, himmelsrichtung, 
-bestand_wände, dicke_mm, material, modernisiert, modernisierungsmaßnahmen, 
-maßnahme_art, u_wert, optik
-
-Jedes Feld soll haben:
-- instruction: Hilfreiche, spezifische deutsche Anweisung mit Beispielen
-- value: ""
-
-Mache die Anweisungen praxisnah und hilfreich für Gebäudeeigentümer.
-            """
-
-        llm_response = call_llm(prompt, request.context)
+Erstelle ein allgemeines Gebäudeformular mit 10 wichtigen Feldern im JSON-Format.
+Jeder Feldname sollte in GROSSBUCHSTABEN sein.
+Jeder Wert sollte eine hilfreiche Eingabeanweisung auf Deutsch sein.
+"""
         
-        # JSON aus LLM-Response extrahieren
+        response = call_llm(prompt, request.context)
+        
+        # Versuche JSON zu parsen
         try:
-            # Finde JSON-Block in der Antwort
-            start = llm_response.find('{')
-            end = llm_response.rfind('}') + 1
-            if start != -1 and end != -1:
-                json_str = llm_response[start:end]
+            # Extrahiere JSON aus der Antwort
+            start = response.find('{')
+            end = response.rfind('}') + 1
+            if start != -1 and end != 0:
+                json_str = response[start:end]
                 instructions = json.loads(json_str)
+                return instructions
             else:
                 raise ValueError("Kein JSON gefunden")
-                
-        except (json.JSONDecodeError, ValueError):
-            # Fallback: Standard-Formular mit LLM-generierten Beschreibungen
-            standard_fields = [
-                "gebäude", "energieträger", "wohnungsbezeichnung", "gebäudeseite", 
-                "himmelsrichtung", "bestand_wände", "dicke_mm", "material", 
-                "modernisiert", "modernisierungsmaßnahmen", "maßnahme_art", "u_wert", "optik"
-            ]
-            
-            instructions = {}
-            for field in standard_fields:
-                # Individuelle Anweisung für jedes Feld generieren
-                field_prompt = f"Erstelle eine hilfreiche deutsche Anweisung für das Formularfeld '{field}' in einem Gebäudeformular. Maximal 1-2 Sätze mit Beispielen."
-                field_instruction = call_llm(field_prompt, request.context)
-                
-                instructions[field] = {
-                    "instruction": field_instruction.strip(),
-                    "value": ""
-                }
-
-        return instructions
-
+        except:
+            # Fallback bei JSON-Parse-Fehlern
+            return {
+                "GEBÄUDEART": "Bitte geben Sie die Art Ihres Gebäudes an",
+                "BAUJAHR": "In welchem Jahr wurde das Gebäude errichtet?",
+                "WOHNFLÄCHE": "Wie groß ist die Wohnfläche in Quadratmetern?",
+                "HEIZUNGSART": "Welche Art der Heizung ist installiert?",
+                "DACHTYP": "Beschreiben Sie die Art des Daches"
+            }
+        
     except Exception as e:
-        print(f"Fehler bei Anweisungsgenerierung: {e}")
-        raise HTTPException(status_code=500, detail="Fehler bei der Verarbeitung")
+        print(f"Instructions-Fehler: {e}")
+        raise HTTPException(status_code=500, detail="Fehler beim Generieren der Anweisungen")
 
 @app.post("/api/chat")
-async def chat_endpoint(request: ChatRequest):
+async def chat_help(request: ChatRequest):
     """
-    Verbesserte Chat-Funktionalität für Formularhilfe
+    Chat-Hilfe für Formularfelder
     """
     try:
         prompt = f"""
-Du hilfst beim Ausfüllen eines Gebäudeformulars. 
-Beantworte die folgende Frage hilfsreich und präzise auf Deutsch:
-
+Ein Nutzer braucht Hilfe beim Ausfüllen eines Gebäudeformulars.
 Frage: {request.message}
 
-Gib praktische Tipps und Beispiele. Halte die Antwort knapp aber informativ.
-        """
+Gib eine hilfreiche, konkrete Antwort auf Deutsch in 2-3 Sätzen.
+Sei freundlich und praxisorientiert.
+"""
         
         response = call_llm(prompt)
         return {"response": response}
         
     except Exception as e:
         print(f"Chat-Fehler: {e}")
-        raise HTTPException(status_code=500, detail="Fehler bei der Chatverarbeitung")
+        raise HTTPException(status_code=500, detail="Fehler beim Verarbeiten der Chat-Anfrage")
 
 @app.post("/api/dialog/start")
-async def start_dialog(extraInfo: str = Form(""), pdf: UploadFile = File(None)):
+async def start_dialog(request: ContextRequest):
     """
-    Startet einen Dialog mit optimierten Fragen
+    Startet einen Dialog für Formularbearbeitung
     """
     try:
-        context = extraInfo if extraInfo else "Allgemeines Gebäudeformular"
-        
         prompt = f"""
-Erstelle 8-12 Dialog-Fragen für ein Gebäudeformular basierend auf: {context}
+Erstelle eine Liste von 8-10 Fragen für ein Gebäude-Interview.
+Kontext: {request.context}
 
-Jede Frage soll:
-- Natürlich und freundlich formuliert sein
-- Ein spezifisches Formularfeld abfragen
-- Auf Deutsch sein
+Format: JSON-Array mit Objekten, jedes mit "question" und "field" Feldern.
 
-Format: JSON-Array mit Objekten:
+Beispiel:
 [
-  {{"feld": "gebäude", "frage": "Was für ein Gebäude möchten Sie erfassen?"}},
-  {{"feld": "energieträger", "frage": "Welche Art von Energieversorgung nutzt das Gebäude?"}}
+    {{"question": "Welche Art von Gebäude möchten Sie erfassen?", "field": "GEBÄUDEART"}},
+    {{"question": "In welchem Jahr wurde das Gebäude errichtet?", "field": "BAUJAHR"}}
 ]
 
-Erstelle realistische, hilfreiche Fragen für: gebäude, energieträger, wohnungsbezeichnung, 
-himmelsrichtung, material, modernisiert, modernisierungsmaßnahmen, u_wert, optik, gebäudeseite
-        """
+Die Fragen sollten logisch aufeinander aufbauen und auf Deutsch sein.
+"""
         
-        llm_response = call_llm(prompt, context)
+        response = call_llm(prompt, request.context)
         
+        # JSON parsen
         try:
-            # JSON extrahieren
-            start = llm_response.find('[')
-            end = llm_response.rfind(']') + 1
-            if start != -1 and end != -1:
-                json_str = llm_response[start:end]
+            start = response.find('[')
+            end = response.rfind(']') + 1
+            if start != -1 and end != 0:
+                json_str = response[start:end]
                 questions = json.loads(json_str)
             else:
-                raise ValueError("Kein JSON-Array gefunden")
-        
-        except (json.JSONDecodeError, ValueError):
-            # Fallback: Standard-Fragen
+                raise ValueError("Kein JSON Array gefunden")
+        except:
+            # Fallback-Fragen
             questions = [
-                {"feld": "gebäude", "frage": "Was für ein Gebäude möchten Sie erfassen? (z.B. Einfamilienhaus, Mehrfamilienhaus)"},
-                {"feld": "energieträger", "frage": "Welche Art von Energieversorgung nutzt das Gebäude?"},
-                {"feld": "wohnungsbezeichnung", "frage": "Wie lautet die Bezeichnung der Wohnung oder des Gebäudeteils?"},
-                {"feld": "himmelsrichtung", "frage": "In welche Himmelsrichtung ist das Gebäude ausgerichtet?"},
-                {"feld": "material", "frage": "Aus welchem Material sind die Außenwände hauptsächlich?"},
-                {"feld": "modernisiert", "frage": "Wurde das Gebäude in den letzten Jahren modernisiert?"},
-                {"feld": "modernisierungsmaßnahmen", "frage": "Welche Modernisierungsmaßnahmen wurden durchgeführt?"},
-                {"feld": "u_wert", "frage": "Kennen Sie den U-Wert der Außenwände? (falls nicht bekannt, lassen Sie leer)"},
-                {"feld": "optik", "frage": "Wie würden Sie das äußere Erscheinungsbild beschreiben?"}
+                {"question": "Welche Art von Gebäude möchten Sie erfassen?", "field": "GEBÄUDEART"},
+                {"question": "In welchem Jahr wurde das Gebäude errichtet?", "field": "BAUJAHR"},
+                {"question": "Wie groß ist die Wohnfläche in Quadratmetern?", "field": "WOHNFLÄCHE"},
+                {"question": "Welche Art der Heizung ist installiert?", "field": "HEIZUNGSART"},
+                {"question": "Welche Art von Dach hat das Gebäude?", "field": "DACHTYP"}
             ]
         
-        return {"questions": questions}
+        return {
+            "questions": questions,
+            "totalQuestions": len(questions),
+            "currentQuestionIndex": 0
+        }
         
     except Exception as e:
         print(f"Dialog-Start-Fehler: {e}")
@@ -249,35 +270,27 @@ himmelsrichtung, material, modernisiert, modernisierungsmaßnahmen, u_wert, opti
 @app.post("/api/dialog/message")
 async def dialog_message(request: DialogMessageRequest):
     """
-    Verbesserte Dialog-Nachrichtenverwaltung mit Nachfrage-Support
+    Verarbeitet Dialog-Nachrichten
     """
     try:
-        # Check ob Nutzer eine Frage stellt (endet mit ?)
-        is_question = request.message.strip().endswith('?')
-        
-        if is_question:
-            # Nutzer stellt Nachfrage - beantworten ohne weiterzugehen
+        if request.message.strip() == "?":
+            # Hilfe-Anfrage
+            current_field = request.currentQuestion.get('field', '')
             prompt = f"""
-Der Nutzer hat eine Nachfrage zum Formularfeld '{request.currentQuestion['feld']}':
+Der Nutzer braucht Hilfe bei der Frage: {request.currentQuestion.get('question', '')}
+Feld: {current_field}
 
-Aktuelle Frage: {request.currentQuestion['frage']}
-Nutzer-Nachfrage: {request.message}
-
-Beantworte die Nachfrage hilfreich auf Deutsch und stelle dann die ursprüngliche Frage erneut.
-            """
-            
-            response_text = call_llm(prompt)
+Gib eine hilfreiche Erklärung in 2-3 Sätzen auf Deutsch.
+"""
+            help_response = call_llm(prompt)
             return {
-                "response": response_text,
-                "nextQuestion": False  # Nicht zur nächsten Frage
+                "response": help_response,
+                "nextQuestion": False
             }
-        
         else:
-            # Normale Antwort - zur nächsten Frage
-            next_index = request.questionIndex + 1
-            
-            if next_index < request.totalQuestions:
-                response_text = f"Vielen Dank! Ihre Antwort wurde gespeichert."
+            # Normale Antwort verarbeiten
+            if request.questionIndex < request.totalQuestions - 1:
+                response_text = f"Ihre Antwort '{request.message}' wurde gespeichert. Nächste Frage:"
                 return {
                     "response": response_text,
                     "nextQuestion": True
@@ -294,13 +307,17 @@ Beantworte die Nachfrage hilfreich auf Deutsch und stelle dann die ursprünglich
 
 @app.post("/api/save")
 async def save_form_data(request: SaveRequest):
-    """Speichert Formulardaten"""
+    """
+    Speichert Formulardaten
+    """
     try:
         output_path = f"LLM Output/{request.filename}"
         with open(output_path, 'w', encoding='utf-8') as f:
             json.dump({
                 "instructions": request.instructions,
-                "values": request.values
+                "values": request.values,
+                "timestamp": datetime.now().isoformat(),
+                "type": "form_data"
             }, f, ensure_ascii=False, indent=2)
         
         return {"message": "Daten erfolgreich gespeichert", "filename": request.filename}
@@ -311,14 +328,18 @@ async def save_form_data(request: SaveRequest):
 
 @app.post("/api/dialog/save")
 async def save_dialog_data(request: DialogSaveRequest):
-    """Speichert Dialog-Daten"""
+    """
+    Speichert Dialog-Daten
+    """
     try:
         output_path = f"LLM Output/{request.filename}"
         with open(output_path, 'w', encoding='utf-8') as f:
             json.dump({
                 "questions": request.questions,
                 "answers": request.answers,
-                "chatHistory": request.chatHistory
+                "chatHistory": request.chatHistory,
+                "timestamp": datetime.now().isoformat(),
+                "type": "dialog_data"
             }, f, ensure_ascii=False, indent=2)
         
         return {"message": "Dialog-Daten erfolgreich gespeichert", "filename": request.filename}
@@ -328,211 +349,5 @@ async def save_dialog_data(request: DialogSaveRequest):
         raise HTTPException(status_code=500, detail="Fehler beim Speichern der Dialog-Daten")
 
 if __name__ == "__main__":
-    print("🚀 Starte FormularIQ Backend mit optimierter LLM-Integration")
-    print("="*60)
-    print("Backend: http://localhost:8000")
-    print("API Docs: http://localhost:8000/docs")
-    print("="*60)
-    
-    uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)
-
-# Füge diesen Endpoint zu deiner backend/main.py Datei hinzu:
-
-from pydantic import BaseModel
-from typing import List, Dict, Any
-import json
-import os
-from datetime import datetime
-
-class DialogSaveRequest(BaseModel):
-    questions: List[Dict[str, str]]  # [{"feld": "...", "frage": "..."}]
-    answers: Dict[str, str]          # {"feld1": "antwort1", ...}
-    chatHistory: List[Dict[str, str]] # [{"role": "user", "content": "..."}, ...]
-    filename: str
-
-@app.post("/api/dialog/save")
-async def save_dialog_data(request: DialogSaveRequest):
-    """Speichert Dialog-Daten als JSON-Datei - analog zu Variante A"""
-    try:
-        # Ausgabe-Ordner erstellen (gleich wie bei Variante A)
-        output_dir = "LLM Output"
-        os.makedirs(output_dir, exist_ok=True)
-        
-        # Vollständigen Pfad erstellen
-        file_path = os.path.join(output_dir, request.filename)
-        
-        # Dialog-Daten strukturieren (analog zu Variante A)
-        dialog_data = {
-            "metadata": {
-                "variant": "B - Dialog-basiert",
-                "timestamp": datetime.now().isoformat(),
-                "total_questions": len(request.questions),
-                "answered_questions": len(request.answers)
-            },
-            "questions": request.questions,
-            "answers": request.answers,
-            "chat_history": request.chatHistory,
-            # Zusätzlich: Formular-Format wie bei Variante A für Vergleichbarkeit
-            "form_format": {
-                field_data["feld"]: {
-                    "question": field_data["frage"],
-                    "answer": request.answers.get(field_data["feld"], ""),
-                    "answered": field_data["feld"] in request.answers
-                }
-                for field_data in request.questions
-            }
-        }
-        
-        # JSON-Datei speichern
-        with open(file_path, 'w', encoding='utf-8') as f:
-            json.dump(dialog_data, f, ensure_ascii=False, indent=2)
-        
-        print(f"✅ Dialog-Daten gespeichert: {file_path}")
-        
-        return {
-            "success": True,
-            "filename": request.filename,
-            "path": file_path,
-            "message": f"Dialog-Daten erfolgreich gespeichert: {request.filename}"
-        }
-        
-    except Exception as e:
-        print(f"❌ Fehler beim Speichern der Dialog-Daten: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Fehler beim Speichern: {str(e)}")
-
-# Optional: Endpoint um alle gespeicherten Dialog-Dateien aufzulisten
-@app.get("/api/dialog/files")
-async def list_dialog_files():
-    """Listet alle gespeicherten Dialog-JSON-Dateien auf"""
-    try:
-        output_dir = "LLM Output"
-        if not os.path.exists(output_dir):
-            return {"files": []}
-        
-        # Nur Dialog-Dateien (die mit "dialog_output_" beginnen)
-        dialog_files = [
-            f for f in os.listdir(output_dir) 
-            if f.startswith("dialog_output_") and f.endswith(".json")
-        ]
-        
-        # Dateien mit Metadaten
-        files_with_info = []
-        for filename in sorted(dialog_files, reverse=True):  # Neueste zuerst
-            file_path = os.path.join(output_dir, filename)
-            stat = os.stat(file_path)
-            files_with_info.append({
-                "filename": filename,
-                "created": datetime.fromtimestamp(stat.st_ctime).isoformat(),
-                "size": stat.st_size
-            })
-        
-        return {
-            "files": files_with_info,
-            "total": len(files_with_info)
-        }
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Fehler beim Auflisten: {str(e)}")
-    
-# Füge diesen Endpoint zu deiner backend/main.py hinzu:
-
-from pydantic import BaseModel
-from typing import List, Dict
-import json
-import os
-from datetime import datetime
-
-class QuestionsSaveRequest(BaseModel):
-    questions: List[Dict[str, str]]  # [{"feld": "...", "frage": "..."}]
-    context: str = ""                # Ursprünglicher Kontext
-    filename: str
-
-@app.post("/api/dialog/save-questions")
-async def save_questions_only(request: QuestionsSaveRequest):
-    """Speichert nur die generierten Fragen als JSON-Datei (vor Dialog-Start)"""
-    try:
-        # Separaten Ausgabe-Ordner für Fragen erstellen
-        output_dir = "Dialog Questions"  # Separater Ordner!
-        os.makedirs(output_dir, exist_ok=True)
-        
-        # Vollständigen Pfad erstellen
-        file_path = os.path.join(output_dir, request.filename)
-        
-        # Fragen-Daten strukturieren
-        questions_data = {
-            "metadata": {
-                "variant": "B - Fragen generiert",
-                "timestamp": datetime.now().isoformat(),
-                "total_questions": len(request.questions),
-                "context_provided": bool(request.context.strip()),
-                "status": "questions_generated"
-            },
-            "context": request.context,
-            "generated_questions": request.questions,
-            # Für einfachen Überblick - Liste der Feldnamen
-            "field_names": [q["feld"] for q in request.questions],
-            # Zum Vergleich mit Variante A - vereinfachtes Format
-            "questions_overview": {
-                q["feld"]: {
-                    "question": q["frage"],
-                    "generated": True,
-                    "answered": False,
-                    "answer": ""
-                }
-                for q in request.questions
-            }
-        }
-        
-        # JSON-Datei speichern
-        with open(file_path, 'w', encoding='utf-8') as f:
-            json.dump(questions_data, f, ensure_ascii=False, indent=2)
-        
-        print(f"✅ Dialog-Fragen gespeichert: {file_path}")
-        
-        return {
-            "success": True,
-            "filename": request.filename,
-            "path": file_path,
-            "folder": output_dir,
-            "message": f"Fragen erfolgreich gespeichert: {request.filename}",
-            "questions_count": len(request.questions)
-        }
-        
-    except Exception as e:
-        print(f"❌ Fehler beim Speichern der Fragen: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Fehler beim Speichern der Fragen: {str(e)}")
-
-# Optional: Endpoint zum Auflisten der Fragen-Dateien
-@app.get("/api/dialog/questions-files")
-async def list_questions_files():
-    """Listet alle gespeicherten Fragen-JSON-Dateien auf"""
-    try:
-        output_dir = "Dialog Questions"
-        if not os.path.exists(output_dir):
-            return {"files": [], "folder": output_dir}
-        
-        # Alle JSON-Dateien im Questions-Ordner
-        question_files = [
-            f for f in os.listdir(output_dir) 
-            if f.endswith(".json")
-        ]
-        
-        # Dateien mit Metadaten
-        files_with_info = []
-        for filename in sorted(question_files, reverse=True):  # Neueste zuerst
-            file_path = os.path.join(output_dir, filename)
-            stat = os.stat(file_path)
-            files_with_info.append({
-                "filename": filename,
-                "created": datetime.fromtimestamp(stat.st_ctime).isoformat(),
-                "size": stat.st_size
-            })
-        
-        return {
-            "files": files_with_info,
-            "total": len(files_with_info),
-            "folder": output_dir
-        }
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Fehler beim Auflisten: {str(e)}")
+    port = int(os.getenv("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port)
