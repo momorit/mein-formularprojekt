@@ -1,47 +1,73 @@
-// src/lib/api.ts
+// src/lib/api.ts - KOMPLETTE DATEI - ALLES ERSETZEN
 
-export async function getInstructions(context: string) {
-  const res = await fetch("http://localhost:8000/api/instructions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ context })
-  })
-  if (!res.ok) throw new Error("Fehler bei der Verarbeitung")
-  return await res.json()
-}
+const API_BASE_URL = 'http://localhost:8000'
 
-export async function saveFormData(instructions: any, values: any) {
-  const timestamp = new Date().toISOString().replace(/[:.]/g, "-")
-  const filename = `output_${timestamp}.json`
-  const res = await fetch("http://localhost:8000/api/save", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ instructions, values, filename })
+export async function getInstructions(context: string = '') {
+  const response = await fetch(`${API_BASE_URL}/api/instructions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ context }),
   })
-  if (!res.ok) throw new Error("Fehler beim Speichern der JSON-Datei")
-  return await res.json()
+
+  if (!response.ok) {
+    throw new Error('Fehler beim Abrufen der Anweisungen')
+  }
+
+  return response.json()
 }
 
 export async function sendChatMessage(message: string) {
-  const res = await fetch("http://localhost:8000/api/chat", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message })
+  const response = await fetch(`${API_BASE_URL}/api/chat`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ message }),
   })
-  if (!res.ok) throw new Error("Fehler bei der Chatverarbeitung")
-  return await res.json()
+
+  if (!response.ok) {
+    throw new Error('Fehler beim Senden der Chat-Nachricht')
+  }
+
+  return response.json()
 }
 
+export async function saveFormData(instructions: any, values: any) {
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+  const filename = `output_${timestamp}.json`
 
-// === NEUE FUNKTIONEN FÜR VARIANTE B (DIALOG) ===
+  const response = await fetch(`${API_BASE_URL}/api/save`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      instructions,
+      values,
+      filename
+    }),
+  })
+
+  if (!response.ok) {
+    throw new Error('Fehler beim Speichern der Formulardaten')
+  }
+
+  return response.json()
+}
 
 export async function startDialog(formData: FormData) {
-  const res = await fetch("http://localhost:8000/api/dialog/start", {
-    method: "POST",
-    body: formData
+  const response = await fetch(`${API_BASE_URL}/api/dialog/start`, {
+    method: 'POST',
+    body: formData,
   })
-  if (!res.ok) throw new Error("Fehler beim Starten des Dialogs")
-  return await res.json()
+
+  if (!response.ok) {
+    throw new Error('Fehler beim Starten des Dialogs')
+  }
+
+  return response.json()
 }
 
 export async function sendDialogMessage(data: {
@@ -50,193 +76,135 @@ export async function sendDialogMessage(data: {
   questionIndex: number
   totalQuestions: number
 }) {
-  const res = await fetch("http://localhost:8000/api/dialog/message", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data)
+  const response = await fetch(`${API_BASE_URL}/api/dialog/message`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(data),
   })
-  if (!res.ok) throw new Error("Fehler beim Senden der Dialog-Nachricht")
-  return await res.json()
-}
 
-// Verbesserte Version für src/lib/api.ts - saveDialogData Funktion
+  if (!response.ok) {
+    throw new Error('Fehler beim Senden der Dialog-Nachricht')
+  }
+
+  return response.json()
+}
 
 export async function saveDialogData(data: {
-  questions: Array<{ feld: string; frage: string }>
+  questions: Array<{feld: string, frage: string}>
   answers: Record<string, string>
-  chatHistory: Array<{ role: string; content: string }>
+  chatHistory: Array<{role: string, content: string}>
 }) {
-  try {
-    // Timestamp für eindeutige Dateinamen (gleiche Logik wie Variante A)
-    const timestamp = new Date().toISOString().replace(/[:.]/g, "-")
-    const filename = `dialog_output_${timestamp}.json`
-    
-    // Daten validieren
-    if (!data.questions || data.questions.length === 0) {
-      throw new Error("Keine Fragen vorhanden")
-    }
-    
-    // API-Aufruf
-    const res = await fetch("http://localhost:8000/api/dialog/save", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ 
-        ...data, 
-        filename,
-        // Zusätzliche Metadaten für bessere Nachverfolgung
-        metadata: {
-          saved_at: new Date().toISOString(),
-          variant: "B",
-          total_questions: data.questions.length,
-          answered_questions: Object.keys(data.answers).length,
-          completion_rate: Math.round((Object.keys(data.answers).length / data.questions.length) * 100)
-        }
-      })
-    })
-    
-    if (!res.ok) {
-      const errorText = await res.text()
-      throw new Error(`HTTP ${res.status}: ${errorText}`)
-    }
-    
-    const result = await res.json()
-    console.log("✅ Dialog-Daten erfolgreich gespeichert:", result)
-    return result
-    
-  } catch (error) {
-    console.error("❌ Fehler beim Speichern der Dialog-Daten:", error)
-    throw new Error(`Fehler beim Speichern der Dialog-Daten: ${error.message}`)
-  }
-}
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+  const filename = `dialog_output_${timestamp}.json`
 
-// Optional: Funktion zum Laden gespeicherter Dialog-Dateien
-export async function getDialogFiles() {
-  try {
-    const res = await fetch("http://localhost:8000/api/dialog/files")
-    if (!res.ok) throw new Error("Fehler beim Laden der Dateien")
-    return await res.json()
-  } catch (error) {
-    console.error("Fehler beim Laden der Dialog-Dateien:", error)
-    throw error
-  }
-}
-
-// Erweiterte Speicherfunktion mit zusätzlichen Optionen
-export async function saveDialogDataWithOptions(data: {
-  questions: Array<{ feld: string; frage: string }>
-  answers: Record<string, string>
-  chatHistory: Array<{ role: string; content: string }>
-}, options?: {
-  customFilename?: string
-  includeMetadata?: boolean
-  folder?: string
-}) {
-  const timestamp = new Date().toISOString().replace(/[:.]/g, "-")
-  const filename = options?.customFilename || `dialog_output_${timestamp}.json`
-  
-  const payload = {
-    ...data,
-    filename
-  }
-  
-  // Zusätzliche Metadaten hinzufügen falls gewünscht
-  if (options?.includeMetadata !== false) {
-    payload.metadata = {
-      saved_at: new Date().toISOString(),
-      variant: "B - Dialog-basiert", 
-      total_questions: data.questions.length,
-      answered_questions: Object.keys(data.answers).length,
-      completion_rate: Math.round((Object.keys(data.answers).length / data.questions.length) * 100),
-      chat_messages: data.chatHistory.length
-    }
-  }
-  
-  const res = await fetch("http://localhost:8000/api/dialog/save", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload)
+  const response = await fetch(`${API_BASE_URL}/api/dialog/save`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      questions: data.questions,
+      answers: data.answers,
+      chatHistory: data.chatHistory,
+      filename
+    }),
   })
-  
-  if (!res.ok) throw new Error("Fehler beim Speichern der Dialog-Daten")
-  return await res.json()
+
+  if (!response.ok) {
+    throw new Error('Fehler beim Speichern der Dialog-Daten')
+  }
+
+  return response.json()
 }
 
-// Füge diese Funktionen zu deiner src/lib/api.ts hinzu:
-
-// Neue API-Funktion für Fragen-Download
 export async function saveQuestionsOnly(data: {
-  questions: Array<{ feld: string; frage: string }>
+  questions: Array<{feld: string, frage: string}>
   context: string
 }) {
-  try {
-    // Timestamp für eindeutige Dateinamen
-    const timestamp = new Date().toISOString().replace(/[:.]/g, "-")
-    const filename = `questions_${timestamp}.json`
-    
-    // Daten validieren
-    if (!data.questions || data.questions.length === 0) {
-      throw new Error("Keine Fragen vorhanden")
-    }
-    
-    // API-Aufruf
-    const res = await fetch("http://localhost:8000/api/dialog/save-questions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ 
-        ...data, 
-        filename
-      })
-    })
-    
-    if (!res.ok) {
-      const errorText = await res.text()
-      throw new Error(`HTTP ${res.status}: ${errorText}`)
-    }
-    
-    const result = await res.json()
-    console.log("✅ Fragen erfolgreich gespeichert:", result)
-    return result
-    
-  } catch (error) {
-    console.error("❌ Fehler beim Speichern der Fragen:", error)
-    throw new Error(`Fehler beim Speichern der Fragen: ${error.message}`)
-  }
-}
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+  const filename = `questions_${timestamp}.json`
 
-// Funktion zum Laden der Fragen-Dateien
-export async function getQuestionsFiles() {
-  try {
-    const res = await fetch("http://localhost:8000/api/dialog/questions-files")
-    if (!res.ok) throw new Error("Fehler beim Laden der Fragen-Dateien")
-    return await res.json()
-  } catch (error) {
-    console.error("Fehler beim Laden der Fragen-Dateien:", error)
-    throw error
-  }
-}
-
-// Erweiterte Funktion mit zusätzlichen Metadaten
-export async function saveQuestionsWithMetadata(data: {
-  questions: Array<{ feld: string; frage: string }>
-  context: string
-}, options?: {
-  customFilename?: string
-  includeStats?: boolean
-}) {
-  const timestamp = new Date().toISOString().replace(/[:.]/g, "-")
-  const filename = options?.customFilename || `questions_${timestamp}.json`
-  
-  const payload = {
-    ...data,
-    filename
-  }
-  
-  const res = await fetch("http://localhost:8000/api/dialog/save-questions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload)
+  const response = await fetch(`${API_BASE_URL}/api/dialog/save-questions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      questions: data.questions,
+      context: data.context,
+      filename
+    }),
   })
-  
-  if (!res.ok) throw new Error("Fehler beim Speichern der Fragen")
-  return await res.json()
+
+  if (!response.ok) {
+    throw new Error('Fehler beim Speichern der Fragen')
+  }
+
+  return response.json()
+}
+
+// NEUE FUNKTIONEN FÜR ANTWORT-EXTRAKTION
+
+export async function extractAnswers(data: {
+  questions: Array<{feld: string, frage: string}>
+  raw_answers: Record<string, string>
+}) {
+  const response = await fetch(`${API_BASE_URL}/api/dialog/extract-answers`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      questions: data.questions,
+      raw_answers: data.raw_answers
+    }),
+  })
+
+  if (!response.ok) {
+    throw new Error('Fehler bei der Antwort-Extraktion')
+  }
+
+  return response.json()
+}
+
+export async function saveCompleteDialogData(data: {
+  questions: Array<{feld: string, frage: string}>
+  answers: Record<string, string>
+  chatHistory: Array<{role: string, content: string}>
+  filename: string
+}) {
+  const response = await fetch(`${API_BASE_URL}/api/dialog/save-complete`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      questions: data.questions,
+      answers: data.answers,
+      chatHistory: data.chatHistory,
+      filename: data.filename
+    }),
+  })
+
+  if (!response.ok) {
+    throw new Error('Fehler beim Speichern der kompletten Dialog-Daten')
+  }
+
+  return response.json()
+}
+
+// PERFORMANCE STATS
+
+export async function getPerformanceStats() {
+  const response = await fetch(`${API_BASE_URL}/api/stats`, {
+    method: 'GET',
+  })
+
+  if (!response.ok) {
+    throw new Error('Fehler beim Abrufen der Performance-Statistiken')
+  }
+
+  return response.json()
 }

@@ -1,4 +1,20 @@
 {
+  "Erstelle 8-12 Dialog-Fragen für ein Gebäudeformular basierend auf: {context}
+
+Jede Frage soll:
+- Natürlich und freundlich formuliert sein
+- Ein spezifisches Formularfeld abfragen
+- Auf Deutsch sein
+
+Format: JSON-Array mit Objekten:
+[
+  {{"feld": "gebäude", "frage": "Was für ein Gebäude möchten Sie erfassen?"}},
+  {{"feld": "energieträger", "frage": "Welche Art von Energieversorgung nutzt das Gebäude?"}}
+]
+
+Erstelle realistische, hilfreiche Fragen für: gebäude, energieträger, wohnungsbezeichnung, 
+himmelsrichtung, material, modernisiert, modernisierungsmaßnahmen, u_wert, optik, gebäudeseite"
+
   "metadata": {
     "variant": "B - Fragen generiert",
     "timestamp": "2025-07-16T21:40:13.690443",

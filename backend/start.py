@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# backend/start.py - Backend Start Script
+# backend/start.py - Backend Start Script (GEFIXT)
 
 import os
 import sys
@@ -32,7 +32,35 @@ def check_dependencies():
         import uvicorn
         import pdfplumber
         import ollama
-        print("✅ Alle Dependencies sind installiert")
+        print("✅ Basis-Dependencies sind installiert")
+        
+        # ROBUSTER Groq-Check mit Fehlerbehandlung
+        try:
+            import groq
+            print("✅ Groq Library ist installiert")
+            
+            # Sichere .env Prüfung
+            try:
+                from dotenv import load_dotenv
+                load_dotenv()
+                groq_key = os.getenv("GROQ_API_KEY")
+                
+                if groq_key and groq_key.startswith('gsk_'):
+                    print("✅ Groq API Key gefunden - Ultra-schnelle LLM-Antworten!")
+                elif groq_key:
+                    print("⚠️ Groq API Key Format scheint falsch (sollte mit 'gsk_' beginnen)")
+                else:
+                    print("⚠️ Groq API Key nicht in .env gefunden - verwende Ollama")
+                    
+            except Exception as env_error:
+                print(f"⚠️ .env Datei Problem: {env_error}")
+                print("   Erstelle neue .env mit: echo GROQ_API_KEY=dein_key > .env")
+                print("   Verwende Ollama als Fallback")
+                
+        except ImportError:
+            print("⚠️ Groq nicht installiert - verwende Ollama")
+            print("   Installiere mit: pip install groq python-dotenv")
+        
         return True
     except ImportError as e:
         print(f"❌ Fehlende Dependency: {e}")
