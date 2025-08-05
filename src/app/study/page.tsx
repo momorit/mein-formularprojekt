@@ -186,24 +186,33 @@ export default function StudyPage() {
       )
     
     case 'questionnaire-b':
-      return (
-        <QuestionnaireStep
-          variant="B"
-          variantName="Dialog-System"
-          onComplete={(responses) => {
-            endQuestionnaire('variantB')
-            setStudyData(prev => ({ 
-              ...prev, 
-              variantB: {
-                ...responses,
-                completedAt: new Date(),
-                variant: 'B'
-              }
-            }))
-            setCurrentStep('comparison')
-          }}
-        />
-      )
+  return (
+    <QuestionnaireStep
+      variant="B"
+      variantName="Dialog-System"
+      onComplete={(responses) => {
+        endQuestionnaire('variantB')
+        setStudyData(prev => ({ 
+          ...prev, 
+          variantB: {
+            ...responses,
+            completedAt: new Date(),
+            variant: 'B'
+          }
+        }))
+        
+        // ✅ FIX: Nach Variante B prüfen, ob Variante A noch getestet werden muss
+        if (!studyData.variantA) {
+          // Variante A noch nicht getestet → als nächstes A testen
+          startVariant('A')
+          setCurrentStep('variant-a')
+        } else {
+          // Beide Varianten getestet → zum Vergleich
+          setCurrentStep('comparison')
+        }
+      }}
+    />
+  )
     
     case 'comparison':
       return (
