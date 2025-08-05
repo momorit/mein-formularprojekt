@@ -1,7 +1,8 @@
-# backend/main.py - CORS-GEFIXT für Vercel
+# backend/main.py - BULLETPROOF CORS FIX
 
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 import json
 import os
@@ -15,20 +16,47 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# CORS - ERWEITERT um deine exakte Vercel-URL
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",  # Local development
-        "https://mein-formularprojekt-odbbyii0b-momorits-projects.vercel.app",  # Deine Vercel-URL
-        "https://vercel.app",     # Basis Vercel
-        "https://*.vercel.app",   # Vercel domains (fallback)
-        "https://*.railway.app",  # Railway domains
-    ],
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],  # Explizit OPTIONS
-    allow_headers=["*"],
-)
+# BULLETPROOF CORS - Erlaubt ALLE Vercel-Domains
+@app.middleware("http")
+async def cors_handler(request: Request, call_next):
+    """Custom CORS Handler der garantiert funktioniert"""
+    
+    # Hole Origin aus Request
+    origin = request.headers.get("origin")
+    
+    # Führe Request aus
+    response = await call_next(request)
+    
+    # Wenn Origin eine Vercel-Domain ist oder localhost, erlaube es
+    if origin and (
+        "vercel.app" in origin or 
+        "localhost" in origin or 
+        "127.0.0.1" in origin or
+        "railway.app" in origin
+    ):
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = "*"
+    
+    return response
+
+# OPTIONS Handler für Preflight-Requests
+@app.options("/{path:path}")
+async def options_handler(request: Request, path: str):
+    """Behandelt alle OPTIONS-Requests für CORS"""
+    origin = request.headers.get("origin", "")
+    
+    if "vercel.app" in origin or "localhost" in origin:
+        headers = {
+            "Access-Control-Allow-Origin": origin,
+            "Access-Control-Allow-Credentials": "true", 
+            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+            "Access-Control-Allow-Headers": "*",
+        }
+        return JSONResponse(content={}, headers=headers)
+    
+    return JSONResponse(content={"error": "CORS not allowed"}, status_code=403)
 
 # Pydantic Models
 class ContextRequest(BaseModel):
@@ -61,11 +89,8 @@ class DialogSaveRequest(BaseModel):
 os.makedirs("LLM Output", exist_ok=True)
 
 def call_llm(prompt: str, context: str = "") -> str:
-    """
-    LLM-Aufruf mit Groq (für Online-Deployment)
-    """
+    """LLM-Aufruf mit Groq"""
     try:
-        # Groq verwenden
         groq_key = os.getenv("GROQ_API_KEY")
         if groq_key and groq_key.startswith('gsk_'):
             try:
@@ -89,7 +114,6 @@ def call_llm(prompt: str, context: str = "") -> str:
             except Exception as groq_error:
                 print(f"Groq-Fehler: {groq_error}")
                 return "Entschuldigung, es gab einen Fehler beim LLM-Aufruf."
-        
         else:
             print("Groq API Key nicht verfügbar")
             return "Entschuldigung, der LLM-Service ist nicht verfügbar."
@@ -100,22 +124,29 @@ def call_llm(prompt: str, context: str = "") -> str:
 
 @app.get("/")
 async def root():
-    return {"message": "FormularIQ Backend läuft", "status": "OK"}
+    return {"message": "FormularIQ Backend läuft", "status": "OK", "cors": "enabled"}
 
 @app.get("/health")
 async def health():
-    return {"message": "FormularIQ Backend läuft", "status": "OK"}
+    return {"message": "FormularIQ Backend läuft", "status": "OK", "cors": "enabled"}
+
+# Test-Endpoint für CORS
+@app.get("/api/test")
+async def test_cors():
+    return {"message": "CORS funktioniert!", "status": "OK"}
 
 @app.post("/api/instructions")
 async def generate_instructions(request: ContextRequest):
     """Generiert Formular-Anweisungen"""
     try:
+        print(f"Instructions-Request empfangen: {request.context[:50]}...")
+        
         if request.context.strip():
             prompt = f"""
 Erstelle hilfreiche Anweisungen für ein Gebäudeformular basierend auf diesem Kontext: {request.context}
 
 Erstelle ein JSON-Objekt mit Formularfeldern als Schlüssel und hilfreichen Anweisungen als Werte.
-Beispiel-Felder: GEBÄUDEART, BAUJAHR, WOHNFLÄCHE, HEIZUNGSART, DÄCHART, ANZAHL_STOCKWERKE, SANIERUNGSBEDARF, etc.
+Beispiel-Felder: GEBÄUDEART, BAUJAHR, WOHNFLÄCHE, HEIZUNGSART, DÄCHART, ANZAHL_STOCKWERKE, SANIERUNGSBEDARF
 
 Gib nur das JSON zurück, keine weiteren Erklärungen."""
         else:
@@ -123,24 +154,29 @@ Gib nur das JSON zurück, keine weiteren Erklärungen."""
 Erstelle Standard-Anweisungen für ein Gebäudeformular.
 
 Erstelle ein JSON-Objekt mit typischen Gebäudeformular-Feldern als Schlüssel und hilfreichen Anweisungen als Werte.
-Beispiel-Felder: GEBÄUDEART, BAUJAHR, WOHNFLÄCHE, HEIZUNGSART, DÄCHART, ANZAHL_STOCKWERKE, SANIERUNGSBEDARF, etc.
+Beispiel-Felder: GEBÄUDEART, BAUJAHR, WOHNFLÄCHE, HEIZUNGSART, DÄCHART, ANZAHL_STOCKWERKE, SANIERUNGSBEDARF
 
 Gib nur das JSON zurück, keine weiteren Erklärungen."""
         
         response = call_llm(prompt, request.context)
+        print(f"LLM-Response erhalten: {response[:100]}...")
         
         # Versuche JSON zu parsen
         try:
             instructions = json.loads(response)
+            print(f"JSON erfolgreich geparst: {len(instructions)} Felder")
             return instructions
         except json.JSONDecodeError:
+            print("JSON-Parse-Fehler, verwende Fallback")
             # Fallback bei JSON-Parse-Fehler
             return {
                 "GEBÄUDEART": "Bitte geben Sie die Art Ihres Gebäudes an (z.B. Einfamilienhaus, Mehrfamilienhaus)",
                 "BAUJAHR": "In welchem Jahr wurde das Gebäude errichtet?",
-                "WOHNFLÄCHE": "Wie groß ist die Wohnfläche in Quadratmetern?",
+                "WOHNFLÄCHE": "Wie groß ist die Wohnfläche in Quadratmetern?", 
                 "HEIZUNGSART": "Welche Art der Heizung ist installiert? (z.B. Gas, Öl, Wärmepumpe)",
-                "DÄCHART": "Beschreiben Sie die Art des Daches (z.B. Satteldach, Flachdach)"
+                "DÄCHART": "Beschreiben Sie die Art des Daches (z.B. Satteldach, Flachdach)",
+                "ANZAHL_STOCKWERKE": "Wie viele Stockwerke hat das Gebäude?",
+                "SANIERUNGSBEDARF": "Welche Sanierungsmaßnahmen sind geplant oder erforderlich?"
             }
         
     except Exception as e:
@@ -158,6 +194,7 @@ Gib nur das JSON zurück, keine weiteren Erklärungen."""
 async def chat_help(request: ChatRequest):
     """Chat-Hilfe für Formulare"""
     try:
+        print(f"Chat-Request: {request.message}")
         prompt = f"""
 Du hilfst beim Ausfüllen eines Gebäudeformulars. 
 Beantworte diese Frage hilfreich und kurz: {request.message}
@@ -175,6 +212,7 @@ Gib eine präzise, hilfreiche Antwort auf Deutsch."""
 async def start_dialog(request: DialogStartRequest):
     """Startet Dialog-Modus"""
     try:
+        print(f"Dialog-Start mit Kontext: {request.context}")
         prompt = f"""
 Erstelle 8-10 wichtige Fragen für ein Gebäudeformular-Interview basierend auf diesem Kontext: {request.context}
 
@@ -182,11 +220,10 @@ Erstelle ein JSON-Array mit Objekten im Format:
 [
   {{"question": "Welche Art von Gebäude möchten Sie erfassen?", "field": "GEBÄUDEART"}},
   {{"question": "In welchem Jahr wurde das Gebäude erbaut?", "field": "BAUJAHR"}},
-  ...
+  {{"question": "Wie groß ist die Wohnfläche in Quadratmetern?", "field": "WOHNFLÄCHE"}}
 ]
 
-Die Fragen sollten natürlich klingen, als würde ein Experte sie in einem Gespräch stellen.
-Gib nur das JSON-Array zurück, keine weiteren Erklärungen."""
+Die Fragen sollten natürlich klingen. Gib nur das JSON-Array zurück."""
         
         response = call_llm(prompt, request.context)
         
@@ -204,7 +241,8 @@ Gib nur das JSON-Array zurück, keine weiteren Erklärungen."""
                 {"question": "In welchem Jahr wurde das Gebäude erbaut?", "field": "BAUJAHR"},
                 {"question": "Wie groß ist die Wohnfläche in Quadratmetern?", "field": "WOHNFLÄCHE"},
                 {"question": "Welche Heizungsart ist installiert?", "field": "HEIZUNGSART"},
-                {"question": "Welche Art von Dach hat das Gebäude?", "field": "DÄCHART"}
+                {"question": "Welche Art von Dach hat das Gebäude?", "field": "DÄCHART"},
+                {"question": "Wie viele Stockwerke hat das Gebäude?", "field": "ANZAHL_STOCKWERKE"}
             ]
             return {
                 "questions": fallback_questions,
@@ -292,4 +330,5 @@ async def save_dialog_data(request: DialogSaveRequest):
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8000))
+    print(f"🚀 Starte FormularIQ Backend mit Bulletproof CORS auf Port {port}")
     uvicorn.run(app, host="0.0.0.0", port=port)
