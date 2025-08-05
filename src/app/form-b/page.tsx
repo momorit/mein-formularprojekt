@@ -2,7 +2,7 @@
 
 "use client"
 
-import { useState } from "react"
+import { useState, useRef, useEffect } from "react"  // ✅ useRef & useEffect hinzugefügt
 import Link from "next/link"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
@@ -28,6 +28,7 @@ interface DialogState {
 }
 
 export default function FormB() {
+  // ✅ ALLE STATE VARIABLES:
   const [context, setContext] = useState("")
   const [dialogState, setDialogState] = useState<DialogState>({
     active: false,
@@ -38,8 +39,16 @@ export default function FormB() {
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([])
   const [userInput, setUserInput] = useState("")
   const [loading, setLoading] = useState(false)
-  const [dialogCompleted, setDialogCompleted] = useState(false)  
+  const [dialogCompleted, setDialogCompleted] = useState(false)
   const [chatExpanded, setChatExpanded] = useState(false)  // ✅ NEU
+
+  // ✅ REFS:
+  const chatEndRef = useRef<HTMLDivElement>(null)  // ✅ NEU
+
+  // ✅ EFFECTS:
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" })
+  }, [chatHistory])
 
   const handleStartDialog = async () => {
     setLoading(true)
