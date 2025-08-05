@@ -312,30 +312,101 @@ Gib nur das JSON-Array zurück."""
         raise HTTPException(status_code=500, detail="Fehler beim Starten des Dialogs")
 
 @app.post("/api/dialog/message")
+# backend/main.py - Dialog-Message Fix (NUR DIESE FUNKTION ERSETZEN)
+
+@app.post("/api/dialog/message")
 async def dialog_message(request: DialogMessageRequest):
-    """Verarbeitet Dialog-Nachrichten"""
+    """Verarbeitet Dialog-Nachrichten mit intelligenter Rückfragen-Erkennung"""
     try:
         current_q = request.currentQuestion
-        user_message = request.message
+        user_message = request.message.strip()
         
-        if user_message.strip() == "?":
-            # Hilfe angefordert
+        print(f"💬 Dialog-Message empfangen: '{user_message}'")
+        print(f"🎯 Aktuelle Frage: {current_q.get('question', '')}")
+        
+        # ✅ ERWEITERTE HILFE-ERKENNUNG
+        def is_help_request(message: str) -> bool:
+            """Erkennt Hilfe-Anfragen intelligenter"""
+            message_lower = message.lower()
+            
+            # Explizite Hilfe-Anfragen
+            if message == "?":
+                return True
+            
+            # Fragezeichen am Ende
+            if message.endswith("?"):
+                return True
+                
+            # Fragewörter am Anfang
+            question_starters = [
+                "was", "welche", "welcher", "welches", "wie", "wo", "wann", "warum", 
+                "gibt es", "können sie", "kannst du", "hilfe", "beispiel", "erklärung"
+            ]
+            
+            for starter in question_starters:
+                if message_lower.startswith(starter):
+                    return True
+                    
+            # Kurze, unvollständige Antworten als Hilfe-Anfrage behandeln
+            if len(message.split()) <= 3 and any(word in message_lower for word in ["was", "wie", "welche"]):
+                return True
+                
+            return False
+        
+        # ✅ INTELLIGENTE HILFE-BEHANDLUNG
+        if is_help_request(user_message):
+            print(f"🆘 Hilfe-Anfrage erkannt: '{user_message}'")
+            
             help_prompt = f"""
 Der Nutzer fragt nach Hilfe bei der Frage: "{current_q.get('question', '')}"
 Feld: {current_q.get('field', '')}
+Nutzer-Frage: "{user_message}"
 
-Gib eine hilfreiche, kurze Erklärung auf Deutsch was hier gemeint ist und wie man antworten könnte.
+Gib eine hilfreiche, detaillierte Antwort auf Deutsch. Erkläre was gemeint ist und gib konkrete Beispiele.
+
+Beispiel-Antworten:
+- Für Gebäudeart: "Es gibt verschiedene Gebäudetypen wie Einfamilienhaus, Mehrfamilienhaus, Bürogebäude, Gewerbeobjekt, Industriegebäude, etc."
+- Für Heizungsart: "Mögliche Heizungsarten sind Gas, Öl, Fernwärme, Wärmepumpe, Pellets, Elektro, etc."
+- Für Baujahr: "Geben Sie das Jahr an, in dem das Gebäude errichtet wurde, z.B. 1985 oder 2010."
+
+Gib eine spezifische, hilfreiche Antwort für die aktuelle Frage.
 """
             
-            help_response = call_llm(help_prompt)
-            return {
-                "response": help_response,
-                "nextQuestion": False
-            }
+            try:
+                help_response = call_llm(help_prompt)
+                print(f"🤖 LLM-Hilfe generiert: {help_response[:100]}...")
+                
+                return {
+                    "response": help_response,
+                    "nextQuestion": False
+                }
+            except Exception as llm_error:
+                print(f"❌ LLM-Hilfe-Fehler: {llm_error}")
+                
+                # Fallback-Hilfe basierend auf Feld-Typ
+                field_name = current_q.get('field', '').upper()
+                fallback_help = f"Für das Feld '{field_name}' benötigen Sie eine spezifische Angabe. Bitte geben Sie eine konkrete Antwort ein."
+                
+                if 'GEBÄUDE' in field_name:
+                    fallback_help = "Mögliche Gebäudearten: Einfamilienhaus, Mehrfamilienhaus, Bürogebäude, Gewerbe, etc."
+                elif 'HEIZUNG' in field_name:
+                    fallback_help = "Heizungsarten: Gas, Öl, Fernwärme, Wärmepumpe, Pellets, Elektro, etc."
+                elif 'JAHR' in field_name:
+                    fallback_help = "Geben Sie das Baujahr als vierstellige Zahl ein, z.B. 1985 oder 2010."
+                elif 'FLÄCHE' in field_name:
+                    fallback_help = "Geben Sie die Fläche in Quadratmetern an, z.B. 120 oder 85,5."
+                
+                return {
+                    "response": fallback_help,
+                    "nextQuestion": False
+                }
+                
         else:
-            # Normale Antwort verarbeiten
+            # ✅ NORMALE ANTWORT VERARBEITEN
+            print(f"✅ Normale Antwort verarbeitet: '{user_message}'")
+            
             if request.questionIndex < request.totalQuestions - 1:
-                response_text = f"Ihre Antwort '{user_message}' wurde gespeichert. Nächste Frage:"
+                response_text = f"Danke! Ihre Antwort '{user_message}' wurde gespeichert. Nächste Frage:"
                 return {
                     "response": response_text,
                     "nextQuestion": True
@@ -349,7 +420,7 @@ Gib eine hilfreiche, kurze Erklärung auf Deutsch was hier gemeint ist und wie m
     except Exception as e:
         print(f"❌ Dialog-Message-Fehler: {e}")
         raise HTTPException(status_code=500, detail="Fehler beim Verarbeiten der Nachricht")
-
+    
 @app.post("/api/save")
 async def save_form_data(request: SaveRequest):
     """Speichert Formulardaten"""
