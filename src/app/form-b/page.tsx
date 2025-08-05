@@ -83,18 +83,25 @@ export default function FormB() {
     setUserInput("")
   }
 
+  // ✅ NEUE handleSendMessage Funktion (IN form-b/page.tsx ERSETZEN)
   const handleSendMessage = async () => {
     if (!userInput.trim() || !dialogState.active) return
 
     const userMessage = { role: "user" as const, content: userInput }
     setChatHistory(prev => [...prev, userMessage])
 
-    // Antwort speichern
+    // Antwort speichern (NUR wenn es keine Rückfrage ist)
     const currentQuestion = dialogState.questions[dialogState.questionIndex]
-    if (currentQuestion && !userInput.endsWith('?')) {
+    const isHelpRequest = userInput.endsWith('?') || 
+                         userInput.toLowerCase().includes('was') ||
+                         userInput.toLowerCase().includes('welche') ||
+                         userInput.toLowerCase().includes('arten') ||
+                         userInput === '?'
+
+    if (currentQuestion && !isHelpRequest) {
       setDialogState(prev => ({
         ...prev,
-        answers: { ...prev.answers, [currentQuestion.field]: userInput }  // ✅ .field statt .feld
+        answers: { ...prev.answers, [currentQuestion.field]: userInput }
       }))
     }
 
@@ -109,19 +116,41 @@ export default function FormB() {
       const assistantMessage = { role: "assistant" as const, content: response.response }
       setChatHistory(prev => [...prev, assistantMessage])
 
-      if (response.nextQuestion && dialogState.questionIndex + 1 < dialogState.questions.length) {
-        // Nächste Frage
+      // ✅ NEUE LOGIC: Unterscheide zwischen Hilfe und normalen Antworten
+      if (response.helpProvided) {
+        // 🆘 HILFE GEGEBEN - BEI AKTUELLER FRAGE BLEIBEN
+        console.log("🆘 Hilfe wurde gegeben, bleibe bei aktueller Frage")
+        
+        // Nach kurzer Pause die gleiche Frage nochmal stellen
+        setTimeout(() => {
+          setChatHistory(prev => [...prev, { 
+            role: "assistant", 
+            content: `${currentQuestion.question}` 
+          }])
+        }, 1500)
+        
+      } else if (response.dialogComplete) {
+        // 🎉 DIALOG KOMPLETT BEENDET
+        console.log("🎉 Dialog wurde beendet")
+        setDialogCompleted(true)
+        setDialogState(prev => ({ ...prev, active: false }))
+        
+      } else if (response.nextQuestion && dialogState.questionIndex + 1 < dialogState.questions.length) {
+        // ➡️ NÄCHSTE FRAGE
+        console.log(`➡️ Springe zu Frage ${dialogState.questionIndex + 2}`)
         setDialogState(prev => ({ ...prev, questionIndex: prev.questionIndex + 1 }))
         
         const nextQuestion = dialogState.questions[dialogState.questionIndex + 1]
         setTimeout(() => {
           setChatHistory(prev => [...prev, { 
             role: "assistant", 
-            content: nextQuestion.question  // ✅ .question statt .frage
+            content: nextQuestion.question
           }])
         }, 1000)
-      } else if (!response.nextQuestion || dialogState.questionIndex + 1 >= dialogState.questions.length) {
-        // Dialog beendet
+        
+      } else if (!response.nextQuestion && !response.helpProvided) {
+        // 🏁 ALLE FRAGEN BEANTWORTET
+        console.log("🏁 Alle Fragen beantwortet")
         setDialogCompleted(true)
         setDialogState(prev => ({ ...prev, active: false }))
       }

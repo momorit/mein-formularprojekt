@@ -314,107 +314,130 @@ Gib nur das JSON-Array zurück."""
 @app.post("/api/dialog/message")
 # backend/main.py - Dialog-Message Fix (NUR DIESE FUNKTION ERSETZEN)
 
+# backend/main.py - Dialog-Message Fix (KOMPLETTE FUNKTION ERSETZEN)
+
 @app.post("/api/dialog/message")
 async def dialog_message(request: DialogMessageRequest):
-    """Verarbeitet Dialog-Nachrichten mit intelligenter Rückfragen-Erkennung"""
+    """Verarbeitet Dialog-Nachrichten mit Kontext-bewussten Rückfragen"""
     try:
         current_q = request.currentQuestion
         user_message = request.message.strip()
         
-        print(f"💬 Dialog-Message empfangen: '{user_message}'")
+        print(f"💬 Dialog-Message: '{user_message}' bei Frage {request.questionIndex + 1}/{request.totalQuestions}")
         print(f"🎯 Aktuelle Frage: {current_q.get('question', '')}")
         
-        # ✅ ERWEITERTE HILFE-ERKENNUNG
+        # ✅ INTELLIGENTE HILFE-ERKENNUNG (erweitert)
         def is_help_request(message: str) -> bool:
-            """Erkennt Hilfe-Anfragen intelligenter"""
+            """Erkennt Hilfe-Anfragen und Rückfragen"""
             message_lower = message.lower()
             
-            # Explizite Hilfe-Anfragen
+            # Explizite Hilfe
             if message == "?":
                 return True
             
-            # Fragezeichen am Ende
+            # Fragen mit Fragezeichen
             if message.endswith("?"):
                 return True
                 
-            # Fragewörter am Anfang
+            # Fragewörter
             question_starters = [
-                "was", "welche", "welcher", "welches", "wie", "wo", "wann", "warum", 
-                "gibt es", "können sie", "kannst du", "hilfe", "beispiel", "erklärung"
+                "was", "welche", "welcher", "welches", "wie", "wo", "wann", "warum",
+                "gibt es", "können sie", "kannst du", "hilfe", "beispiel", "beispiele",
+                "erklärung", "arten", "typen", "möglichkeiten", "optionen"
             ]
             
             for starter in question_starters:
-                if message_lower.startswith(starter):
+                if message_lower.startswith(starter) or starter in message_lower:
                     return True
                     
-            # Kurze, unvollständige Antworten als Hilfe-Anfrage behandeln
-            if len(message.split()) <= 3 and any(word in message_lower for word in ["was", "wie", "welche"]):
+            # Kurze, frageartige Antworten
+            if len(message.split()) <= 4 and any(word in message_lower for word in ["was", "wie", "welche", "arten"]):
                 return True
                 
             return False
         
-        # ✅ INTELLIGENTE HILFE-BEHANDLUNG
+        # ✅ RÜCKFRAGEN MIT KONTEXT BEANTWORTEN
         if is_help_request(user_message):
-            print(f"🆘 Hilfe-Anfrage erkannt: '{user_message}'")
+            print(f"🆘 Rückfrage erkannt: '{user_message}'")
             
-            help_prompt = f"""
-Der Nutzer fragt nach Hilfe bei der Frage: "{current_q.get('question', '')}"
-Feld: {current_q.get('field', '')}
-Nutzer-Frage: "{user_message}"
+            # Kontext aus der aktuellen Frage ableiten
+            current_field = current_q.get('field', '')
+            current_question_text = current_q.get('question', '')
+            
+            # Erweiterte Hilfe mit Groq generieren
+            context_help_prompt = f"""
+Du hilfst einem Nutzer beim Ausfüllen eines Gebäudeformulars. 
 
-Gib eine hilfreiche, detaillierte Antwort auf Deutsch. Erkläre was gemeint ist und gib konkrete Beispiele.
+AKTUELLE FRAGE: "{current_question_text}"
+FELD: {current_field}
+NUTZER-RÜCKFRAGE: "{user_message}"
 
-Beispiel-Antworten:
-- Für Gebäudeart: "Es gibt verschiedene Gebäudetypen wie Einfamilienhaus, Mehrfamilienhaus, Bürogebäude, Gewerbeobjekt, Industriegebäude, etc."
-- Für Heizungsart: "Mögliche Heizungsarten sind Gas, Öl, Fernwärme, Wärmepumpe, Pellets, Elektro, etc."
-- Für Baujahr: "Geben Sie das Jahr an, in dem das Gebäude errichtet wurde, z.B. 1985 oder 2010."
+Beantworte die Rückfrage des Nutzers präzise und hilfreich auf Deutsch. 
+Gib konkrete Beispiele und Optionen für das aktuelle Formularfeld.
 
-Gib eine spezifische, hilfreiche Antwort für die aktuelle Frage.
+Beispiel-Antworten je nach Feld:
+- GEBÄUDEART: "Es gibt verschiedene Gebäudetypen: Einfamilienhaus, Mehrfamilienhaus, Reihenhaus, Doppelhaushälfte, Bürogebäude, Gewerbeimmobilie, Industriegebäude, etc."
+- HEIZUNGSART: "Mögliche Heizungsarten: Gasheizung, Ölheizung, Fernwärme, Wärmepumpe (Luft/Wasser), Pelletheizung, Elektroheizung, Solarthermie, etc."
+- BAUJAHR: "Geben Sie das Jahr der Fertigstellung an, z.B. 1985, 2010, 2023. Bei unsicheren Angaben können Sie auch Jahrzehnte angeben wie '1970er Jahre'."
+- WOHNFLÄCHE: "Die Wohnfläche wird in Quadratmetern (m²) angegeben, z.B. 85, 120, 150. Gemeint ist die beheizbare Wohnfläche ohne Keller oder Dachboden."
+
+Beantworte die Frage spezifisch für das aktuelle Feld "{current_field}".
 """
-            
+
             try:
-                help_response = call_llm(help_prompt)
-                print(f"🤖 LLM-Hilfe generiert: {help_response[:100]}...")
+                help_response = call_llm(context_help_prompt)
+                print(f"🤖 Kontextuelle Hilfe generiert: {help_response[:100]}...")
                 
                 return {
                     "response": help_response,
-                    "nextQuestion": False
+                    "nextQuestion": False,  # ✅ WICHTIG: Bei aktueller Frage bleiben!
+                    "questionIndex": request.questionIndex,  # ✅ Gleicher Index
+                    "helpProvided": True  # ✅ Marker für Frontend
                 }
+                
             except Exception as llm_error:
                 print(f"❌ LLM-Hilfe-Fehler: {llm_error}")
                 
-                # Fallback-Hilfe basierend auf Feld-Typ
-                field_name = current_q.get('field', '').upper()
-                fallback_help = f"Für das Feld '{field_name}' benötigen Sie eine spezifische Angabe. Bitte geben Sie eine konkrete Antwort ein."
+                # Fallback-Hilfe basierend auf Feld
+                fallback_responses = {
+                    "GEBÄUDEART": "Gebäudetypen: Einfamilienhaus, Mehrfamilienhaus, Reihenhaus, Bürogebäude, Gewerbe, etc.",
+                    "HEIZUNGSART": "Heizungsarten: Gas, Öl, Fernwärme, Wärmepumpe, Pellets, Elektro, Solar, etc.",
+                    "BAUJAHR": "Geben Sie das Baujahr als vierstellige Zahl ein, z.B. 1985, 2010, 2023.",
+                    "WOHNFLÄCHE": "Wohnfläche in m², z.B. 85, 120, 150 (ohne Keller/Dachboden).",
+                    "STOCKWERKE": "Anzahl der Stockwerke/Etagen, z.B. 1, 2, 3 (Erdgeschoss + Obergeschosse).",
+                    "ZIMMER": "Anzahl der Zimmer/Räume, z.B. 3, 4, 5 (ohne Bad/Küche)."
+                }
                 
-                if 'GEBÄUDE' in field_name:
-                    fallback_help = "Mögliche Gebäudearten: Einfamilienhaus, Mehrfamilienhaus, Bürogebäude, Gewerbe, etc."
-                elif 'HEIZUNG' in field_name:
-                    fallback_help = "Heizungsarten: Gas, Öl, Fernwärme, Wärmepumpe, Pellets, Elektro, etc."
-                elif 'JAHR' in field_name:
-                    fallback_help = "Geben Sie das Baujahr als vierstellige Zahl ein, z.B. 1985 oder 2010."
-                elif 'FLÄCHE' in field_name:
-                    fallback_help = "Geben Sie die Fläche in Quadratmetern an, z.B. 120 oder 85,5."
+                fallback_help = fallback_responses.get(
+                    current_field, 
+                    f"Bitte geben Sie eine spezifische Antwort für das Feld '{current_field}' ein."
+                )
                 
                 return {
                     "response": fallback_help,
-                    "nextQuestion": False
+                    "nextQuestion": False,  # ✅ Bei aktueller Frage bleiben
+                    "questionIndex": request.questionIndex,
+                    "helpProvided": True
                 }
                 
         else:
-            # ✅ NORMALE ANTWORT VERARBEITEN
-            print(f"✅ Normale Antwort verarbeitet: '{user_message}'")
+            # ✅ NORMALE ANTWORT - ZUR NÄCHSTEN FRAGE
+            print(f"✅ Normale Antwort: '{user_message}' → Frage {request.questionIndex + 1} beantwortet")
             
             if request.questionIndex < request.totalQuestions - 1:
-                response_text = f"Danke! Ihre Antwort '{user_message}' wurde gespeichert. Nächste Frage:"
                 return {
-                    "response": response_text,
-                    "nextQuestion": True
+                    "response": f"Danke! '{user_message}' wurde gespeichert. Nächste Frage:",
+                    "nextQuestion": True,  # ✅ Zur nächsten Frage springen
+                    "questionIndex": request.questionIndex + 1,
+                    "helpProvided": False
                 }
             else:
                 return {
-                    "response": "Herzlichen Glückwunsch! Sie haben alle Fragen beantwortet. Sie können nun Ihre Daten speichern.",
-                    "nextQuestion": False
+                    "response": "🎉 Herzlichen Glückwunsch! Sie haben alle Fragen beantwortet. Sie können nun Ihre Daten speichern.",
+                    "nextQuestion": False,
+                    "questionIndex": request.questionIndex,
+                    "dialogComplete": True,  # ✅ Dialog beenden
+                    "helpProvided": False
                 }
         
     except Exception as e:

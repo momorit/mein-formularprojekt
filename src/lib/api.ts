@@ -39,6 +39,9 @@ interface DialogStartResponse {
 interface DialogMessageResponse {
   response: string
   nextQuestion: boolean
+  questionIndex?: number        // ✅ NEU: Aktuelle Frage-Index
+  helpProvided?: boolean        // ✅ NEU: Wurde Hilfe gegeben?
+  dialogComplete?: boolean      // ✅ NEU: Dialog beendet?
 }
 
 // === FORMULAR-ANWEISUNGEN (Variante A) ===
