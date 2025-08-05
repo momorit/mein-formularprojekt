@@ -1,14 +1,16 @@
-// src/app/study/page.tsx - Aktualisierte Version mit Fragebogen-System
+// src/app/study/page.tsx - QUICK FIX für Deployment
 
 'use client'
 
 import React, { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { SUSQuestionnaire } from '@/components/Questionnaire/SUSQuestionnaire'
-import { CustomUsabilityItems } from '@/components/Questionnaire/CustomUsabilityItems'
-import { ComparisonQuestionnaire } from '@/components/Questionnaire/ComparisonQuestionnaire'
-import { useTimingTracker } from '@/components/Questionnaire/TimingTracker'
+
+// TODO: Uncomment when questionnaire components are created
+// import { SUSQuestionnaire } from '@/components/Questionnaire/SUSQuestionnaire'
+// import { CustomUsabilityItems } from '@/components/Questionnaire/CustomUsabilityItems'
+// import { ComparisonQuestionnaire } from '@/components/Questionnaire/ComparisonQuestionnaire'
+// import { useTimingTracker } from '@/components/Questionnaire/TimingTracker'
 
 // Types
 interface StudyData {
@@ -63,7 +65,8 @@ export default function StudyPage() {
     startTime: new Date()
   }))
 
-  const { timingData, startVariant, endVariant, finishStudy } = useTimingTracker()
+  // TODO: Re-enable when TimingTracker is created
+  // const { timingData, startVariant, endVariant, finishStudy } = useTimingTracker()
 
   // Generate unique participant ID
   function generateParticipantId(): string {
@@ -101,7 +104,8 @@ export default function StudyPage() {
           firstVariant={firstVariant}
           firstVariantName={firstVariantName}
           onProceed={() => {
-            startVariant(firstVariant as 'A' | 'B')
+            // TODO: Re-enable timing when components exist
+            // startVariant(firstVariant as 'A' | 'B')
             setCurrentStep(firstVariant === 'A' ? 'variant-a' : 'variant-b')
           }}
         />
@@ -114,7 +118,8 @@ export default function StudyPage() {
           variantName="Sichtbares Formular"
           redirectUrl="/form-a"
           onComplete={() => {
-            endVariant('A')
+            // TODO: Re-enable timing when components exist
+            // endVariant('A')
             setCurrentStep('questionnaire-a')
           }}
         />
@@ -127,7 +132,8 @@ export default function StudyPage() {
           variantName="Dialog-System"
           redirectUrl="/form-b"
           onComplete={() => {
-            endVariant('B')
+            // TODO: Re-enable timing when components exist
+            // endVariant('B')
             setCurrentStep('questionnaire-b')
           }}
         />
@@ -150,7 +156,8 @@ export default function StudyPage() {
             
             // Go to second variant or comparison
             if (secondVariant === 'B') {
-              startVariant('B')
+              // TODO: Re-enable timing when components exist
+              // startVariant('B')
               setCurrentStep('variant-b')
             } else {
               setCurrentStep('comparison')
@@ -183,14 +190,15 @@ export default function StudyPage() {
         <ComparisonStep
           onComplete={(comparison) => {
             setStudyData(prev => ({ ...prev, comparison }))
-            finishStudy()
+            // TODO: Re-enable timing when components exist
+            // finishStudy()
             setCurrentStep('complete')
           }}
         />
       )
     
     case 'complete':
-      return <CompletionStep studyData={studyData} timingData={timingData} />
+      return <CompletionStep studyData={studyData} timingData={{}} />
     
     default:
       return <div>Unbekannter Schritt</div>
@@ -315,6 +323,7 @@ function WelcomeStep({ studyData, onProceed }: { studyData: StudyData, onProceed
   )
 }
 
+// Placeholder components for now
 function QuestionnaireStep({ 
   variant, 
   variantName, 
@@ -324,70 +333,27 @@ function QuestionnaireStep({
   variantName: string 
   onComplete: (responses: { susResponses: Record<string, number>, customResponses: Record<string, number> }) => void 
 }) {
-  const [susResponses, setSusResponses] = useState<Record<string, number>>({})
-  const [customResponses, setCustomResponses] = useState<Record<string, number>>({})
-  const [currentSection, setCurrentSection] = useState<'sus' | 'custom'>('sus')
-
-  const handleNext = () => {
-    if (currentSection === 'sus') {
-      setCurrentSection('custom')
-    } else {
-      onComplete({ susResponses, customResponses })
-    }
-  }
-
-  const isSectionComplete = () => {
-    if (currentSection === 'sus') {
-      return Object.keys(susResponses).length === 10
-    } else {
-      return Object.keys(customResponses).length === 4
-    }
-  }
-
   return (
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="max-w-4xl mx-auto px-4">
         <Card>
           <CardHeader>
             <CardTitle className="text-2xl text-gray-900">
-              Fragebogen - {variantName}
+              Fragebogen - {variantName} (Coming Soon)
             </CardTitle>
-            <div className="w-full bg-gray-200 rounded-full h-2 mt-4">
-              <div 
-                className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                style={{ width: currentSection === 'sus' ? '50%' : '100%' }}
-              />
-            </div>
           </CardHeader>
           <CardContent>
-            {currentSection === 'sus' ? (
-              <SUSQuestionnaire
-                responses={susResponses}
-                onChange={setSusResponses}
-                variantName={variantName}
-              />
-            ) : (
-              <CustomUsabilityItems
-                responses={customResponses}
-                onChange={setCustomResponses}
-              />
-            )}
-
-            <div className="flex justify-between mt-8">
-              {currentSection === 'custom' && (
-                <Button
-                  onClick={() => setCurrentSection('sus')}
-                  variant="outline"
-                >
-                  ← Zurück
-                </Button>
-              )}
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
+              <h3 className="text-lg font-semibold text-yellow-800 mb-2">🚧 In Entwicklung</h3>
+              <p className="text-yellow-700 mb-4">
+                Das vollständige Fragebogen-System wird gerade implementiert.
+              </p>
+              
               <Button
-                onClick={handleNext}
-                disabled={!isSectionComplete()}
-                className="ml-auto"
+                onClick={() => onComplete({ susResponses: {}, customResponses: {} })}
+                className="bg-yellow-600 hover:bg-yellow-700"
               >
-                {currentSection === 'sus' ? 'Weiter →' : 'Abschließen'}
+                Weiter zur nächsten Variante →
               </Button>
             </div>
           </CardContent>
@@ -398,40 +364,25 @@ function QuestionnaireStep({
 }
 
 function ComparisonStep({ onComplete }: { onComplete: (comparison: ComparisonData) => void }) {
-  const [responses, setResponses] = useState<Record<string, string>>({})
-
-  const isComplete = () => {
-    const required = ['speed', 'understandability', 'pleasantness', 'future_preference', 'overall_rating']
-    return required.every(key => responses[key])
-  }
-
-  const handleComplete = () => {
-    onComplete({
-      responses,
-      completedAt: new Date()
-    })
-  }
-
   return (
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="max-w-4xl mx-auto px-4">
         <Card>
           <CardHeader>
-            <CardTitle className="text-2xl text-gray-900">Vergleich der Varianten</CardTitle>
+            <CardTitle className="text-2xl text-gray-900">Vergleich (Coming Soon)</CardTitle>
           </CardHeader>
           <CardContent>
-            <ComparisonQuestionnaire
-              responses={responses}
-              onChange={setResponses}
-            />
-
-            <div className="flex justify-center mt-8">
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
+              <h3 className="text-lg font-semibold text-yellow-800 mb-2">🚧 In Entwicklung</h3>
+              <p className="text-yellow-700 mb-4">
+                Der Vergleichsfragebogen wird gerade implementiert.
+              </p>
+              
               <Button
-                onClick={handleComplete}
-                disabled={!isComplete()}
-                className="px-8 py-3 text-lg"
+                onClick={() => onComplete({ responses: {}, completedAt: new Date() })}
+                className="bg-yellow-600 hover:bg-yellow-700"
               >
-                🎉 Studie abschließen
+                Studie abschließen →
               </Button>
             </div>
           </CardContent>
@@ -483,8 +434,8 @@ function CompletionStep({ studyData, timingData }: { studyData: StudyData, timin
                   {studyData.participantId}
                 </div>
                 <div>
-                  <strong>Gesamtdauer:</strong><br />
-                  {Math.round((timingData.duration || 0) / 1000 / 60)} Minuten
+                  <strong>Reihenfolge:</strong><br />
+                  {studyData.randomization}
                 </div>
               </div>
             </div>
@@ -499,18 +450,150 @@ function CompletionStep({ studyData, timingData }: { studyData: StudyData, timin
   )
 }
 
-// Placeholder components (implement these based on your existing code)  
+// Placeholder components - implement these based on your existing code  
 function DemographicsStep({ studyData, onComplete }: any) {
-  // Use your existing demographics component
-  return <div>Demographics Step</div>
+  const [formData, setFormData] = useState({
+    age: '',
+    role: '',
+    experience: '',
+    techAffinity: 3,
+    formularFrequency: '',
+    device: 'Desktop',
+    browser: 'Chrome'
+  })
+
+  return (
+    <div className="min-h-screen bg-gray-50 py-8">
+      <div className="max-w-4xl mx-auto px-4">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-2xl text-gray-900">Demografische Daten</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
+              <h3 className="text-lg font-semibold text-blue-800 mb-2">📋 Kurzer Fragebogen</h3>
+              <p className="text-blue-700 mb-4">
+                Bitte geben Sie ein paar grundlegende Informationen an.
+              </p>
+              
+              <Button
+                onClick={() => onComplete(formData)}
+                className="bg-blue-600 hover:bg-blue-700"
+              >
+                Weiter zum Szenario →
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  )
 }
 
 function ScenarioStep({ studyData, firstVariant, firstVariantName, onProceed }: any) {
-  // Use your existing scenario component  
-  return <div>Scenario Step</div>
+  const [readComplete, setReadComplete] = useState(false)
+
+  return (
+    <div className="min-h-screen bg-gray-50 py-8">
+      <div className="max-w-4xl mx-auto px-4">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-2xl text-gray-900">Szenario-Beschreibung</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="bg-green-50 border border-green-200 rounded-lg p-6 mb-6">
+              <h3 className="text-lg font-semibold text-green-800 mb-2">🏠 Ihr Szenario</h3>
+              <p className="text-green-700 mb-4">
+                Sie sind Eigentümer eines Mehrfamilienhauses und müssen ein Formular für 
+                die Gebäudeerfassung ausfüllen. Stellen Sie sich vor, Sie haben alle nötigen 
+                Informationen zur Hand.
+              </p>
+            </div>
+
+            <div className="bg-gray-50 rounded-lg p-6 mb-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-3">📋 Nächste Schritte</h3>
+              <div className="space-y-2 text-sm text-gray-700">
+                <p>1. Sie werden <strong>Variante {firstVariant} ({firstVariantName})</strong> testen</p>
+                <p>2. Kurzer Fragebogen zu dieser Variante</p>
+                <p>3. Variante {studyData.randomization === 'A-B' ? 'B' : 'A'} testen</p>
+                <p>4. Fragebogen und Vergleich</p>
+              </div>
+            </div>
+
+            <div className="border border-gray-200 rounded-lg p-4 mb-6">
+              <label className="flex items-start space-x-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={readComplete}
+                  onChange={(e) => setReadComplete(e.target.checked)}
+                  className="mt-1 w-4 h-4 text-blue-600"
+                />
+                <span className="text-sm text-gray-700">
+                  Ich habe das Szenario gelesen und verstanden. Ich bin bereit, 
+                  das Formular als Eigentümer des beschriebenen Gebäudes auszufüllen.
+                </span>
+              </label>
+            </div>
+
+            <div className="text-center">
+              <Button
+                onClick={onProceed}
+                disabled={!readComplete}
+                className="bg-green-600 hover:bg-green-700 text-white px-8 py-3 text-lg"
+              >
+                🚀 Variante {firstVariant} starten
+              </Button>
+              
+              {!readComplete && (
+                <p className="text-sm text-gray-500 mt-2">
+                  Bitte bestätigen Sie, dass Sie das Szenario gelesen haben.
+                </p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  )
 }
 
 function VariantTestStep({ variant, variantName, redirectUrl, onComplete }: any) {
-  // Redirect to the actual variant and track completion
-  return <div>Variant Test Step</div>
+  return (
+    <div className="min-h-screen bg-gray-50 py-8">
+      <div className="max-w-4xl mx-auto px-4">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-2xl text-gray-900">
+              Variante {variant}: {variantName}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="bg-purple-50 border border-purple-200 rounded-lg p-6">
+              <h3 className="text-lg font-semibold text-purple-800 mb-2">🚀 Bereit zum Testen</h3>
+              <p className="text-purple-700 mb-4">
+                Klicken Sie auf den Button unten, um Variante {variant} zu testen.
+                Nach dem Test kehren Sie hierher zurück für den Fragebogen.
+              </p>
+              
+              <div className="flex space-x-4">
+                <Button
+                  onClick={() => window.open(redirectUrl, '_blank')}
+                  className="bg-purple-600 hover:bg-purple-700"
+                >
+                  📝 Variante {variant} öffnen
+                </Button>
+                
+                <Button
+                  onClick={onComplete}
+                  variant="outline"
+                >
+                  ✅ Test abgeschlossen
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  )
 }
