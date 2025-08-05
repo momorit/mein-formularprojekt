@@ -46,10 +46,8 @@ export default function FormB() {
   const handleStartDialog = async () => {
     setLoading(true)
     try {
-      const formData = new FormData()
-      formData.append("extraInfo", context || "")
-
-      const result = await startDialog(formData)
+      // ✅ FIX: Direkt string übergeben statt FormData
+      const result = await startDialog(context || "")
       
       setDialogState({
         active: false, // Dialog noch nicht aktiv!
