@@ -38,7 +38,8 @@ export default function FormB() {
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([])
   const [userInput, setUserInput] = useState("")
   const [loading, setLoading] = useState(false)
-  const [dialogCompleted, setDialogCompleted] = useState(false)
+  const [dialogCompleted, setDialogCompleted] = useState(false)  
+  const [chatExpanded, setChatExpanded] = useState(false)  // ✅ NEU
 
   const handleStartDialog = async () => {
     setLoading(true)
@@ -274,12 +275,12 @@ export default function FormB() {
           </Card>
         )}
 
-        {/* Main Content */}
+        {/* NEUES LAYOUT: Chat unten statt rechts */}
         {!dialogCompleted && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <div className="space-y-8">
             
-            {/* Setup / Control Panel */}
-            <div className="space-y-6">
+            {/* Setup / Control Panel - JETZT FULL WIDTH */}
+            <div className="w-full max-w-4xl mx-auto">
               
               {!dialogState.questions.length ? (
                 <Card>
@@ -315,8 +316,8 @@ export default function FormB() {
                   </CardContent>
                 </Card>
               ) : (
-                <>
-                  {/* Generated Questions Preview */}
+                <div className="grid md:grid-cols-2 gap-6">
+                  {/* Generated Questions Preview - Links */}
                   <Card>
                     <CardHeader>
                       <CardTitle className="text-lg text-gray-900">
@@ -324,10 +325,14 @@ export default function FormB() {
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <div className="bg-gray-50 rounded-lg p-4 max-h-40 overflow-y-auto mb-4">
+                      <div className="bg-gray-50 rounded-lg p-4 max-h-48 overflow-y-auto mb-4">
                         <div className="space-y-1 text-sm">
                           {dialogState.questions.map((q, i) => (
-                            <div key={i} className="text-gray-700">
+                            <div key={i} className={`text-gray-700 p-2 rounded ${
+                              i === dialogState.questionIndex && dialogState.active 
+                                ? 'bg-emerald-100 border-l-4 border-emerald-500 font-medium' 
+                                : ''
+                            }`}>
                               {i + 1}. {q.question}
                             </div>
                           ))}
@@ -353,79 +358,186 @@ export default function FormB() {
                     </CardContent>
                   </Card>
 
-                  {/* Reset Button */}
-                  <Button 
-                    onClick={handleReset}
-                    variant="outline"
-                    className="w-full text-gray-600 border-gray-300 hover:bg-gray-50"
-                  >
-                    🔄 Neu starten
-                  </Button>
-                </>
+                  {/* Controls - Rechts */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg text-gray-900">Dialog-Status</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="grid grid-cols-2 gap-4 text-center">
+                        <div className="bg-blue-50 rounded-lg p-3">
+                          <div className="text-lg font-bold text-blue-600">
+                            {Object.keys(dialogState.answers).length}
+                          </div>
+                          <div className="text-xs text-blue-700">Beantwortet</div>
+                        </div>
+                        <div className="bg-gray-50 rounded-lg p-3">
+                          <div className="text-lg font-bold text-gray-600">
+                            {dialogState.questions.length - Object.keys(dialogState.answers).length}
+                          </div>
+                          <div className="text-xs text-gray-700">Noch offen</div>
+                        </div>
+                      </div>
+                      
+                      <Button 
+                        onClick={handleReset}
+                        variant="outline"
+                        className="w-full text-gray-600 border-gray-300 hover:bg-gray-50"
+                      >
+                        🔄 Neu starten
+                      </Button>
+                      
+                      {Object.keys(dialogState.answers).length > 0 && (
+                        <div className="bg-gray-50 rounded-lg p-3">
+                          <h4 className="text-sm font-medium text-gray-900 mb-2">Aktuelle Antworten:</h4>
+                          <div className="space-y-1 max-h-32 overflow-y-auto">
+                            {Object.entries(dialogState.answers).map(([field, answer]) => (
+                              <div key={field} className="text-xs">
+                                <span className="font-medium text-gray-700">{field}:</span>
+                                <span className="ml-1 text-gray-600">"{answer}"</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </div>
               )}
             </div>
 
-            {/* Chat Interface */}
-            <div className="space-y-6">
-              <Card className="h-[600px] flex flex-col">
-                <CardHeader>
-                  <CardTitle className="text-lg text-gray-900">Dialog-Chat</CardTitle>
-                  <p className="text-sm text-gray-600">
-                    {dialogState.active 
-                      ? `Frage ${dialogState.questionIndex + 1} von ${dialogState.questions.length}`
-                      : "Starten Sie den Dialog um zu beginnen"
-                    }
-                  </p>
-                </CardHeader>
-                
-                <CardContent className="flex-1 flex flex-col">
-                  {/* Chat Messages */}
-                  <div className="flex-1 overflow-y-auto border border-gray-200 rounded-lg p-4 mb-4 space-y-4">
-                    {chatHistory.length === 0 ? (
-                      <div className="text-center text-gray-500 py-8">
-                        <svg className="w-12 h-12 mx-auto mb-4 text-gray-300" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-2v2h2V9zM9 9h2v2H9V9z"/>
-                        </svg>
-                        <p>Dialog-Chat bereit</p>
-                        <p className="text-sm">Generieren Sie zuerst Fragen und starten Sie den Dialog.</p>
+            {/* CHAT INTERFACE - JETZT UNTEN UND BREIT */}
+            {dialogState.questions.length > 0 && (
+              <div className="w-full max-w-6xl mx-auto">
+                <Card className="border-t-4 border-emerald-500">
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <CardTitle className="text-lg text-gray-900 flex items-center">
+                          <svg className="w-5 h-5 mr-2 text-emerald-600" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-2v2h2V9zM9 9h2v2H9V9z"/>
+                          </svg>
+                          Dialog-Chat
+                        </CardTitle>
+                        <p className="text-sm text-gray-600">
+                          {dialogState.active 
+                            ? `Frage ${dialogState.questionIndex + 1} von ${dialogState.questions.length} • Stellen Sie Rückfragen oder antworten Sie direkt`
+                            : "Dialog bereit - klicken Sie 'Dialog beginnen' um zu starten"
+                          }
+                        </p>
                       </div>
-                    ) : (
-                      chatHistory.map((msg, i) => (
-                        <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                          <div className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
-                            msg.role === 'user' 
-                              ? 'bg-emerald-600 text-white' 
-                              : 'bg-gray-100 text-gray-900'
-                          }`}>
-                            {msg.content}
-                          </div>
+                      
+                      {/* Chat Toggle */}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setChatExpanded(!chatExpanded)}
+                        className="text-gray-600"
+                      >
+                        {chatExpanded ? "Minimieren" : "Erweitern"}
+                        <svg className={`w-4 h-4 ml-1 transform transition-transform ${chatExpanded ? 'rotate-180' : ''}`} fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"/>
+                        </svg>
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  
+                  <CardContent className="p-4">
+                    {/* Chat Messages - AUTO-EXPANDING */}
+                    <div className={`overflow-y-auto space-y-3 mb-4 p-4 border border-gray-200 rounded-lg bg-gray-50 transition-all duration-300 ${
+                      chatExpanded 
+                        ? 'min-h-[400px] max-h-[600px]' 
+                        : chatHistory.length === 0 
+                          ? 'h-24' 
+                          : `min-h-[${Math.min(chatHistory.length * 60 + 100, 300)}px] max-h-[300px]`
+                    }`}>
+                      {chatHistory.length === 0 ? (
+                        <div className="text-center text-gray-500 py-4">
+                          <svg className="w-8 h-8 mx-auto mb-2 text-gray-300" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7z"/>
+                          </svg>
+                          <p className="text-sm">Dialog-Chat bereit</p>
                         </div>
-                      ))
-                    )}
-                  </div>
+                      ) : (
+                        chatHistory.map((msg, i) => (
+                          <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} mb-3`}>
+                            <div className={`max-w-[70%] px-4 py-3 rounded-lg shadow-sm ${
+                              msg.role === 'user' 
+                                ? 'bg-emerald-600 text-white' 
+                                : 'bg-white text-gray-900 border border-gray-200'
+                            }`}>
+                              <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</p>
+                              <div className={`text-xs mt-1 opacity-70 ${
+                                msg.role === 'user' ? 'text-emerald-100' : 'text-gray-500'
+                              }`}>
+                                {new Date().toLocaleTimeString('de-DE', { 
+                                  hour: '2-digit', 
+                                  minute: '2-digit' 
+                                })}
+                              </div>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                      
+                      <div ref={chatEndRef} />
+                    </div>
 
-                  {/* Input */}
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={userInput}
-                      onChange={(e) => setUserInput(e.target.value)}
-                      onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
-                      placeholder={dialogState.active ? "Ihre Antwort eingeben... (oder '?' für Hilfe)" : "Dialog starten um zu antworten"}
-                      disabled={!dialogState.active}
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 disabled:bg-gray-100"
-                    />
-                    <Button 
-                      onClick={handleSendMessage}
-                      disabled={!dialogState.active || !userInput.trim()}
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white px-4"
-                    >
-                      📤
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
+                    {/* Input Area */}
+                    <div className="space-y-3">
+                      <div className="flex gap-3">
+                        <input
+                          type="text"
+                          value={userInput}
+                          onChange={(e) => setUserInput(e.target.value)}
+                          onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+                          placeholder={dialogState.active 
+                            ? "Ihre Antwort eingeben oder Rückfrage stellen..." 
+                            : "Dialog starten um zu antworten"
+                          }
+                          disabled={!dialogState.active}
+                          className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 disabled:bg-gray-100"
+                        />
+                        
+                        <Button 
+                          onClick={handleSendMessage}
+                          disabled={!dialogState.active || !userInput.trim()}
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white px-6"
+                        >
+                          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"/>
+                          </svg>
+                        </Button>
+                      </div>
+                      
+                      {/* Quick Actions */}
+                      {dialogState.active && (
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            onClick={() => setUserInput("?")}
+                            className="text-xs px-3 py-1 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 rounded-full"
+                          >
+                            ? Hilfe
+                          </button>
+                          <button
+                            onClick={() => setUserInput("Welche Optionen gibt es?")}
+                            className="text-xs px-3 py-1 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-full"
+                          >
+                            💡 Optionen
+                          </button>
+                          <button
+                            onClick={() => setUserInput("Beispiele?")}
+                            className="text-xs px-3 py-1 bg-purple-100 hover:bg-purple-200 text-purple-700 rounded-full"
+                          >
+                            📝 Beispiele
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
           </div>
         )}
       </main>
