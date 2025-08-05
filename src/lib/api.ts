@@ -1,8 +1,8 @@
-// src/lib/api.ts - Vollständige Version mit allen Funktionen
+// src/lib/api.ts - SIMPLIFIED & FIXED
 
 // API-Base-URL für verschiedene Umgebungen
 const API_BASE_URL = process.env.NODE_ENV === 'production' 
-  ? (process.env.NEXT_PUBLIC_API_URL || 'https://your-backend.up.railway.app')
+  ? (process.env.NEXT_PUBLIC_API_URL || 'https://mein-formularprojekt-production.up.railway.app')
   : 'http://localhost:8000'
 
 // TypeScript Interface Definitionen
@@ -24,9 +24,10 @@ interface ChatMessage {
   content: string
 }
 
+// ✅ FIX: Correct interface matching backend
 interface DialogQuestion {
-  question: string
-  field: string
+  question: string  // Backend sendet "question"
+  field: string     // Backend sendet "field"
 }
 
 interface DialogStartResponse {
@@ -40,9 +41,7 @@ interface DialogMessageResponse {
   nextQuestion: boolean
 }
 
-// === BESTEHENDE FUNKTIONEN ===
-
-// API-Funktionen für Formular-Anweisungen
+// === FORMULAR-ANWEISUNGEN (Variante A) ===
 export async function generateInstructions(context: string): Promise<FormInstructions> {
   try {
     const response = await fetch(`${API_BASE_URL}/api/instructions`, {
@@ -73,7 +72,7 @@ export async function generateInstructions(context: string): Promise<FormInstruc
   }
 }
 
-// Chat-Hilfe API
+// === CHAT-HILFE ===
 export async function getChatHelp(message: string): Promise<string> {
   try {
     const response = await fetch(`${API_BASE_URL}/api/chat`, {
@@ -96,7 +95,7 @@ export async function getChatHelp(message: string): Promise<string> {
   }
 }
 
-// Formular-Daten speichern
+// === FORMULAR-DATEN SPEICHERN ===
 export async function saveFormData(instructions: FormInstructions, values: FormValues): Promise<SaveResponse> {
   try {
     const timestamp = new Date().toISOString()
@@ -126,7 +125,7 @@ export async function saveFormData(instructions: FormInstructions, values: FormV
   }
 }
 
-// Dialog-Start API
+// === DIALOG-START (Variante B) ===
 export async function startDialog(context: string): Promise<DialogStartResponse> {
   try {
     const response = await fetch(`${API_BASE_URL}/api/dialog/start`, {
@@ -134,7 +133,7 @@ export async function startDialog(context: string): Promise<DialogStartResponse>
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ context }),
+      body: JSON.stringify({ context }),  // ✅ Correct JSON format
     })
 
     if (!response.ok) {
@@ -161,7 +160,7 @@ export async function startDialog(context: string): Promise<DialogStartResponse>
   }
 }
 
-// Dialog-Nachricht verarbeiten
+// === DIALOG-NACHRICHT VERARBEITEN ===
 export async function sendDialogMessage(
   message: string,
   currentQuestion: DialogQuestion,
@@ -197,7 +196,7 @@ export async function sendDialogMessage(
   }
 }
 
-// Dialog-Daten speichern
+// === DIALOG-DATEN SPEICHERN ===
 export async function saveDialogData(
   questions: DialogQuestion[],
   answers: Record<string, string>,
@@ -232,75 +231,7 @@ export async function saveDialogData(
   }
 }
 
-// === FEHLENDE FUNKTIONEN FÜR FORM-A ===
-
-// Alias für generateInstructions (für form-a compatibility)
-export async function getInstructions(context: string): Promise<FormInstructions> {
-  return generateInstructions(context)
-}
-
-// Chat-Message senden (für form-a compatibility)
-export async function sendChatMessage(message: string): Promise<string> {
-  return getChatHelp(message)
-}
-
-// === FEHLENDE FUNKTIONEN FÜR FORM-B ===
-
-// Nur Fragen speichern (vereinfacht)
-export async function saveQuestionsOnly(questions: DialogQuestion[]): Promise<SaveResponse> {
-  const timestamp = new Date().toISOString()
-  const filename = `questions_${timestamp.replace(/[:.]/g, '-')}.json`
-  
-  try {
-    // Local fallback - speichert nur in Browser
-    const data = {
-      questions,
-      timestamp,
-      type: "questions_only"
-    }
-    
-    // Für Demo: Als JSON-String zurückgeben
-    console.log('Questions saved:', data)
-    
-    return {
-      filename,
-      message: "Fragen gespeichert (Demo-Modus)"
-    }
-  } catch (error) {
-    console.error('Fehler beim Speichern der Fragen:', error)
-    throw new Error('Fehler beim Speichern der Fragen')
-  }
-}
-
-// Antworten aus Chat-History extrahieren
-export function extractAnswers(
-  questions: DialogQuestion[], 
-  chatHistory: ChatMessage[]
-): Record<string, string> {
-  const answers: Record<string, string> = {}
-  
-  // Einfache Extraktion: jede User-Nachricht wird der entsprechenden Frage zugeordnet
-  const userMessages = chatHistory.filter(msg => msg.role === 'user')
-  
-  questions.forEach((question, index) => {
-    if (userMessages[index]) {
-      answers[question.field] = userMessages[index].content
-    }
-  })
-  
-  return answers
-}
-
-// Komplette Dialog-Daten speichern (für form-b compatibility)
-export async function saveCompleteDialogData(
-  questions: DialogQuestion[],
-  chatHistory: ChatMessage[]
-): Promise<SaveResponse> {
-  const answers = extractAnswers(questions, chatHistory)
-  return saveDialogData(questions, answers, chatHistory)
-}
-
-// Utility-Funktion für API-Status
+// === UTILITY-FUNKTIONEN ===
 export async function checkApiStatus(): Promise<boolean> {
   try {
     const response = await fetch(`${API_BASE_URL}/health`, {
@@ -313,7 +244,6 @@ export async function checkApiStatus(): Promise<boolean> {
   }
 }
 
-// Debug-Information
 export function getApiConfig() {
   return {
     baseUrl: API_BASE_URL,
@@ -321,3 +251,7 @@ export function getApiConfig() {
     hasCustomApiUrl: !!process.env.NEXT_PUBLIC_API_URL
   }
 }
+
+// === ALIASES FÜR COMPATIBILITY ===
+export const getInstructions = generateInstructions
+export const sendChatMessage = getChatHelp
