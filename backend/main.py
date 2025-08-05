@@ -19,7 +19,7 @@ app = FastAPI(
 # BULLETPROOF CORS - Erlaubt ALLE Vercel-Domains
 @app.middleware("http")
 async def cors_handler(request: Request, call_next):
-    """Custom CORS Handler der garantiert funktioniert"""
+    """Custom CORS Handler - Updated für alle Vercel-URLs"""
     
     # Hole Origin aus Request
     origin = request.headers.get("origin")
@@ -27,12 +27,13 @@ async def cors_handler(request: Request, call_next):
     # Führe Request aus
     response = await call_next(request)
     
-    # Wenn Origin eine Vercel-Domain ist oder localhost, erlaube es
+    # Erweiterte Vercel-Domain-Erkennung
     if origin and (
         "vercel.app" in origin or 
         "localhost" in origin or 
         "127.0.0.1" in origin or
-        "railway.app" in origin
+        "railway.app" in origin or
+        "momorits-projects.vercel.app" in origin  # ✅ Deine Subdomain
     ):
         response.headers["Access-Control-Allow-Origin"] = origin
         response.headers["Access-Control-Allow-Credentials"] = "true"
@@ -47,7 +48,9 @@ async def options_handler(request: Request, path: str):
     """Behandelt alle OPTIONS-Requests für CORS"""
     origin = request.headers.get("origin", "")
     
-    if "vercel.app" in origin or "localhost" in origin:
+    if ("vercel.app" in origin or 
+        "localhost" in origin or 
+        "momorits-projects.vercel.app" in origin):  # ✅ Deine Subdomain
         headers = {
             "Access-Control-Allow-Origin": origin,
             "Access-Control-Allow-Credentials": "true", 
