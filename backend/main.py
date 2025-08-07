@@ -8,6 +8,7 @@ import uvicorn
 from datetime import datetime
 from pathlib import Path
 import httpx
+import base64
 
 # Load environment variables
 try:
@@ -46,12 +47,23 @@ DRIVE_FOLDER_NAME = 'FormularIQ_Studiendata'
 def get_drive_service():
     """Google Drive Service initialisieren"""
     try:
-        if not os.path.exists(SERVICE_ACCOUNT_FILE):
-            print(f"⚠️ Service Account Datei nicht gefunden: {SERVICE_ACCOUNT_FILE}")
+        # Production: Base64-encoded Service Account Key
+        base64_key = os.getenv("GOOGLE_SERVICE_ACCOUNT_KEY_BASE64")
+        if base64_key:
+            decoded_key = base64.b64decode(base64_key).decode('utf-8')
+            service_account_info = json.loads(decoded_key)
+            credentials = service_account.Credentials.from_service_account_info(
+                service_account_info, scopes=SCOPES)
+        # Development: JSON file
+        elif os.path.exists(SERVICE_ACCOUNT_FILE):
+            credentials = service_account.Credentials.from_service_account_file(
+                SERVICE_ACCOUNT_FILE, scopes=SCOPES)
+        else:
+            print(f"⚠️ Keine Google Service Account Credentials gefunden")
+            print(f"   Lokale Datei: {SERVICE_ACCOUNT_FILE}")
+            print(f"   Umgebungsvariable: GOOGLE_SERVICE_ACCOUNT_KEY_BASE64")
             return None
             
-        credentials = service_account.Credentials.from_service_account_file(
-            SERVICE_ACCOUNT_FILE, scopes=SCOPES)
         service = build('drive', 'v3', credentials=credentials)
         return service
     except Exception as e:
