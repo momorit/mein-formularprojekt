@@ -6,9 +6,16 @@ import json
 import os
 import uvicorn
 from datetime import datetime
-import aiofiles
-import asyncio
 from pathlib import Path
+import httpx
+
+# Load environment variables
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    print("⚠️ python-dotenv nicht installiert. Umgebungsvariablen müssen manuell gesetzt werden.")
+    pass
 
 # === GOOGLE DRIVE IMPORTS ===
 from google.oauth2 import service_account
@@ -16,7 +23,11 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 import io
 
-app = FastAPI(title="FormularIQ Backend - Vereinfachte Version", version="2.1.0")
+app = FastAPI(
+    title="FormularIQ - Wissenschaftliche Formularanalyse",
+    description="Backend für LLM-gestützte Formularbearbeitung im Rahmen einer wissenschaftlichen Studie",
+    version="1.0.0"
+)
 
 # === CORS MIDDLEWARE ===
 app.add_middleware(
@@ -27,14 +38,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# === GOOGLE DRIVE SETUP ===
+# === GOOGLE DRIVE CONFIGURATION ===
 SCOPES = ['https://www.googleapis.com/auth/drive.file']
 SERVICE_ACCOUNT_FILE = 'service-account-key.json'
-DRIVE_FOLDER_NAME = 'FormularIQ_Daten'
+DRIVE_FOLDER_NAME = 'FormularIQ_Studiendata'
 
 def get_drive_service():
     """Google Drive Service initialisieren"""
     try:
+        if not os.path.exists(SERVICE_ACCOUNT_FILE):
+            print(f"⚠️ Service Account Datei nicht gefunden: {SERVICE_ACCOUNT_FILE}")
+            return None
+            
         credentials = service_account.Credentials.from_service_account_file(
             SERVICE_ACCOUNT_FILE, scopes=SCOPES)
         service = build('drive', 'v3', credentials=credentials)
@@ -44,7 +59,7 @@ def get_drive_service():
         return None
 
 def create_or_get_folder(service, folder_name):
-    """Ordner erstellen oder finden"""
+    """Studienordner erstellen oder finden"""
     try:
         # Suche existierenden Ordner
         results = service.files().list(
@@ -55,13 +70,13 @@ def create_or_get_folder(service, folder_name):
         if results['files']:
             return results['files'][0]['id']
         
-        # Neuen Ordner erstellen
+        # Neuen Studienordner erstellen
         file_metadata = {
             'name': folder_name,
             'mimeType': 'application/vnd.google-apps.folder'
         }
         folder = service.files().create(body=file_metadata, fields='id').execute()
-        print(f"✅ Ordner '{folder_name}' erstellt: {folder.get('id')}")
+        print(f"✅ Studienordner erstellt: {folder_name} (ID: {folder.get('id')})")
         return folder.get('id')
         
     except Exception as e:
@@ -69,15 +84,27 @@ def create_or_get_folder(service, folder_name):
         return None
 
 def upload_to_drive(service, data, filename, folder_id):
-    """Datei zu Google Drive hochladen"""
+    """Studiendaten zu Google Drive hochladen"""
     try:
-        # JSON-Daten in String konvertieren
-        json_content = json.dumps(data, ensure_ascii=False, indent=2)
+        # JSON-Daten mit Metadaten erweitern
+        enhanced_data = {
+            **data,
+            "study_metadata": {
+                "project": "FormularIQ - LLM-gestützte Formularbearbeitung",
+                "institution": "HAW Hamburg",
+                "researcher": "Moritz Treu",
+                "upload_timestamp": datetime.now().isoformat(),
+                "backend_version": "1.0.0"
+            }
+        }
+        
+        json_content = json.dumps(enhanced_data, ensure_ascii=False, indent=2)
         
         # Upload vorbereiten
         file_metadata = {
             'name': filename,
-            'parents': [folder_id] if folder_id else []
+            'parents': [folder_id] if folder_id else [],
+            'description': f'Studiendaten - FormularIQ - {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}'
         }
         
         # Media Upload
@@ -90,10 +117,10 @@ def upload_to_drive(service, data, filename, folder_id):
         file = service.files().create(
             body=file_metadata,
             media_body=media,
-            fields='id, name, webViewLink'
+            fields='id, name, webViewLink, createdTime'
         ).execute()
         
-        print(f"✅ Datei hochgeladen: {file.get('name')} (ID: {file.get('id')})")
+        print(f"✅ Studiendaten hochgeladen: {file.get('name')} (ID: {file.get('id')})")
         return file.get('id'), file.get('webViewLink')
         
     except Exception as e:
@@ -101,6 +128,9 @@ def upload_to_drive(service, data, filename, folder_id):
         return None, None
 
 # === PYDANTIC MODELS ===
+class ContextRequest(BaseModel):
+    context: str
+
 class SaveRequest(BaseModel):
     instructions: Dict[str, Any]
     values: Dict[str, str]
@@ -108,12 +138,11 @@ class SaveRequest(BaseModel):
 
 class ChatRequest(BaseModel):
     message: str
-    context: str
+    context: str = ""
 
 class DialogQuestion(BaseModel):
     question: str
     field: str
-    difficulty: Optional[str] = None
 
 class DialogMessageRequest(BaseModel):
     message: str
@@ -127,77 +156,190 @@ class DialogSaveRequest(BaseModel):
     chatHistory: List[Dict[str, Any]]
     filename: str
 
-# === LLM INTEGRATION ===
+# === LLM INTEGRATION (GROQ) ===
+import httpx
+import json as json_module
+
 def call_llm(prompt: str, max_retries: int = 3) -> str:
-    """LLM-Aufruf mit Ollama"""
-    import subprocess
+    """LLM-Aufruf mit Groq API"""
+    
+    # Groq API Configuration
+    GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+    if not GROQ_API_KEY:
+        print("❌ GROQ_API_KEY nicht gefunden in Umgebungsvariablen")
+        return "Der LLM-Service ist nicht konfiguriert. Bitte setzen Sie GROQ_API_KEY."
+    
+    GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
     
     for attempt in range(max_retries):
         try:
-            result = subprocess.run([
-                'ollama', 'run', 'llama3',
-                prompt
-            ], capture_output=True, text=True, timeout=30)
+            # Groq API Request
+            headers = {
+                "Authorization": f"Bearer {GROQ_API_KEY}",
+                "Content-Type": "application/json"
+            }
             
-            if result.returncode == 0 and result.stdout.strip():
-                return result.stdout.strip()
-            else:
-                print(f"⚠️ LLM Versuch {attempt + 1} fehlgeschlagen")
+            payload = {
+                "model": "llama3-8b-8192",  # Groq's LLaMA3 model
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": "Du bist ein hilfreicher Assistent für Gebäudeformulare. Antworte präzise und auf Deutsch."
+                    },
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ],
+                "max_tokens": 1000,
+                "temperature": 0.3,
+                "top_p": 0.9
+            }
+            
+            with httpx.Client(timeout=30.0) as client:
+                response = client.post(GROQ_API_URL, headers=headers, json=payload)
                 
-        except subprocess.TimeoutExpired:
-            print(f"⚠️ LLM Timeout bei Versuch {attempt + 1}")
+                if response.status_code == 200:
+                    data = response.json()
+                    if data.get("choices") and len(data["choices"]) > 0:
+                        content = data["choices"][0]["message"]["content"]
+                        return content.strip()
+                    else:
+                        print(f"⚠️ Groq API: Keine Antwort in Response (Versuch {attempt + 1})")
+                else:
+                    print(f"⚠️ Groq API HTTP {response.status_code} (Versuch {attempt + 1}): {response.text}")
+                    
+        except httpx.TimeoutException:
+            print(f"⚠️ Groq API Timeout (Versuch {attempt + 1})")
         except Exception as e:
-            print(f"⚠️ LLM Fehler bei Versuch {attempt + 1}: {e}")
+            print(f"⚠️ Groq API Fehler (Versuch {attempt + 1}): {e}")
     
-    return "Entschuldigung, der LLM-Service ist momentan nicht verfügbar."
+    return "Der LLM-Service ist momentan nicht verfügbar. Bitte versuchen Sie es später erneut."
 
 # === API ENDPOINTS ===
 
-@app.get("/health")
-async def health_check():
-    """Health Check"""
+@app.get("/")
+async def root():
+    """Hauptendpunkt mit Systeminformationen"""
     drive_service = get_drive_service()
     return {
-        "status": "healthy",
+        "project": "FormularIQ - Wissenschaftliche Studie",
+        "status": "online",
+        "version": "1.0.0",
         "google_drive": "connected" if drive_service else "disconnected",
-        "timestamp": datetime.now().isoformat(),
-        "version": "simplified_4-5_fields"
+        "timestamp": datetime.now().isoformat()
     }
+
+@app.get("/health")
+async def health_check():
+    """System-Health-Check"""
+    drive_service = get_drive_service()
+    
+    # Groq API Test
+    groq_status = "online"
+    groq_api_key = os.getenv("GROQ_API_KEY")
+    if not groq_api_key:
+        groq_status = "no_api_key"
+    else:
+        try:
+            # Quick test call to Groq API
+            headers = {"Authorization": f"Bearer {groq_api_key}"}
+            test_payload = {
+                "model": "llama3-8b-8192",
+                "messages": [{"role": "user", "content": "test"}],
+                "max_tokens": 1
+            }
+            with httpx.Client(timeout=5.0) as client:
+                response = client.post("https://api.groq.com/openai/v1/chat/completions", 
+                                     headers=headers, json=test_payload)
+                if response.status_code not in [200, 429]:  # 429 = rate limit, aber API funktioniert
+                    groq_status = "api_error"
+        except:
+            groq_status = "offline"
+    
+    return {
+        "status": "healthy",
+        "services": {
+            "google_drive": "connected" if drive_service else "disconnected",
+            "groq_llm": groq_status
+        },
+        "timestamp": datetime.now().isoformat()
+    }
+
+@app.post("/api/instructions")
+async def generate_instructions(request: ContextRequest):
+    """Generiert Formular-Anweisungen für Variante A (Sichtbares Formular)"""
+    try:
+        # Feste, wissenschaftlich validierte Formularfelder für Gebäudeerfassung
+        base_instructions = {
+            "GEBÄUDEART": "Geben Sie die Art Ihres Gebäudes an (z.B. Einfamilienhaus, Mehrfamilienhaus)",
+            "BAUJAHR": "In welchem Jahr wurde das Gebäude errichtet? (Format: JJJJ)",
+            "WOHNFLÄCHE": "Wie groß ist die Wohnfläche in Quadratmetern? (nur beheizte Räume)",
+            "ANZAHL_STOCKWERKE": "Über wie viele Stockwerke erstreckt sich das Gebäude?",
+            "HEIZUNGSART": "Welche Art der Heizung ist installiert? (z.B. Gas, Öl, Wärmepumpe)",
+            "DACHTYP": "Welcher Dachtyp ist vorhanden? (z.B. Satteldach, Flachdach, Walmdach)",
+            "KELLER_VORHANDEN": "Ist ein Keller vorhanden? (Ja/Nein/Teilunterkellert)",
+            "ENERGIEAUSWEIS": "Liegt ein Energieausweis vor? Falls ja, welche Energieklasse?",
+            "SANIERUNGSBEDARF": "Welche Sanierungsmaßnahmen sind geplant oder erforderlich?"
+        }
+        
+        # Bei Kontext: LLM kann Anweisungen anpassen/erweitern
+        if request.context.strip():
+            prompt = f"""
+Kontext: {request.context}
+
+Basierend auf diesem Kontext, erweitere oder passe die folgenden Gebäudeformular-Felder an:
+{json.dumps(base_instructions, ensure_ascii=False, indent=2)}
+
+Gib ein JSON-Objekt zurück mit angepassten/erweiterten Anweisungen.
+Behalte die GROSSBUCHSTABEN-Feldnamen bei.
+Anweisungen sollten klar und hilfreich sein.
+
+Nur JSON zurückgeben, keine Erklärungen.
+"""
+            
+            llm_response = call_llm(prompt)
+            
+            try:
+                # JSON extrahieren
+                start = llm_response.find('{')
+                end = llm_response.rfind('}') + 1
+                if start != -1 and end != 0:
+                    json_str = llm_response[start:end]
+                    enhanced_instructions = json.loads(json_str)
+                    return enhanced_instructions
+                else:
+                    print("⚠️ Kein JSON in LLM-Antwort gefunden, nutze Basis-Anweisungen")
+                    return base_instructions
+            except json.JSONDecodeError as e:
+                print(f"⚠️ JSON-Parse-Fehler: {e}, nutze Basis-Anweisungen")
+                return base_instructions
+        else:
+            return base_instructions
+            
+    except Exception as e:
+        print(f"❌ Instructions-Fehler: {e}")
+        raise HTTPException(status_code=500, detail="Fehler beim Generieren der Anweisungen")
 
 @app.post("/api/chat")
 async def chat_help(request: ChatRequest):
-    """Chat-Hilfe für Gebäudeformulare"""
+    """Chat-Hilfe für beide Varianten"""
     try:
-        # Spezifische Prompts je nach Kontext
-        if "Variante A" in request.context:
-            prompt = f"""
-Ein Nutzer braucht Hilfe beim Ausfüllen eines Gebäudeformulars (Variante A - Sichtbares Formular).
+        prompt = f"""
+Du hilfst Nutzern beim Ausfüllen eines Gebäudeformulars im Rahmen einer wissenschaftlichen Studie.
 
-Die Formularfelder sind:
-- Gebäudeart (leicht): Verschiedene Haustypen
-- Baujahr (leicht): Jahr der Errichtung  
-- Energieausweis (schwer): Energieklassen A+ bis H mit kWh/m²a Werten
-- Sanierungsmaßnahmen (schwer): Detaillierte Planung von energetischen Sanierungen
-
+Kontext: {request.context}
 Nutzerfrage: {request.message}
 
-Gib eine hilfreiche, konkrete Antwort auf Deutsch in 2-3 Sätzen.
-Sei freundlich und praxisorientiert. Fokussiere auf die oben genannten Themen.
-"""
-        else:
-            prompt = f"""
-Ein Nutzer braucht Hilfe beim Ausfüllen eines Gebäudeformulars (Variante B - Dialog-System).
+Gib eine hilfreiche, sachliche Antwort auf Deutsch in 2-3 Sätzen.
+Fokussiere auf praktische Gebäude-Informationen:
+- Gebäudearten und deren Merkmale
+- Baujahre und Epochen
+- Heizungssysteme
+- Dachtypen und Materialien
+- Energieeffizienz und Sanierung
 
-Die Dialog-Themen sind:
-- Wohnfläche (leicht): Quadratmeter-Angaben
-- Heizungsart (leicht): Verschiedene Heizungssysteme
-- Dachtyp & Details (schwer): Detaillierte Dachbeschreibung mit Material und Zustand
-- Isolierung & Dämmung (schwer): Umfassende Beschreibung aller Dämmmaßnahmen
-
-Nutzerfrage: {request.message}
-
-Gib eine hilfreiche, konkrete Antwort auf Deutsch in 2-3 Sätzen.
-Sei freundlich und praxisorientiert. Fokussiere auf die oben genannten Themen.
+Bleibe wissenschaftlich neutral und präzise.
 """
         
         response = call_llm(prompt)
@@ -205,23 +347,18 @@ Sei freundlich und praxisorientiert. Fokussiere auf die oben genannten Themen.
         
     except Exception as e:
         print(f"❌ Chat-Fehler: {e}")
-        return {"response": "Entschuldigung, ich konnte Ihre Frage nicht beantworten."}
+        return {"response": "Der Chat-Service ist momentan nicht verfügbar. Bitte versuchen Sie es später erneut."}
 
 @app.post("/api/save")
 async def save_form_data(request: SaveRequest):
-    """Formulardaten in Google Drive speichern"""
+    """Speichert Formulardaten von Variante A in Google Drive"""
     try:
-        # Google Drive Service
-        drive_service = get_drive_service()
-        if not drive_service:
-            raise HTTPException(status_code=500, detail="Google Drive nicht verfügbar")
+        # Lokale Sicherung (Fallback)
+        os.makedirs("LLM Output", exist_ok=True)
+        local_path = f"LLM Output/{request.filename}"
         
-        # Ordner erstellen/finden
-        folder_id = create_or_get_folder(drive_service, DRIVE_FOLDER_NAME)
-        
-        # Daten vorbereiten
+        # Datenstruktur vorbereiten
         save_data = {
-            "type": "form_data_simplified",
             "variant": "A_sichtbares_formular",
             "timestamp": datetime.now().isoformat(),
             "instructions": request.instructions,
@@ -229,89 +366,141 @@ async def save_form_data(request: SaveRequest):
             "metadata": {
                 "total_fields": len(request.instructions),
                 "filled_fields": len([v for v in request.values.values() if v.strip()]),
-                "completion_rate": f"{len([v for v in request.values.values() if v.strip()]) / len(request.instructions) * 100:.1f}%",
-                "field_difficulties": {
-                    field: details.get("difficulty", "unknown") 
-                    for field, details in request.instructions.items() 
-                    if isinstance(details, dict)
-                }
+                "completion_rate": round((len([v for v in request.values.values() if v.strip()]) / len(request.instructions)) * 100, 1) if request.instructions else 0
             }
         }
         
-        # Filename mit Zeitstempel
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"variante_a_formular_{timestamp}.json"
+        # Lokale Speicherung
+        with open(local_path, 'w', encoding='utf-8') as f:
+            json.dump(save_data, f, ensure_ascii=False, indent=2)
         
-        # Upload zu Google Drive
-        file_id, web_link = upload_to_drive(drive_service, save_data, filename, folder_id)
+        # Google Drive Upload
+        drive_service = get_drive_service()
+        if drive_service:
+            folder_id = create_or_get_folder(drive_service, DRIVE_FOLDER_NAME)
+            if folder_id:
+                file_id, web_link = upload_to_drive(drive_service, save_data, request.filename, folder_id)
+                
+                if file_id:
+                    return {
+                        "message": "Daten erfolgreich gespeichert",
+                        "filename": request.filename,
+                        "storage": "google_drive",
+                        "google_drive_id": file_id,
+                        "web_link": web_link,
+                        "folder": DRIVE_FOLDER_NAME
+                    }
         
-        if file_id:
-            return {
-                "message": "✅ Daten erfolgreich in Google Drive gespeichert!",
-                "filename": filename,
-                "google_drive_id": file_id,
-                "web_link": web_link,
-                "folder": DRIVE_FOLDER_NAME
-            }
-        else:
-            raise HTTPException(status_code=500, detail="Upload zu Google Drive fehlgeschlagen")
-            
+        # Fallback: Nur lokale Speicherung
+        return {
+            "message": "Daten lokal gespeichert (Google Drive nicht verfügbar)",
+            "filename": request.filename,
+            "storage": "local",
+            "path": local_path
+        }
+        
     except Exception as e:
         print(f"❌ Speicher-Fehler: {e}")
-        raise HTTPException(status_code=500, detail="Fehler beim Speichern in Google Drive")
+        raise HTTPException(status_code=500, detail="Fehler beim Speichern der Daten")
+
+@app.post("/api/dialog/start")
+async def start_dialog(request: ContextRequest):
+    """Startet Dialog für Variante B (Dialog-System)"""
+    try:
+        # Feste, wissenschaftlich validierte Dialog-Fragen
+        base_questions = [
+            {"question": "Welche Art von Gebäude möchten Sie erfassen?", "field": "GEBÄUDEART"},
+            {"question": "In welchem Jahr wurde das Gebäude errichtet?", "field": "BAUJAHR"},
+            {"question": "Wie groß ist die Wohnfläche des Gebäudes in Quadratmetern?", "field": "WOHNFLÄCHE"},
+            {"question": "Über wie viele Stockwerke erstreckt sich das Gebäude?", "field": "ANZAHL_STOCKWERKE"},
+            {"question": "Welche Art der Heizung ist installiert?", "field": "HEIZUNGSART"},
+            {"question": "Welcher Dachtyp ist vorhanden?", "field": "DACHTYP"},
+            {"question": "Ist ein Keller vorhanden?", "field": "KELLER_VORHANDEN"},
+            {"question": "Liegt ein Energieausweis vor? Falls ja, welche Energieklasse?", "field": "ENERGIEAUSWEIS"}
+        ]
+        
+        # Bei Kontext: LLM kann Fragen anpassen
+        if request.context.strip():
+            prompt = f"""
+Kontext für Gebäudeerfassung: {request.context}
+
+Erstelle basierend auf diesem Kontext 8-10 präzise Fragen für ein Gebäude-Interview.
+Format: JSON-Array mit Objekten {"question": "Frage...", "field": "FELDNAME"}
+
+Die Fragen sollen:
+- Logisch aufeinander aufbauen
+- Klar und verständlich sein
+- Alle wichtigen Gebäudedaten abdecken
+- Auf Deutsch formuliert sein
+
+Beispiel-Start:
+[
+    {"question": "Welche Art von Gebäude möchten Sie erfassen?", "field": "GEBÄUDEART"},
+    ...
+]
+
+Nur JSON-Array zurückgeben, keine Erklärungen.
+"""
+            
+            llm_response = call_llm(prompt)
+            
+            try:
+                # JSON Array extrahieren
+                start = llm_response.find('[')
+                end = llm_response.rfind(']') + 1
+                if start != -1 and end != 0:
+                    json_str = llm_response[start:end]
+                    questions = json.loads(json_str)
+                    
+                    # Validierung der Fragen-Struktur
+                    if all(isinstance(q, dict) and "question" in q and "field" in q for q in questions):
+                        return {
+                            "questions": questions,
+                            "totalQuestions": len(questions),
+                            "currentQuestionIndex": 0
+                        }
+                    else:
+                        print("⚠️ Ungültige Fragen-Struktur, nutze Basis-Fragen")
+                        
+            except json.JSONDecodeError as e:
+                print(f"⚠️ JSON-Parse-Fehler bei Dialog-Start: {e}")
+        
+        # Fallback: Basis-Fragen
+        return {
+            "questions": base_questions,
+            "totalQuestions": len(base_questions),
+            "currentQuestionIndex": 0
+        }
+        
+    except Exception as e:
+        print(f"❌ Dialog-Start-Fehler: {e}")
+        raise HTTPException(status_code=500, detail="Fehler beim Starten des Dialogs")
 
 @app.post("/api/dialog/message")
 async def dialog_message(request: DialogMessageRequest):
-    """Dialog-Nachricht verarbeiten"""
+    """Verarbeitet Dialog-Nachrichten für Variante B"""
     try:
         user_message = request.message.strip()
         
         if user_message == "?":
-            # Spezifische Hilfe basierend auf dem Dialog-Feld
+            # Hilfe-Anfrage
             current_field = request.currentQuestion.field
             current_question = request.currentQuestion.question
             
-            # Detaillierte Hilfe-Prompts für die Dialog-Felder (Variante B)
-            help_prompts = {
-                "WOHNFLÄCHE": f"""
-Der Nutzer braucht Hilfe bei: '{current_question}'
+            prompt = f"""
+Ein Teilnehmer der wissenschaftlichen Studie braucht Hilfe bei folgender Frage:
+"{current_question}"
 
-Erkläre in 2-3 Sätzen:
-- Wie man die Wohnfläche korrekt misst (nur beheizte Räume)
-- Unterschied zwischen Wohnfläche und Grundfläche
-- Typische Wohnflächengrößen für verschiedene Gebäudetypen
-""",
-                "HEIZUNGSART": f"""
-Der Nutzer braucht Hilfe bei: '{current_question}'
+Feld: {current_field}
 
-Erkläre in 2-3 Sätzen:
-- Die häufigsten Heizungsarten (Gas, Öl, Wärmepumpe, Fernwärme)
-- Wo man die Heizungsart erkennen kann (Keller, Heizungsetikett)
-- Unterschiede zwischen den Systemen
-""",
-                "DACHTYP_DETAIL": f"""
-Der Nutzer braucht Hilfe bei: '{current_question}'
-
-Erkläre in 2-3 Sätzen:
-- Unterschiede zwischen Satteldach, Flachdach, Walmdach
-- Wichtige Details wie Eindeckungsmaterial (Ziegel, Schiefer, Blech)
-- Worauf bei Zustand und Dämmung zu achten ist
-""",
-                "ISOLIERUNG_DETAIL": f"""
-Der Nutzer braucht Hilfe bei: '{current_question}'
-
-Erkläre in 2-3 Sätzen:
-- Verschiedene Dämmungsarten (WDVS, Kerndämmung, Dachdämmung)
-- Wie man vorhandene Dämmung erkennt
-- Wichtige Details wie U-Werte und Dämmstärken
+Gib eine präzise, hilfreiche Erklärung in 2-3 Sätzen auf Deutsch.
+Fokussiere auf praktische Informationen zu Gebäuden.
+Bleibe sachlich und wissenschaftlich neutral.
 """
-            }
             
-            prompt = help_prompts.get(current_field, f"Der Nutzer braucht Hilfe bei: '{current_question}'. Gib eine hilfreiche Erklärung in 2-3 Sätzen auf Deutsch.")
             help_response = call_llm(prompt)
-            
             return {
-                "response": f"💡 Hilfe: {help_response}",
+                "response": help_response,
                 "nextQuestion": False,
                 "questionIndex": request.questionIndex,
                 "helpProvided": True
@@ -320,14 +509,14 @@ Erkläre in 2-3 Sätzen:
             # Normale Antwort verarbeiten
             if request.questionIndex < request.totalQuestions - 1:
                 return {
-                    "response": f"✅ Ihre Antwort wurde gespeichert. Weiter zur nächsten Frage:",
+                    "response": "Ihre Antwort wurde erfasst. Nächste Frage:",
                     "nextQuestion": True,
                     "questionIndex": request.questionIndex + 1,
                     "helpProvided": False
                 }
             else:
                 return {
-                    "response": "🎉 Alle Fragen beantwortet! Sie können nun die Umfrage beenden.",
+                    "response": "Alle Fragen beantwortet. Sie können nun Ihre Daten speichern.",
                     "nextQuestion": False,
                     "questionIndex": request.questionIndex,
                     "dialogComplete": True,
@@ -336,23 +525,18 @@ Erkläre in 2-3 Sätzen:
         
     except Exception as e:
         print(f"❌ Dialog-Message-Fehler: {e}")
-        raise HTTPException(status_code=500, detail="Dialog-Verarbeitung fehlgeschlagen")
+        raise HTTPException(status_code=500, detail="Fehler bei der Dialog-Verarbeitung")
 
 @app.post("/api/dialog/save")
 async def save_dialog_data(request: DialogSaveRequest):
-    """Dialog-Daten in Google Drive speichern"""
+    """Speichert Dialog-Daten von Variante B in Google Drive"""
     try:
-        # Google Drive Service
-        drive_service = get_drive_service()
-        if not drive_service:
-            raise HTTPException(status_code=500, detail="Google Drive nicht verfügbar")
+        # Lokale Sicherung (Fallback)
+        os.makedirs("LLM Output", exist_ok=True)
+        local_path = f"LLM Output/{request.filename}"
         
-        # Ordner erstellen/finden
-        folder_id = create_or_get_folder(drive_service, DRIVE_FOLDER_NAME)
-        
-        # Daten strukturieren
+        # Datenstruktur vorbereiten
         save_data = {
-            "type": "dialog_data_simplified",
             "variant": "B_dialog_system",
             "timestamp": datetime.now().isoformat(),
             "questions": request.questions,
@@ -361,49 +545,65 @@ async def save_dialog_data(request: DialogSaveRequest):
             "metadata": {
                 "total_questions": len(request.questions),
                 "answered_questions": len(request.answers),
-                "completion_rate": f"{len(request.answers) / len(request.questions) * 100:.1f}%",
-                "chat_interactions": len(request.chatHistory),
-                "question_difficulties": {
-                    q.field: q.difficulty for q in request.questions if hasattr(q, 'difficulty')
-                }
+                "completion_rate": round((len(request.answers) / len(request.questions)) * 100, 1) if request.questions else 0,
+                "chat_interactions": len(request.chatHistory)
             }
         }
         
-        # Filename mit Zeitstempel
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"variante_b_dialog_{timestamp}.json"
+        # Lokale Speicherung
+        with open(local_path, 'w', encoding='utf-8') as f:
+            json.dump(save_data, f, ensure_ascii=False, indent=2)
         
-        # Upload zu Google Drive
-        file_id, web_link = upload_to_drive(drive_service, save_data, filename, folder_id)
+        # Google Drive Upload
+        drive_service = get_drive_service()
+        if drive_service:
+            folder_id = create_or_get_folder(drive_service, DRIVE_FOLDER_NAME)
+            if folder_id:
+                file_id, web_link = upload_to_drive(drive_service, save_data, request.filename, folder_id)
+                
+                if file_id:
+                    return {
+                        "message": "Dialog-Daten erfolgreich gespeichert",
+                        "filename": request.filename,
+                        "storage": "google_drive",
+                        "google_drive_id": file_id,
+                        "web_link": web_link,
+                        "folder": DRIVE_FOLDER_NAME
+                    }
         
-        if file_id:
-            return {
-                "message": "✅ Dialog-Daten erfolgreich in Google Drive gespeichert!",
-                "filename": filename,
-                "google_drive_id": file_id,
-                "web_link": web_link,
-                "folder": DRIVE_FOLDER_NAME
-            }
-        else:
-            raise HTTPException(status_code=500, detail="Upload zu Google Drive fehlgeschlagen")
-            
+        # Fallback: Nur lokale Speicherung
+        return {
+            "message": "Dialog-Daten lokal gespeichert (Google Drive nicht verfügbar)",
+            "filename": request.filename,
+            "storage": "local",
+            "path": local_path
+        }
+        
     except Exception as e:
         print(f"❌ Dialog-Speicher-Fehler: {e}")
-        raise HTTPException(status_code=500, detail="Dialog-Speicher-Fehler")
+        raise HTTPException(status_code=500, detail="Fehler beim Speichern der Dialog-Daten")
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8000))
-    print(f"🚀 FormularIQ Backend - Vereinfachte Version")
-    print(f"📁 Google Drive Ordner: {DRIVE_FOLDER_NAME}")
+    print(f"🔬 FormularIQ - Wissenschaftliche Studie")
+    print(f"📊 Backend für LLM-gestützte Formularbearbeitung")
+    print(f"🏛️ HAW Hamburg - Masterarbeit Moritz Treu")
     print(f"🌐 Server läuft auf Port {port}")
-    print(f"📝 Variante A: 4 Felder (Gebäudeart, Baujahr, Energieausweis, Sanierung)")
-    print(f"💬 Variante B: 4 Fragen (Wohnfläche, Heizung, Dach, Dämmung)")
+    print(f"📁 Google Drive Ordner: {DRIVE_FOLDER_NAME}")
     
-    # Google Drive Test
+    # System-Check
     drive_service = get_drive_service()
     if drive_service:
-        print("✅ Google Drive Service erfolgreich initialisiert")
+        print("✅ Google Drive Service initialisiert")
     else:
-        print("❌ Google Drive Service nicht verfügbar - prüfe service-account-key.json")
+        print("⚠️ Google Drive Service nicht verfügbar (läuft mit lokaler Speicherung)")
+    
+    # Groq API Check
+    groq_api_key = os.getenv("GROQ_API_KEY")
+    if groq_api_key:
+        print("✅ Groq API Key gefunden")
+    else:
+        print("⚠️ GROQ_API_KEY Umgebungsvariable nicht gesetzt")
+        print("   Setzen Sie: export GROQ_API_KEY=your_api_key")
     
     uvicorn.run(app, host="0.0.0.0", port=port)
