@@ -1,351 +1,460 @@
-// src/app/form-a/page.tsx - COMPLETELY FIXED
+'use client'
 
-"use client"
+import React, { useState, useEffect } from 'react'
+import Link from 'next/link'
+import { generateInstructions, saveFormData, getChatHelp, checkSystemStatus } from '@/lib/api'
+import type { FormInstructions, FormValues, ChatMessage, SaveResponse } from '@/lib/types'
 
-import { useState } from "react"
-import Link from "next/link"
-import { Textarea } from "@/components/ui/textarea"
-import { Button } from "@/components/ui/button"
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
-import { generateInstructions, getChatHelp, saveFormData } from "@/lib/api"
-
-interface ChatMessage {
-  role: "user" | "assistant"
-  content: string
-}
-
-export default function FormA() {
+export default function FormAPage() {
+  // === STATE MANAGEMENT ===
   const [context, setContext] = useState("")
-  const [instructions, setInstructions] = useState<Record<string, string> | null>(null)  // ✅ Simple strings
-  const [values, setValues] = useState<Record<string, string>>({})
+  const [instructions, setInstructions] = useState<FormInstructions | null>(null)
+  const [values, setValues] = useState<FormValues>({})
   const [loading, setLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [completed, setCompleted] = useState(false)
+  const [saveResult, setSaveResult] = useState<SaveResponse | null>(null)
   
-  // Chat state
+  // Chat-Funktionalität
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([])
   const [chatInput, setChatInput] = useState("")
   const [chatLoading, setChatLoading] = useState(false)
+  
+  // System Status
+  const [systemOnline, setSystemOnline] = useState(true)
+  const [startTime] = useState(new Date())
 
-  const handleGenerateFields = async () => {
+  // === SYSTEM CHECK ===
+  useEffect(() => {
+    checkSystemStatus().then(setSystemOnline)
+  }, [])
+
+  // === FORM GENERATION ===
+  const handleGenerateForm = async () => {
+    if (!systemOnline) {
+      alert('System ist nicht verfügbar. Bitte versuchen Sie es später erneut.')
+      return
+    }
+
     setLoading(true)
+    
     try {
-      const result = await generateInstructions(context)
-      setInstructions(result)  // ✅ Simple string instructions
+      const formInstructions = await generateInstructions(context)
+      setInstructions(formInstructions)
       
-      // Initialize empty values
-      const initialValues: Record<string, string> = {}
-      Object.keys(result).forEach(key => {
-        initialValues[key] = ""
+      // Initialize empty form values
+      const emptyValues: FormValues = {}
+      Object.keys(formInstructions).forEach(key => {
+        emptyValues[key] = ""
       })
-      setValues(initialValues)
-      
-      // Add welcome message
-      setChatHistory([{
-        role: "assistant",
-        content: `✅ ${Object.keys(result).length} Formularfelder wurden generiert! Sie können nun das Formular ausfüllen. Fragen Sie mich gerne, wenn Sie Hilfe brauchen.`
-      }])
-
+      setValues(emptyValues)
     } catch (error) {
-      console.error("Fehler beim Generieren:", error)
-      alert("❌ Fehler beim Generieren der Felder. Bitte versuchen Sie es erneut.")
+      console.error("Form generation failed:", error)
+      alert("Fehler beim Generieren des Formulars. Bitte versuchen Sie es erneut.")
     } finally {
       setLoading(false)
     }
   }
 
-  const handleSendChat = async () => {
-    if (!chatInput.trim()) return
+  // === FORM HANDLING ===
+  const handleInputChange = (key: string, value: string) => {
+    setValues(prev => ({
+      ...prev,
+      [key]: value
+    }))
+  }
 
-    const userMessage = { role: "user" as const, content: chatInput }
+  const handleSaveForm = async () => {
+    if (!instructions) return
+
+    // Validation
+    const requiredFields = Object.keys(instructions).slice(0, 5) // First 5 fields required
+    const missingFields = requiredFields.filter(field => !values[field]?.trim())
+    
+    if (missingFields.length > 0) {
+      alert(`Bitte füllen Sie folgende Pflichtfelder aus: ${missingFields.join(', ')}`)
+      return
+    }
+
+    setSaving(true)
+
+    try {
+      const result = await saveFormData(instructions, values)
+      setSaveResult(result)
+      setCompleted(true)
+    } catch (error) {
+      console.error("Save failed:", error)
+      alert("Fehler beim Speichern. Bitte versuchen Sie es erneut.")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // === CHAT HANDLING ===
+  const handleChatSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!chatInput.trim() || chatLoading) return
+
+    const userMessage: ChatMessage = {
+      type: 'user',
+      message: chatInput,
+      timestamp: new Date()
+    }
+
     setChatHistory(prev => [...prev, userMessage])
     setChatLoading(true)
 
     try {
-      const response = await getChatHelp(chatInput)
-      const assistantMessage = { role: "assistant" as const, content: response }
-      setChatHistory(prev => [...prev, assistantMessage])
+      const response = await getChatHelp(chatInput, `Variante A - Sichtbares Formular: ${context}`)
+      
+      const botMessage: ChatMessage = {
+        type: 'bot',
+        message: response,
+        timestamp: new Date()
+      }
+      
+      setChatHistory(prev => [...prev, botMessage])
     } catch (error) {
-      console.error("Chat-Fehler:", error)
-      setChatHistory(prev => [...prev, { 
-        role: "assistant", 
-        content: "Entschuldigung, ich konnte Ihre Frage nicht verarbeiten. Bitte versuchen Sie es erneut." 
-      }])
+      console.error("Chat error:", error)
+      const errorMessage: ChatMessage = {
+        type: 'bot',
+        message: "Der Chat-Service ist momentan nicht verfügbar. Bitte versuchen Sie es erneut.",
+        timestamp: new Date()
+      }
+      setChatHistory(prev => [...prev, errorMessage])
     } finally {
       setChatLoading(false)
       setChatInput("")
     }
   }
 
-  const handleSave = async () => {
-    if (!instructions) return
-
-    try {
-      const result = await saveFormData(instructions, values)
-      alert(`✅ Daten gespeichert: ${result.filename}`)
-    } catch (error) {
-      console.error("Speicher-Fehler:", error)
-      alert("❌ Fehler beim Speichern")
-    }
-  }
-
-  const handleReset = () => {
-    setContext("")
-    setInstructions(null)
-    setValues({})
-    setChatHistory([])
-    setChatInput("")
-    setLoading(false)
-    setChatLoading(false)
-  }
-
-  const filledFields = Object.keys(values).filter(key => values[key]?.trim()).length
-  const totalFields = instructions ? Object.keys(instructions).length : 0
-  const progress = totalFields > 0 ? (filledFields / totalFields) * 100 : 0
-
-  return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Navigation */}
-      <nav className="bg-white border-b border-gray-200 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
-            <Link href="/" className="flex items-center space-x-3 hover:opacity-80 transition-opacity">
-              <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
-                <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M4 4a2 2 0 00-2 2v1h16V6a2 2 0 00-2-2H4zM18 9H2v5a2 2 0 002 2h12a2 2 0 002-2V9zM4 13a1 1 0 011-1h1a1 1 0 110 2H5a1 1 0 01-1-1z"/>
-                </svg>
-              </div>
-              <div>
-                <h1 className="text-xl font-semibold text-gray-900">FormularIQ</h1>
-                <p className="text-sm text-blue-600">Variante A - Sichtbares Formular</p>
-              </div>
-            </Link>
+  // === COMPLETION SCREEN ===
+  if (completed && saveResult) {
+    const duration = Math.round((new Date().getTime() - startTime.getTime()) / 1000 / 60)
+    
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 p-6">
+        <div className="max-w-3xl mx-auto">
+          <div className="bg-white rounded-2xl shadow-xl p-8 text-center">
+            <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
+              <svg className="w-10 h-10 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
             
-            <div className="flex items-center space-x-4">
-              <div className="flex items-center space-x-2 text-sm text-gray-600">
-                <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
-                  <span className="text-blue-600 font-semibold text-sm">A</span>
+            <h1 className="text-3xl font-bold text-gray-900 mb-4">
+              Variante A erfolgreich abgeschlossen
+            </h1>
+            
+            <p className="text-lg text-gray-600 mb-8">
+              Vielen Dank für Ihre Teilnahme. Ihre Daten wurden sicher gespeichert.
+            </p>
+
+            <div className="bg-gray-50 rounded-xl p-6 mb-8">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Speicherdetails</h3>
+              <div className="space-y-2 text-sm text-gray-600">
+                <div className="flex justify-between">
+                  <span>Speicherort:</span>
+                  <span className="font-medium">{saveResult.storage === 'google_drive' ? 'Google Drive (Cloud)' : 'Lokal'}</span>
                 </div>
-                <span>Sichtbares Formular</span>
+                <div className="flex justify-between">
+                  <span>Dateiname:</span>
+                  <span className="font-medium font-mono text-xs">{saveResult.filename}</span>
+                </div>
+                {saveResult.folder && (
+                  <div className="flex justify-between">
+                    <span>Ordner:</span>
+                    <span className="font-medium">{saveResult.folder}</span>
+                  </div>
+                )}
+                <div className="flex justify-between">
+                  <span>Bearbeitungszeit:</span>
+                  <span className="font-medium">{duration} Minuten</span>
+                </div>
               </div>
-              <Link href="/form-b">
-                <Button variant="outline" className="text-sm">
-                  Zu Variante B
-                </Button>
+            </div>
+
+            <div className="flex gap-4 justify-center">
+              <Link 
+                href="/form-b" 
+                className="px-8 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium"
+              >
+                Zu Variante B
+              </Link>
+              <Link 
+                href="/" 
+                className="px-8 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+              >
+                Zur Hauptseite
               </Link>
             </div>
           </div>
         </div>
-      </nav>
+      </div>
+    )
+  }
 
-      <main className="max-w-7xl mx-auto px-6 py-8">
+  // === MAIN INTERFACE ===
+  const filledFields = Object.values(values).filter(value => value.trim()).length
+  const totalFields = instructions ? Object.keys(instructions).length : 0
+  const progress = totalFields > 0 ? Math.round((filledFields / totalFields) * 100) : 0
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 p-6">
+      <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-sm font-medium mb-4">
-            Sichtbare Formularfelder mit KI-Unterstützung
+          <Link href="/" className="inline-flex items-center text-blue-600 hover:text-blue-800 mb-6 text-sm font-medium">
+            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+            </svg>
+            Zurück zur Hauptseite
+          </Link>
+          
+          <div className="mb-6">
+            <h1 className="text-4xl font-bold text-gray-900 mb-3">
+              Variante A: Sichtbares Formular
+            </h1>
+            <p className="text-xl text-gray-600 max-w-3xl mx-auto">
+              Wissenschaftliche Studie zur LLM-gestützten Formularbearbeitung
+            </p>
           </div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-4">
-            Gebäudeformular erfassen
-          </h1>
-          <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-            Lassen Sie die KI ein personalisiertes Formular für Sie generieren und nutzen Sie den Chat-Assistant für Hilfe.
-          </p>
+
+          {/* System Status */}
+          <div className="flex justify-center items-center gap-4 text-sm">
+            <div className="flex items-center gap-2">
+              <div className={`w-2 h-2 rounded-full ${systemOnline ? 'bg-green-500' : 'bg-red-500'}`}></div>
+              <span className="text-gray-600">
+                System {systemOnline ? 'online' : 'offline'}
+              </span>
+            </div>
+            <div className="text-gray-400">•</div>
+            <div className="text-gray-600">HAW Hamburg</div>
+          </div>
         </div>
 
-        <div className="grid lg:grid-cols-2 gap-8">
-          {/* Linke Spalte - Kontext & Formular */}
-          <div className="space-y-6">
-            
-            {/* Kontext-Eingabe */}
-            <Card className="bg-white border border-gray-200">
-              <CardHeader>
-                <CardTitle className="text-lg text-gray-900">
-                  {instructions ? "✅ Kontext eingegeben" : "1. Kontext eingeben (optional)"}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {!instructions ? (
-                  <>
-                    <div className="space-y-2">
-                      <label className="block text-sm font-medium text-gray-700">
-                        Kontext für personalisierte Felder
-                      </label>
-                      <p className="text-sm text-gray-500">
-                        Beschreiben Sie Ihr Gebäude oder Vorhaben, um spezifische Formularfelder zu erhalten. 
-                        Leer lassen für Standard-Gebäudeformular.
-                      </p>
-                    </div>
-                    <Textarea
-                      placeholder="z.B. Energetische Sanierung eines Mehrfamilienhauses aus den 1970er Jahren mit Fokus auf Dämmung und neue Heizungsanlage..."
-                      value={context}
-                      onChange={(e) => setContext(e.target.value)}
-                      className="min-h-[120px] resize-none"
-                    />
-                    <Button 
-                      onClick={handleGenerateFields}
-                      disabled={loading}
-                      className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3"
-                    >
-                      {loading ? "🔄 Generiere Felder..." : "📋 Anweisungen generieren"}
-                    </Button>
-                  </>
-                ) : (
-                  <div className="space-y-3">
-                    <div className="bg-blue-50 rounded-lg p-4">
-                      <p className="text-sm text-blue-800">
-                        <strong>Kontext:</strong> {context || "Standard-Gebäudeformular"}
-                      </p>
-                    </div>
-                    <Button 
-                      onClick={handleReset}
-                      variant="outline"
-                      className="w-full text-gray-600 border-gray-300"
-                    >
-                      🔄 Neu starten
-                    </Button>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+        <div className="grid lg:grid-cols-3 gap-8">
+          {/* Left Column: Context & Form */}
+          <div className="lg:col-span-2 space-y-6">
+            {/* Context Input */}
+            {!instructions && (
+              <div className="bg-white rounded-2xl shadow-lg p-8">
+                <h2 className="text-2xl font-semibold text-gray-900 mb-6">
+                  1. Kontext eingeben
+                </h2>
+                <p className="text-gray-600 mb-6">
+                  Beschreiben Sie optional den Kontext Ihres Gebäudes, um passende Formularfelder zu generieren.
+                </p>
+                
+                <textarea
+                  value={context}
+                  onChange={(e) => setContext(e.target.value)}
+                  placeholder="Beispiel: Ich möchte ein Mehrfamilienhaus von 1980 erfassen, das energetisch saniert werden soll..."
+                  className="w-full h-32 p-4 border border-gray-300 rounded-xl resize-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                  disabled={loading}
+                />
+                
+                <div className="mt-6">
+                  <button
+                    onClick={handleGenerateForm}
+                    disabled={loading || !systemOnline}
+                    className="w-full bg-blue-600 text-white py-4 px-6 rounded-xl hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors text-lg font-medium flex items-center justify-center"
+                  >
+                    {loading ? (
+                      <>
+                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-3"></div>
+                        Formular wird generiert...
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                        </svg>
+                        Formular generieren
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
 
-            {/* Formular */}
+            {/* Generated Form */}
             {instructions && (
-              <Card className="bg-white border border-gray-200">
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-lg text-gray-900">2. Formular ausfüllen</CardTitle>
-                    <div className="text-sm text-gray-500">
-                      {filledFields} von {totalFields} Feldern ausgefüllt
-                    </div>
+              <div className="bg-white rounded-2xl shadow-lg p-8">
+                <div className="flex justify-between items-center mb-6">
+                  <h2 className="text-2xl font-semibold text-gray-900">
+                    2. Gebäudeformular ausfüllen
+                  </h2>
+                  <div className="text-sm text-gray-500">
+                    {filledFields} von {totalFields} Feldern ausgefüllt
                   </div>
-                  {/* Fortschrittsbalken */}
-                  <div className="w-full bg-gray-200 rounded-full h-2 mt-3">
+                </div>
+
+                {/* Progress Bar */}
+                <div className="mb-8">
+                  <div className="flex justify-between text-sm text-gray-600 mb-2">
+                    <span>Fortschritt</span>
+                    <span>{progress}%</span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-3">
                     <div 
-                      className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                      className="bg-blue-600 h-3 rounded-full transition-all duration-500"
                       style={{ width: `${progress}%` }}
-                    />
+                    ></div>
                   </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {Object.entries(instructions).map(([fieldName, instruction]) => (
-                    <div key={fieldName} className="space-y-2">
-                      <label className="block text-sm font-medium text-gray-900">
-                        {fieldName}
+                </div>
+
+                {/* Form Fields */}
+                <div className="space-y-6 mb-8">
+                  {Object.entries(instructions).map(([key, instruction], index) => (
+                    <div key={key} className="border border-gray-200 rounded-xl p-6 hover:border-gray-300 transition-colors">
+                      <label className="block text-sm font-semibold text-gray-900 mb-3">
+                        <div className="flex items-center gap-3">
+                          <span className="flex-shrink-0 w-6 h-6 bg-blue-100 text-blue-700 rounded-full flex items-center justify-center text-xs font-bold">
+                            {index + 1}
+                          </span>
+                          <span className="flex-1">{key.replace(/_/g, ' ')}</span>
+                          {index < 5 && (
+                            <span className="px-2 py-1 bg-red-100 text-red-700 text-xs rounded-full">
+                              Pflichtfeld
+                            </span>
+                          )}
+                        </div>
                       </label>
-                      <p className="text-xs text-gray-600 leading-relaxed">
-                        {instruction}
-                      </p>
+                      
+                      <p className="text-sm text-gray-600 mb-4">{instruction}</p>
+                      
                       <input
-                        type="text"
-                        value={values[fieldName] || ""}
-                        onChange={(e) => setValues(prev => ({ ...prev, [fieldName]: e.target.value }))}
-                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                        placeholder={`${fieldName} eingeben...`}
+                        type={key.includes('JAHR') ? 'number' : key.includes('FLÄCHE') ? 'number' : 'text'}
+                        value={values[key] || ''}
+                        onChange={(e) => handleInputChange(key, e.target.value)}
+                        placeholder="Ihre Eingabe..."
+                        className="w-full p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                        min={key.includes('JAHR') ? 1800 : key.includes('FLÄCHE') ? 1 : undefined}
+                        max={key.includes('JAHR') ? 2025 : undefined}
                       />
                     </div>
                   ))}
+                </div>
+
+                {/* Save Button */}
+                <div className="border-t pt-8">
+                  <button
+                    onClick={handleSaveForm}
+                    disabled={saving || filledFields < 5}
+                    className="w-full bg-green-600 text-white py-4 px-6 rounded-xl hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors text-lg font-medium flex items-center justify-center"
+                  >
+                    {saving ? (
+                      <>
+                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-3"></div>
+                        Daten werden gespeichert...
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                        </svg>
+                        Formular speichern und abschließen
+                      </>
+                    )}
+                  </button>
                   
-                  <div className="pt-6 border-t border-gray-200">
-                    <Button 
-                      onClick={handleSave}
-                      disabled={filledFields === 0}
-                      className="w-full bg-green-600 hover:bg-green-700 text-white py-3"
-                    >
-                      💾 Als JSON speichern ({filledFields} Felder ausgefüllt)
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
+                  {filledFields < 5 && (
+                    <p className="text-sm text-gray-500 text-center mt-3">
+                      Mindestens die ersten 5 Felder müssen ausgefüllt werden
+                    </p>
+                  )}
+                </div>
+              </div>
             )}
           </div>
 
-          {/* Rechte Spalte - Chat-Hilfe */}
-          <div className="space-y-6">
-            <Card className="bg-white border border-gray-200 h-[600px] flex flex-col">
-              <CardHeader>
-                <CardTitle className="text-lg text-gray-900 flex items-center">
-                  <svg className="w-5 h-5 mr-2 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-2v2h2V9zM9 9h2v2H9V9z"/>
-                  </svg>
-                  KI-Hilfe Chat
-                </CardTitle>
-                <p className="text-sm text-gray-600">
-                  Fragen Sie den Assistenten bei Unklarheiten zum Formular.
-                </p>
-              </CardHeader>
+          {/* Right Column: Chat Help */}
+          <div className="lg:col-span-1">
+            <div className="bg-white rounded-2xl shadow-lg p-6 sticky top-6">
+              <h3 className="text-xl font-semibold text-gray-900 mb-6 flex items-center">
+                <svg className="w-5 h-5 mr-2 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-3.582 8-8 8a8.017 8.017 0 01-6.1-2.9L3 21l3.9-3.9A8.017 8.017 0 013 12c0-4.418 3.582-8 8-8s8 3.582 8 8z" />
+                </svg>
+                KI-Assistent
+              </h3>
               
-              <CardContent className="flex-1 flex flex-col">
-                {/* Chat Messages */}
-                <div className="flex-1 overflow-y-auto border border-gray-200 rounded-lg p-4 mb-4 space-y-4 max-h-[400px]">
-                  {chatHistory.length === 0 ? (
-                    <div className="text-center text-gray-500 py-8">
-                      <svg className="w-12 h-12 mx-auto mb-4 text-gray-300" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7z"/>
-                      </svg>
-                      <p className="font-medium">Chat-Assistent bereit</p>
-                      <p className="text-sm">Generieren Sie zuerst Formularfelder, dann kann ich Ihnen beim Ausfüllen helfen.</p>
+              {/* Chat Messages */}
+              <div className="h-64 border border-gray-200 rounded-xl p-4 overflow-y-auto mb-4 bg-gray-50">
+                {chatHistory.length === 0 ? (
+                  <div className="text-center text-gray-500 py-8">
+                    <svg className="w-8 h-8 mx-auto mb-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <p className="text-sm">
+                      Stellen Sie Fragen zum Formular...
+                    </p>
+                    <div className="mt-4 text-xs text-gray-400 space-y-1">
+                      <p>• "Was bedeutet Energieklasse A?"</p>
+                      <p>• "Wie messe ich die Wohnfläche?"</p>
+                      <p>• "Welche Heizungsarten gibt es?"</p>
                     </div>
-                  ) : (
-                    chatHistory.map((msg, i) => (
-                      <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                        <div className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
-                          msg.role === 'user' 
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {chatHistory.map((msg, index) => (
+                      <div key={index} className={`flex ${msg.type === 'user' ? 'justify-end' : 'justify-start'}`}>
+                        <div className={`max-w-xs px-4 py-2 rounded-xl text-sm ${
+                          msg.type === 'user' 
                             ? 'bg-blue-600 text-white' 
-                            : 'bg-gray-100 text-gray-900'
+                            : 'bg-white border border-gray-200 text-gray-800 shadow-sm'
                         }`}>
-                          <p className="text-sm leading-relaxed">{msg.content}</p>
+                          {msg.message}
+                          <div className={`text-xs mt-1 opacity-70 ${
+                            msg.type === 'user' ? 'text-blue-100' : 'text-gray-500'
+                          }`}>
+                            {msg.timestamp.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
+                          </div>
                         </div>
                       </div>
-                    ))
-                  )}
-                  {chatLoading && (
-                    <div className="flex justify-start">
-                      <div className="bg-gray-100 text-gray-900 px-4 py-2 rounded-lg">
-                        <p className="text-sm">🤔 Denke nach...</p>
+                    ))}
+                    {chatLoading && (
+                      <div className="flex justify-start">
+                        <div className="bg-white border border-gray-200 text-gray-800 px-4 py-2 rounded-xl text-sm shadow-sm">
+                          <div className="flex items-center">
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
+                            KI denkt nach...
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Chat Input */}
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={chatInput}
-                    onChange={(e) => setChatInput(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && !chatLoading && handleSendChat()}
-                    placeholder="Frage zum Formular stellen..."
-                    disabled={chatLoading}
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
-                  />
-                  <Button 
-                    onClick={handleSendChat}
-                    disabled={!chatInput.trim() || chatLoading}
-                    className="bg-blue-600 hover:bg-blue-700 text-white px-4"
-                  >
-                    {chatLoading ? "⏳" : "📤"}
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Progress Card */}
-            {instructions && (
-              <Card className="bg-blue-50 border border-blue-200">
-                <CardContent className="p-4">
-                  <div className="text-center">
-                    <div className="text-3xl font-bold text-blue-600 mb-1">
-                      {Math.round(progress)}%
-                    </div>
-                    <div className="text-sm text-blue-700 mb-2">Vervollständigung</div>
-                    <div className="text-xs text-blue-600">
-                      {filledFields} von {totalFields} Feldern ausgefüllt
-                    </div>
+                    )}
                   </div>
-                </CardContent>
-              </Card>
-            )}
+                )}
+              </div>
+
+              {/* Chat Input */}
+              <form onSubmit={handleChatSubmit} className="flex gap-2">
+                <input
+                  type="text"
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  placeholder="Ihre Frage..."
+                  className="flex-1 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                  disabled={chatLoading || !systemOnline}
+                />
+                <button
+                  type="submit"
+                  disabled={chatLoading || !chatInput.trim() || !systemOnline}
+                  className="bg-blue-600 text-white px-4 py-3 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                  </svg>
+                </button>
+              </form>
+              
+              <div className="text-xs text-gray-500 mt-3">
+                Der KI-Assistent hilft beim Ausfüllen des Formulars
+              </div>
+            </div>
           </div>
         </div>
-      </main>
+      </div>
     </div>
   )
 }

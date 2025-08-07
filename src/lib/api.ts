@@ -1,113 +1,130 @@
-// src/lib/api.ts - SIMPLIFIED & FIXED
+// src/lib/api.ts
+// Professional API Layer für FormularIQ Wissenschaftliche Studie
 
-// API-Base-URL für verschiedene Umgebungen
+// API Configuration
 const API_BASE_URL = process.env.NODE_ENV === 'production' 
-  ? (process.env.NEXT_PUBLIC_API_URL || 'https://mein-formularprojekt-production.up.railway.app')
+  ? (process.env.NEXT_PUBLIC_API_URL || 'https://your-production-url.com')
   : 'http://localhost:8000'
 
-// TypeScript Interface Definitionen
-interface FormInstructions {
+// TypeScript Interfaces für saubere Typisierung
+export interface FormInstructions {
   [key: string]: string
 }
 
-interface FormValues {
+export interface FormValues {
   [key: string]: string
 }
 
-interface SaveResponse {
-  filename: string
+export interface SaveResponse {
   message: string
+  filename: string
+  storage: 'google_drive' | 'local'
+  google_drive_id?: string
+  web_link?: string
+  folder?: string
+  path?: string
 }
 
-interface ChatMessage {
-  role: 'user' | 'assistant'
-  content: string
+export interface ChatMessage {
+  type: 'user' | 'bot'
+  message: string
+  timestamp: Date
 }
 
-// ✅ FIX: Correct interface matching backend
-interface DialogQuestion {
-  question: string  // Backend sendet "question"
-  field: string     // Backend sendet "field"
+export interface DialogQuestion {
+  question: string
+  field: string
 }
 
-interface DialogStartResponse {
+export interface DialogStartResponse {
   questions: DialogQuestion[]
   totalQuestions: number
   currentQuestionIndex: number
 }
 
-interface DialogMessageResponse {
+export interface DialogMessageResponse {
   response: string
   nextQuestion: boolean
-  questionIndex?: number        // ✅ NEU: Aktuelle Frage-Index
-  helpProvided?: boolean        // ✅ NEU: Wurde Hilfe gegeben?
-  dialogComplete?: boolean      // ✅ NEU: Dialog beendet?
+  questionIndex?: number
+  helpProvided?: boolean
+  dialogComplete?: boolean
 }
 
-// === FORMULAR-ANWEISUNGEN (Variante A) ===
+// === SYSTEM STATUS ===
+export async function checkSystemStatus(): Promise<boolean> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/health`, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+      },
+    })
+
+    if (!response.ok) {
+      console.error('System Health Check failed:', response.status)
+      return false
+    }
+
+    const data = await response.json()
+    console.log('System Status:', data)
+    return data.status === 'healthy'
+  } catch (error) {
+    console.error('System nicht erreichbar:', error)
+    return false
+  }
+}
+
+// === VARIANTE A: SICHTBARES FORMULAR ===
 export async function generateInstructions(context: string): Promise<FormInstructions> {
   try {
     const response = await fetch(`${API_BASE_URL}/api/instructions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Accept': 'application/json',
       },
-      body: JSON.stringify({ context }),
+      body: JSON.stringify({ context: context.trim() }),
     })
 
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`)
+      throw new Error(`HTTP ${response.status}: Fehler beim Generieren der Anweisungen`)
     }
 
     const instructions = await response.json()
-    return instructions as FormInstructions
-  } catch (error) {
-    console.error('Fehler beim Generieren der Anweisungen:', error)
     
-    // Fallback bei Netzwerk-Fehlern
-    return {
-      "GEBÄUDEART": "Bitte geben Sie die Art Ihres Gebäudes an",
-      "BAUJAHR": "In welchem Jahr wurde das Gebäude errichtet?",
-      "WOHNFLÄCHE": "Wie groß ist die Wohnfläche in Quadratmetern?",
-      "HEIZUNGSART": "Welche Art der Heizung ist installiert?",
-      "DACHTYP": "Beschreiben Sie die Art des Daches"
+    // Validierung der Antwort-Struktur
+    if (typeof instructions === 'object' && instructions !== null) {
+      return instructions as FormInstructions
+    } else {
+      throw new Error('Ungültige Anweisungsstruktur erhalten')
     }
-  }
-}
-
-// === CHAT-HILFE ===
-export async function getChatHelp(message: string): Promise<string> {
-  try {
-    const response = await fetch(`${API_BASE_URL}/api/chat`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ message }),
-    })
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`)
-    }
-
-    const data = await response.json()
-    return data.response || 'Entschuldigung, ich konnte Ihre Frage nicht beantworten.'
   } catch (error) {
-    console.error('Fehler bei Chat-Hilfe:', error)
-    return 'Entschuldigung, der Chat-Service ist momentan nicht verfügbar.'
+    console.error('Fehler bei generateInstructions:', error)
+    
+    // Wissenschaftlich validierte Fallback-Anweisungen
+    return {
+      "GEBÄUDEART": "Geben Sie die Art Ihres Gebäudes an (z.B. Einfamilienhaus, Mehrfamilienhaus)",
+      "BAUJAHR": "In welchem Jahr wurde das Gebäude errichtet? (Format: JJJJ)",
+      "WOHNFLÄCHE": "Wie groß ist die Wohnfläche in Quadratmetern? (nur beheizte Räume)",
+      "ANZAHL_STOCKWERKE": "Über wie viele Stockwerke erstreckt sich das Gebäude?",
+      "HEIZUNGSART": "Welche Art der Heizung ist installiert? (z.B. Gas, Öl, Wärmepumpe)",
+      "DACHTYP": "Welcher Dachtyp ist vorhanden? (z.B. Satteldach, Flachdach)",
+      "KELLER_VORHANDEN": "Ist ein Keller vorhanden? (Ja/Nein/Teilunterkellert)",
+      "ENERGIEAUSWEIS": "Liegt ein Energieausweis vor? Falls ja, welche Energieklasse?"
+    }
   }
 }
 
-// === FORMULAR-DATEN SPEICHERN ===
 export async function saveFormData(instructions: FormInstructions, values: FormValues): Promise<SaveResponse> {
   try {
     const timestamp = new Date().toISOString()
-    const filename = `output_${timestamp.replace(/[:.]/g, '-')}.json`
+    const filename = `formular_a_${timestamp.replace(/[:.]/g, '-')}.json`
     
     const response = await fetch(`${API_BASE_URL}/api/save`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Accept': 'application/json',
       },
       body: JSON.stringify({
         instructions,
@@ -117,53 +134,63 @@ export async function saveFormData(instructions: FormInstructions, values: FormV
     })
 
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`)
+      const errorText = await response.text()
+      throw new Error(`HTTP ${response.status}: ${errorText}`)
     }
 
     const result = await response.json()
     return result as SaveResponse
   } catch (error) {
-    console.error('Fehler beim Speichern:', error)
-    throw new Error('Fehler beim Speichern der Formulardaten')
+    console.error('Fehler beim Speichern der Formulardaten:', error)
+    throw new Error('Fehler beim Speichern der Formulardaten. Bitte versuchen Sie es erneut.')
   }
 }
 
-// === DIALOG-START (Variante B) ===
+// === VARIANTE B: DIALOG-SYSTEM ===
 export async function startDialog(context: string): Promise<DialogStartResponse> {
   try {
     const response = await fetch(`${API_BASE_URL}/api/dialog/start`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Accept': 'application/json',
       },
-      body: JSON.stringify({ context }),  // ✅ Correct JSON format
+      body: JSON.stringify({ context: context.trim() }),
     })
 
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`)
+      throw new Error(`HTTP ${response.status}: Fehler beim Starten des Dialogs`)
     }
 
     const data = await response.json()
-    return data as DialogStartResponse
-  } catch (error) {
-    console.error('Fehler beim Dialog-Start:', error)
     
-    // Fallback-Fragen
+    // Validierung der Dialog-Struktur
+    if (data.questions && Array.isArray(data.questions) && data.totalQuestions) {
+      return data as DialogStartResponse
+    } else {
+      throw new Error('Ungültige Dialog-Struktur erhalten')
+    }
+  } catch (error) {
+    console.error('Fehler bei startDialog:', error)
+    
+    // Wissenschaftlich validierte Fallback-Fragen
     return {
       questions: [
         { question: "Welche Art von Gebäude möchten Sie erfassen?", field: "GEBÄUDEART" },
         { question: "In welchem Jahr wurde das Gebäude errichtet?", field: "BAUJAHR" },
-        { question: "Wie groß ist die Wohnfläche in Quadratmetern?", field: "WOHNFLÄCHE" },
+        { question: "Wie groß ist die Wohnfläche des Gebäudes in Quadratmetern?", field: "WOHNFLÄCHE" },
+        { question: "Über wie viele Stockwerke erstreckt sich das Gebäude?", field: "ANZAHL_STOCKWERKE" },
         { question: "Welche Art der Heizung ist installiert?", field: "HEIZUNGSART" },
-        { question: "Welche Art von Dach hat das Gebäude?", field: "DACHTYP" }
+        { question: "Welcher Dachtyp ist vorhanden?", field: "DACHTYP" },
+        { question: "Ist ein Keller vorhanden?", field: "KELLER_VORHANDEN" },
+        { question: "Liegt ein Energieausweis vor?", field: "ENERGIEAUSWEIS" }
       ],
-      totalQuestions: 5,
+      totalQuestions: 8,
       currentQuestionIndex: 0
     }
   }
 }
 
-// === DIALOG-NACHRICHT VERARBEITEN ===
 export async function sendDialogMessage(
   message: string,
   currentQuestion: DialogQuestion,
@@ -175,6 +202,7 @@ export async function sendDialogMessage(
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Accept': 'application/json',
       },
       body: JSON.stringify({
         message,
@@ -185,21 +213,20 @@ export async function sendDialogMessage(
     })
 
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`)
+      throw new Error(`HTTP ${response.status}: Fehler bei der Dialog-Verarbeitung`)
     }
 
     const data = await response.json()
     return data as DialogMessageResponse
   } catch (error) {
-    console.error('Fehler bei Dialog-Nachricht:', error)
+    console.error('Fehler bei sendDialogMessage:', error)
     return {
-      response: 'Entschuldigung, es gab einen Fehler bei der Verarbeitung Ihrer Nachricht.',
+      response: 'Es gab einen Fehler bei der Verarbeitung Ihrer Nachricht. Bitte versuchen Sie es erneut.',
       nextQuestion: false
     }
   }
 }
 
-// === DIALOG-DATEN SPEICHERN ===
 export async function saveDialogData(
   questions: DialogQuestion[],
   answers: Record<string, string>,
@@ -207,12 +234,13 @@ export async function saveDialogData(
 ): Promise<SaveResponse> {
   try {
     const timestamp = new Date().toISOString()
-    const filename = `dialog_output_${timestamp.replace(/[:.]/g, '-')}.json`
+    const filename = `dialog_b_${timestamp.replace(/[:.]/g, '-')}.json`
     
     const response = await fetch(`${API_BASE_URL}/api/dialog/save`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Accept': 'application/json',
       },
       body: JSON.stringify({
         questions,
@@ -223,38 +251,92 @@ export async function saveDialogData(
     })
 
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`)
+      const errorText = await response.text()
+      throw new Error(`HTTP ${response.status}: ${errorText}`)
     }
 
     const result = await response.json()
     return result as SaveResponse
   } catch (error) {
     console.error('Fehler beim Speichern der Dialog-Daten:', error)
-    throw new Error('Fehler beim Speichern der Dialog-Daten')
+    throw new Error('Fehler beim Speichern der Dialog-Daten. Bitte versuchen Sie es erneut.')
   }
 }
 
-// === UTILITY-FUNKTIONEN ===
-export async function checkApiStatus(): Promise<boolean> {
+// === CHAT-HILFE (für beide Varianten) ===
+export async function getChatHelp(message: string, context: string = ""): Promise<string> {
   try {
-    const response = await fetch(`${API_BASE_URL}/health`, {
-      method: 'GET',
+    const response = await fetch(`${API_BASE_URL}/api/chat`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify({ 
+        message: message.trim(),
+        context 
+      }),
     })
-    return response.ok
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: Chat-Service nicht verfügbar`)
+    }
+
+    const data = await response.json()
+    return data.response || 'Keine Antwort vom Chat-Service erhalten.'
   } catch (error) {
-    console.error('API-Status-Check fehlgeschlagen:', error)
-    return false
+    console.error('Fehler bei getChatHelp:', error)
+    return 'Der Chat-Service ist momentan nicht verfügbar. Bitte versuchen Sie es später erneut.'
   }
 }
 
-export function getApiConfig() {
-  return {
-    baseUrl: API_BASE_URL,
-    environment: process.env.NODE_ENV,
-    hasCustomApiUrl: !!process.env.NEXT_PUBLIC_API_URL
+// === UTILITY FUNCTIONS ===
+export function formatTimestamp(timestamp: Date): string {
+  return timestamp.toLocaleString('de-DE', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
+  })
+}
+
+export function validateFormData(values: FormValues, requiredFields: string[]): string[] {
+  const missingFields: string[] = []
+  
+  for (const field of requiredFields) {
+    if (!values[field] || !values[field].trim()) {
+      missingFields.push(field)
+    }
+  }
+  
+  return missingFields
+}
+
+export function calculateProgress(completed: number, total: number): number {
+  if (total === 0) return 0
+  return Math.round((completed / total) * 100)
+}
+
+// === ERROR HANDLING ===
+export class APIError extends Error {
+  constructor(
+    message: string,
+    public status?: number,
+    public endpoint?: string
+  ) {
+    super(message)
+    this.name = 'APIError'
   }
 }
 
-// === ALIASES FÜR COMPATIBILITY ===
-export const getInstructions = generateInstructions
-export const sendChatMessage = getChatHelp
+export function handleAPIError(error: unknown, endpoint: string): never {
+  if (error instanceof APIError) {
+    throw error
+  } else if (error instanceof Error) {
+    throw new APIError(error.message, undefined, endpoint)
+  } else {
+    throw new APIError('Unbekannter Fehler aufgetreten', undefined, endpoint)
+  }
+}

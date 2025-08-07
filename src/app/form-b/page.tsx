@@ -1,555 +1,439 @@
-// src/app/form-b/page.tsx - VOLLSTÄNDIG GEFIXT
+'use client'
 
-"use client"
+import React, { useState, useEffect } from 'react'
+import Link from 'next/link'
+import { startDialog, sendDialogMessage, saveDialogData, checkSystemStatus } from '@/lib/api'
+import type { DialogQuestion, ChatMessage, SaveResponse } from '@/lib/types'
 
-import { useState, useRef, useEffect } from "react"  // ✅ useRef & useEffect hinzugefügt
-import Link from "next/link"
-import { Textarea } from "@/components/ui/textarea"
-import { Button } from "@/components/ui/button"
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
-import { startDialog, sendDialogMessage, saveDialogData } from "@/lib/api"
-
-interface ChatMessage {
-  role: "user" | "assistant"
-  content: string
-}
-
-// ✅ FIX: Correct interface matching backend
-interface DialogQuestion {
-  question: string  // Backend sendet "question"
-  field: string     // Backend sendet "field"
-}
-
-interface DialogState {
-  active: boolean
-  questionIndex: number
-  questions: DialogQuestion[]  // ✅ Richtige Typen
-  answers: Record<string, string>
-}
-
-export default function FormB() {
-  // ✅ ALLE STATE VARIABLES:
+export default function FormBPage() {
+  // === STATE MANAGEMENT ===
   const [context, setContext] = useState("")
-  const [dialogState, setDialogState] = useState<DialogState>({
-    active: false,
-    questionIndex: 0,
-    questions: [],
-    answers: {}
-  })
+  const [questions, setQuestions] = useState<DialogQuestion[]>([])
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
+  const [answers, setAnswers] = useState<Record<string, string>>({})
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([])
   const [userInput, setUserInput] = useState("")
+  
+  // UI States
   const [loading, setLoading] = useState(false)
-  const [dialogCompleted, setDialogCompleted] = useState(false)
-  const [chatExpanded, setChatExpanded] = useState(false)  // ✅ NEU
+  const [dialogActive, setDialogActive] = useState(false)
+  const [dialogComplete, setDialogComplete] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [completed, setCompleted] = useState(false)
+  const [saveResult, setSaveResult] = useState<SaveResponse | null>(null)
+  
+  // System Status
+  const [systemOnline, setSystemOnline] = useState(true)
+  const [startTime] = useState(new Date())
 
-  // ✅ REFS:
-  const chatEndRef = useRef<HTMLDivElement>(null)  // ✅ NEU
-
-  // ✅ EFFECTS:
+  // === SYSTEM CHECK ===
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" })
-  }, [chatHistory])
+    checkSystemStatus().then(setSystemOnline)
+  }, [])
 
+  // === DIALOG START ===
   const handleStartDialog = async () => {
+    if (!systemOnline) {
+      alert('System ist nicht verfügbar. Bitte versuchen Sie es später erneut.')
+      return
+    }
+
     setLoading(true)
+    
     try {
-      // ✅ Bereits gefixt: Direkt string übergeben
-      const result = await startDialog(context || "")
+      const result = await startDialog(context)
+      setQuestions(result.questions)
+      setCurrentQuestionIndex(0)
+      setDialogActive(true)
       
-      setDialogState({
-        active: false,
-        questionIndex: 0,
-        questions: result.questions,  // ✅ Backend format: {question, field}
-        answers: {}
-      })
-
-      alert(`✅ ${result.questions.length} Fragen generiert! Klicken Sie "Dialog beginnen".`)
-
+      // Welcome message and first question
+      const welcomeMessage: ChatMessage = {
+        type: 'bot',
+        message: `Willkommen zum Gebäude-Dialog! Ich führe Sie durch ${result.totalQuestions} Fragen zu Ihrem Gebäude. Sie können jederzeit '?' eingeben, um Hilfe zu einer Frage zu erhalten.`,
+        timestamp: new Date()
+      }
+      
+      const firstQuestion: ChatMessage = {
+        type: 'bot',
+        message: `Frage 1 von ${result.totalQuestions}: ${result.questions[0].question}`,
+        timestamp: new Date()
+      }
+      
+      setChatHistory([welcomeMessage, firstQuestion])
+      
     } catch (error) {
-      console.error("Fehler beim Dialog-Start:", error)
-      alert("❌ Fehler beim Starten des Dialogs. Bitte erneut versuchen.")
+      console.error("Dialog start failed:", error)
+      alert("Fehler beim Starten des Dialogs. Bitte versuchen Sie es erneut.")
     } finally {
       setLoading(false)
     }
   }
 
-  const handleBeginDialog = () => {
-    setDialogState(prev => ({
-      ...prev,
-      active: true
-    }))
+  // === MESSAGE HANDLING ===
+  const handleSendMessage = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!userInput.trim() || !dialogActive) return
 
-    setChatHistory([
-      {
-        role: "assistant",
-        content: "Willkommen! Ich führe Sie durch das Formular. Lassen Sie uns beginnen."
-      },
-      {
-        role: "assistant", 
-        content: dialogState.questions[0]?.question || "Keine Fragen generiert."  // ✅ .question statt .frage
-      }
-    ])
+    const currentQuestion = questions[currentQuestionIndex]
+    if (!currentQuestion) return
 
-    setUserInput("")
-  }
-
-  // ✅ NEUE handleSendMessage Funktion (IN form-b/page.tsx ERSETZEN)
-  const handleSendMessage = async () => {
-    if (!userInput.trim() || !dialogState.active) return
-
-    const userMessage = { role: "user" as const, content: userInput }
-    setChatHistory(prev => [...prev, userMessage])
-
-    // Antwort speichern (NUR wenn es keine Rückfrage ist)
-    const currentQuestion = dialogState.questions[dialogState.questionIndex]
-    const isHelpRequest = userInput.endsWith('?') || 
-                         userInput.toLowerCase().includes('was') ||
-                         userInput.toLowerCase().includes('welche') ||
-                         userInput.toLowerCase().includes('arten') ||
-                         userInput === '?'
-
-    if (currentQuestion && !isHelpRequest) {
-      setDialogState(prev => ({
-        ...prev,
-        answers: { ...prev.answers, [currentQuestion.field]: userInput }
-      }))
+    // Add user message
+    const userMessage: ChatMessage = {
+      type: 'user',
+      message: userInput,
+      timestamp: new Date()
     }
+    setChatHistory(prev => [...prev, userMessage])
 
     try {
       const response = await sendDialogMessage(
         userInput,
         currentQuestion,
-        dialogState.questionIndex,
-        dialogState.questions.length
+        currentQuestionIndex,
+        questions.length
       )
 
-      const assistantMessage = { role: "assistant" as const, content: response.response }
-      setChatHistory(prev => [...prev, assistantMessage])
+      // Add bot response
+      const botMessage: ChatMessage = {
+        type: 'bot',
+        message: response.response,
+        timestamp: new Date()
+      }
+      setChatHistory(prev => [...prev, botMessage])
 
-      // ✅ NEUE LOGIC: Unterscheide zwischen Hilfe und normalen Antworten
-      if (response.helpProvided) {
-        // 🆘 HILFE GEGEBEN - BEI AKTUELLER FRAGE BLEIBEN
-        console.log("🆘 Hilfe wurde gegeben, bleibe bei aktueller Frage")
+      // Save answer (except for help requests)
+      if (userInput !== "?" && !response.helpProvided) {
+        setAnswers(prev => ({
+          ...prev,
+          [currentQuestion.field]: userInput
+        }))
+      }
+
+      // Handle next question
+      if (response.nextQuestion && response.questionIndex !== undefined) {
+        setCurrentQuestionIndex(response.questionIndex)
         
-        // Nach kurzer Pause die gleiche Frage nochmal stellen
-        setTimeout(() => {
-          setChatHistory(prev => [...prev, { 
-            role: "assistant", 
-            content: `${currentQuestion.question}` 
-          }])
-        }, 1500)
+        if (response.questionIndex < questions.length) {
+          const nextQuestion = questions[response.questionIndex]
+          const nextQuestionMessage: ChatMessage = {
+            type: 'bot',
+            message: `Frage ${response.questionIndex + 1} von ${questions.length}: ${nextQuestion.question}`,
+            timestamp: new Date()
+          }
+          setChatHistory(prev => [...prev, nextQuestionMessage])
+        }
+      }
+
+      // Handle dialog completion
+      if (response.dialogComplete) {
+        setDialogComplete(true)
+        setDialogActive(false)
         
-      } else if (response.dialogComplete) {
-        // 🎉 DIALOG KOMPLETT BEENDET
-        console.log("🎉 Dialog wurde beendet")
-        setDialogCompleted(true)
-        setDialogState(prev => ({ ...prev, active: false }))
-        
-      } else if (response.nextQuestion && dialogState.questionIndex + 1 < dialogState.questions.length) {
-        // ➡️ NÄCHSTE FRAGE
-        console.log(`➡️ Springe zu Frage ${dialogState.questionIndex + 2}`)
-        setDialogState(prev => ({ ...prev, questionIndex: prev.questionIndex + 1 }))
-        
-        const nextQuestion = dialogState.questions[dialogState.questionIndex + 1]
-        setTimeout(() => {
-          setChatHistory(prev => [...prev, { 
-            role: "assistant", 
-            content: nextQuestion.question
-          }])
-        }, 1000)
-        
-      } else if (!response.nextQuestion && !response.helpProvided) {
-        // 🏁 ALLE FRAGEN BEANTWORTET
-        console.log("🏁 Alle Fragen beantwortet")
-        setDialogCompleted(true)
-        setDialogState(prev => ({ ...prev, active: false }))
+        const completionMessage: ChatMessage = {
+          type: 'bot',
+          message: "🎉 Alle Fragen beantwortet! Sie können nun Ihre Antworten speichern.",
+          timestamp: new Date()
+        }
+        setChatHistory(prev => [...prev, completionMessage])
       }
 
     } catch (error) {
-      console.error("Dialog-Fehler:", error)
-      setChatHistory(prev => [...prev, { 
-        role: "assistant", 
-        content: "Entschuldigung, ein Fehler ist aufgetreten. Bitte versuchen Sie es erneut." 
-      }])
+      console.error("Dialog message error:", error)
+      const errorMessage: ChatMessage = {
+        type: 'bot',
+        message: "Es gab einen Fehler bei der Verarbeitung. Bitte versuchen Sie es erneut.",
+        timestamp: new Date()
+      }
+      setChatHistory(prev => [...prev, errorMessage])
     }
 
     setUserInput("")
   }
 
-  const handleSaveResults = async () => {
+  // === SAVE HANDLING ===
+  const handleSaveDialog = async () => {
+    setSaving(true)
+
     try {
-      const result = await saveDialogData(
-        dialogState.questions,
-        dialogState.answers,
-        chatHistory
-      )
-      alert(`✅ Dialog gespeichert: ${result.filename}`)
+      const result = await saveDialogData(questions, answers, chatHistory)
+      setSaveResult(result)
+      setCompleted(true)
     } catch (error) {
-      console.error("Speicher-Fehler:", error)
-      alert("❌ Fehler beim Speichern")
+      console.error("Save failed:", error)
+      alert("Fehler beim Speichern. Bitte versuchen Sie es erneut.")
+    } finally {
+      setSaving(false)
     }
   }
 
-  const handleReset = () => {
-    setDialogState({ active: false, questionIndex: 0, questions: [], answers: {} })
-    setChatHistory([])
-    setContext("")
-    setUserInput("")
-    setDialogCompleted(false)
-    setLoading(false)
-  }
+  // === COMPLETION SCREEN ===
+  if (completed && saveResult) {
+    const duration = Math.round((new Date().getTime() - startTime.getTime()) / 1000 / 60)
+    
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-green-50 to-emerald-50 p-6">
+        <div className="max-w-3xl mx-auto">
+          <div className="bg-white rounded-2xl shadow-xl p-8 text-center">
+            <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
+              <svg className="w-10 h-10 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            
+            <h1 className="text-3xl font-bold text-gray-900 mb-4">
+              Variante B erfolgreich abgeschlossen
+            </h1>
+            
+            <p className="text-lg text-gray-600 mb-8">
+              Vielen Dank für Ihre Teilnahme am Dialog-System. Ihre Antworten wurden sicher gespeichert.
+            </p>
 
-  const progress = dialogState.questions.length > 0 
-    ? Math.round((Object.keys(dialogState.answers).length / dialogState.questions.length) * 100)
-    : 0
-
-  return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Navigation */}
-      <nav className="bg-white border-b border-gray-200 sticky top-0 z-50">
-        <div className="max-w-6xl mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 bg-emerald-600 rounded-lg flex items-center justify-center">
-                <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M8 12a4 4 0 100-8 4 4 0 000 8zM2 21a6 6 0 1112 0H2z"/>
-                </svg>
-              </div>
-              <div>
-                <h1 className="text-xl font-semibold text-gray-900">FormularIQ</h1>
-                <p className="text-sm text-emerald-600">Variante B - Dialog-basiert</p>
+            <div className="bg-gray-50 rounded-xl p-6 mb-8">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Speicherdetails</h3>
+              <div className="space-y-2 text-sm text-gray-600">
+                <div className="flex justify-between">
+                  <span>Speicherort:</span>
+                  <span className="font-medium">{saveResult.storage === 'google_drive' ? 'Google Drive (Cloud)' : 'Lokal'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Dateiname:</span>
+                  <span className="font-medium font-mono text-xs">{saveResult.filename}</span>
+                </div>
+                {saveResult.folder && (
+                  <div className="flex justify-between">
+                    <span>Ordner:</span>
+                    <span className="font-medium">{saveResult.folder}</span>
+                  </div>
+                )}
+                <div className="flex justify-between">
+                  <span>Bearbeitungszeit:</span>
+                  <span className="font-medium">{duration} Minuten</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Dialog-Interaktionen:</span>
+                  <span className="font-medium">{chatHistory.length} Nachrichten</span>
+                </div>
               </div>
             </div>
-            <Link 
-              href="/"
-              className="px-4 py-2 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
-            >
-              ← Zurück zur Übersicht
-            </Link>
+
+            <div className="flex gap-4 justify-center">
+              <Link 
+                href="/form-a" 
+                className="px-8 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+              >
+                Zu Variante A
+              </Link>
+              <Link 
+                href="/" 
+                className="px-8 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+              >
+                Zur Hauptseite
+              </Link>
+            </div>
           </div>
         </div>
-      </nav>
+      </div>
+    )
+  }
 
-      <main className="max-w-4xl mx-auto px-6 py-8">
-        
-        {/* Dialog Completed Screen */}
-        {dialogCompleted && (
-          <Card className="bg-gradient-to-r from-emerald-50 to-green-50 border border-emerald-200 mb-8">
-            <CardHeader className="text-center">
-              <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <svg className="w-8 h-8 text-emerald-600" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"/>
-                </svg>
-              </div>
-              <CardTitle className="text-2xl text-emerald-900">
-                🎉 Dialog erfolgreich abgeschlossen!
-              </CardTitle>
-              <p className="text-emerald-700 mt-2">
-                Sie haben alle {dialogState.questions.length} Fragen beantwortet.
+  // === MAIN INTERFACE ===
+  const progress = questions.length > 0 ? Math.round((Object.keys(answers).length / questions.length) * 100) : 0
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-green-50 to-emerald-50 p-6">
+      <div className="max-w-5xl mx-auto">
+        {/* Header */}
+        <div className="text-center mb-8">
+          <Link href="/" className="inline-flex items-center text-green-600 hover:text-green-800 mb-6 text-sm font-medium">
+            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+            </svg>
+            Zurück zur Hauptseite
+          </Link>
+          
+          <div className="mb-6">
+            <h1 className="text-4xl font-bold text-gray-900 mb-3">
+              Variante B: Dialog-System
+            </h1>
+            <p className="text-xl text-gray-600 max-w-3xl mx-auto">
+              Interaktive Gebäudeerfassung durch natürlichen Dialog
+            </p>
+          </div>
+
+          {/* System Status */}
+          <div className="flex justify-center items-center gap-4 text-sm">
+            <div className="flex items-center gap-2">
+              <div className={`w-2 h-2 rounded-full ${systemOnline ? 'bg-green-500' : 'bg-red-500'}`}></div>
+              <span className="text-gray-600">
+                System {systemOnline ? 'online' : 'offline'}
+              </span>
+            </div>
+            <div className="text-gray-400">•</div>
+            <div className="text-gray-600">HAW Hamburg</div>
+          </div>
+        </div>
+
+        <div className="max-w-4xl mx-auto">
+          {/* Context & Start Section */}
+          {!dialogActive && !dialogComplete && (
+            <div className="bg-white rounded-2xl shadow-lg p-8 mb-8">
+              <h2 className="text-2xl font-semibold text-gray-900 mb-6">
+                Dialog-basierte Gebäudeerfassung
+              </h2>
+              
+              <p className="text-gray-600 mb-6">
+                Das System führt Sie interaktiv durch die Gebäudeerfassung. 
+                Sie können optional einen Kontext eingeben, um spezifische Fragen zu erhalten.
               </p>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="bg-white rounded-lg border p-4 max-h-48 overflow-y-auto">
-                  <h3 className="font-medium text-gray-900 mb-3">Ihre Antworten:</h3>
-                  <div className="space-y-2">
-                    {dialogState.questions.map((question, index) => (
-                      <div key={index} className="text-sm">
-                        <span className="font-medium text-gray-700">{question.field}:</span>
-                        <span className="ml-2 text-gray-600 italic">
-                          "{dialogState.answers[question.field] || "Nicht beantwortet"}"
-                        </span>
-                      </div>
-                    ))}
+              
+              <div className="mb-6">
+                <label className="block text-sm font-semibold text-gray-900 mb-3">
+                  Kontext (optional)
+                </label>
+                <textarea
+                  value={context}
+                  onChange={(e) => setContext(e.target.value)}
+                  placeholder="Beispiel: Wir wollen unser Einfamilienhaus von 1975 energetisch sanieren..."
+                  className="w-full h-24 p-4 border border-gray-300 rounded-xl resize-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-colors"
+                  disabled={loading}
+                />
+              </div>
+
+              <button
+                onClick={handleStartDialog}
+                disabled={loading || !systemOnline}
+                className="w-full bg-green-600 text-white py-4 px-6 rounded-xl hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors text-lg font-medium flex items-center justify-center"
+              >
+                {loading ? (
+                  <>
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-3"></div>
+                    Dialog wird vorbereitet...
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-3.582 8-8 8a8.017 8.017 0 01-6.1-2.9L3 21l3.9-3.9A8.017 8.017 0 013 12c0-4.418 3.582-8 8-8s8 3.582 8 8z" />
+                    </svg>
+                    Dialog starten
+                  </>
+                )}
+              </button>
+            </div>
+          )}
+
+          {/* Dialog Interface */}
+          {(dialogActive || dialogComplete) && (
+            <div className="bg-white rounded-2xl shadow-lg p-8">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-semibold text-gray-900">
+                  Gebäude-Dialog {dialogComplete ? "(Abgeschlossen)" : "(Aktiv)"}
+                </h2>
+                <div className="text-sm text-gray-500">
+                  {Object.keys(answers).length} von {questions.length} Fragen beantwortet
+                </div>
+              </div>
+
+              {/* Progress Bar */}
+              {questions.length > 0 && (
+                <div className="mb-8">
+                  <div className="flex justify-between text-sm text-gray-600 mb-2">
+                    <span>Fortschritt</span>
+                    <span>{progress}%</span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-3">
+                    <div 
+                      className="bg-green-600 h-3 rounded-full transition-all duration-500"
+                      style={{ width: `${progress}%` }}
+                    ></div>
                   </div>
                 </div>
+              )}
 
-                <div className="flex gap-3">
-                  <Button 
-                    onClick={handleSaveResults}
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white"
-                  >
-                    💾 Ergebnisse speichern
-                  </Button>
-                  <Button 
-                    onClick={handleReset}
-                    variant="outline"
-                    className="text-gray-600 border-gray-300 hover:bg-gray-50"
-                  >
-                    🔄 Neu starten
-                  </Button>
+              {/* Chat History */}
+              <div className="border border-gray-200 rounded-xl p-6 mb-6 bg-gray-50 h-96 overflow-y-auto">
+                <div className="space-y-4">
+                  {chatHistory.map((msg, index) => (
+                    <div key={index} className={`flex ${msg.type === 'user' ? 'justify-end' : 'justify-start'}`}>
+                      <div className={`max-w-md px-4 py-3 rounded-xl text-sm ${
+                        msg.type === 'user' 
+                          ? 'bg-green-600 text-white shadow-lg' 
+                          : 'bg-white border border-gray-200 text-gray-800 shadow-sm'
+                      }`}>
+                        <div className="whitespace-pre-wrap">{msg.message}</div>
+                        <div className={`text-xs mt-2 opacity-70 ${
+                          msg.type === 'user' ? 'text-green-100' : 'text-gray-500'
+                        }`}>
+                          {msg.timestamp.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
-            </CardContent>
-          </Card>
-        )}
 
-        {/* NEUES LAYOUT: Chat unten statt rechts */}
-        {!dialogCompleted && (
-          <div className="space-y-8">
-            
-            {/* Setup / Control Panel - JETZT FULL WIDTH */}
-            <div className="w-full max-w-4xl mx-auto">
-              
-              {!dialogState.questions.length ? (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-xl text-gray-900">Dialog starten</CardTitle>
-                    <p className="text-gray-600 text-sm">
-                      Generieren Sie personalisierte Fragen für Ihr Gebäudeformular.
-                    </p>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Kontextinformationen (optional)
-                      </label>
-                      <Textarea
-                        value={context}
-                        onChange={(e) => setContext(e.target.value)}
-                        placeholder="z.B. Energetische Sanierung eines Mehrfamilienhauses aus den 1970er Jahren..."
-                        className="w-full h-24 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
-                      />
-                      <p className="text-xs text-gray-500 mt-1">
-                        Beschreiben Sie Ihr Gebäude oder Ihr Vorhaben, um spezifische Fragen zu erhalten.
-                      </p>
-                    </div>
+              {/* Input Area */}
+              {dialogActive && (
+                <form onSubmit={handleSendMessage} className="flex gap-3 mb-6">
+                  <input
+                    type="text"
+                    value={userInput}
+                    onChange={(e) => setUserInput(e.target.value)}
+                    placeholder="Ihre Antwort... (Tipp: '?' für Hilfe)"
+                    className="flex-1 p-4 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-colors"
+                    disabled={!systemOnline}
+                  />
+                  <button
+                    type="submit"
+                    disabled={!userInput.trim() || !systemOnline}
+                    className="bg-green-600 text-white px-6 py-4 rounded-xl hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors flex items-center"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                    </svg>
+                    <span className="ml-2 hidden sm:inline">Senden</span>
+                  </button>
+                </form>
+              )}
 
-                    <Button 
-                      onClick={handleStartDialog}
-                      disabled={loading}
-                      className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-3"
-                    >
-                      {loading ? "Fragen werden generiert..." : "📋 Fragen generieren"}
-                    </Button>
-                  </CardContent>
-                </Card>
-              ) : (
-                <div className="grid md:grid-cols-2 gap-6">
-                  {/* Generated Questions Preview - Links */}
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-lg text-gray-900">
-                        ✅ {dialogState.questions.length} Fragen generiert
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="bg-gray-50 rounded-lg p-4 max-h-48 overflow-y-auto mb-4">
-                        <div className="space-y-1 text-sm">
-                          {dialogState.questions.map((q, i) => (
-                            <div key={i} className={`text-gray-700 p-2 rounded ${
-                              i === dialogState.questionIndex && dialogState.active 
-                                ? 'bg-emerald-100 border-l-4 border-emerald-500 font-medium' 
-                                : ''
-                            }`}>
-                              {i + 1}. {q.question}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                      
-                      {!dialogState.active ? (
-                        <Button 
-                          onClick={handleBeginDialog}
-                          className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
-                        >
-                          🎯 Dialog beginnen
-                        </Button>
-                      ) : (
-                        <div className="text-center p-4 bg-emerald-50 rounded-lg border border-emerald-200">
-                          <div className="text-2xl font-bold text-emerald-600">{progress}%</div>
-                          <div className="text-sm text-emerald-700">Fortschritt</div>
-                          <div className="text-xs text-emerald-600 mt-1">
-                            Frage {dialogState.questionIndex + 1} von {dialogState.questions.length}
-                          </div>
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-
-                  {/* Controls - Rechts */}
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-lg text-gray-900">Dialog-Status</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div className="grid grid-cols-2 gap-4 text-center">
-                        <div className="bg-blue-50 rounded-lg p-3">
-                          <div className="text-lg font-bold text-blue-600">
-                            {Object.keys(dialogState.answers).length}
-                          </div>
-                          <div className="text-xs text-blue-700">Beantwortet</div>
-                        </div>
-                        <div className="bg-gray-50 rounded-lg p-3">
-                          <div className="text-lg font-bold text-gray-600">
-                            {dialogState.questions.length - Object.keys(dialogState.answers).length}
-                          </div>
-                          <div className="text-xs text-gray-700">Noch offen</div>
-                        </div>
-                      </div>
-                      
-                      <Button 
-                        onClick={handleReset}
-                        variant="outline"
-                        className="w-full text-gray-600 border-gray-300 hover:bg-gray-50"
-                      >
-                        🔄 Neu starten
-                      </Button>
-                      
-                      {Object.keys(dialogState.answers).length > 0 && (
-                        <div className="bg-gray-50 rounded-lg p-3">
-                          <h4 className="text-sm font-medium text-gray-900 mb-2">Aktuelle Antworten:</h4>
-                          <div className="space-y-1 max-h-32 overflow-y-auto">
-                            {Object.entries(dialogState.answers).map(([field, answer]) => (
-                              <div key={field} className="text-xs">
-                                <span className="font-medium text-gray-700">{field}:</span>
-                                <span className="ml-1 text-gray-600">"{answer}"</span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
+              {/* Save Button */}
+              {dialogComplete && (
+                <div className="border-t pt-6">
+                  <button
+                    onClick={handleSaveDialog}
+                    disabled={saving}
+                    className="w-full bg-green-600 text-white py-4 px-6 rounded-xl hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors text-lg font-medium flex items-center justify-center"
+                  >
+                    {saving ? (
+                      <>
+                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-3"></div>
+                        Dialog wird gespeichert...
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                        </svg>
+                        Dialog speichern und abschließen
+                      </>
+                    )}
+                  </button>
                 </div>
               )}
-            </div>
 
-            {/* CHAT INTERFACE - JETZT UNTEN UND BREIT */}
-            {dialogState.questions.length > 0 && (
-              <div className="w-full max-w-6xl mx-auto">
-                <Card className="border-t-4 border-emerald-500">
-                  <CardHeader className="pb-3">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <CardTitle className="text-lg text-gray-900 flex items-center">
-                          <svg className="w-5 h-5 mr-2 text-emerald-600" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-2v2h2V9zM9 9h2v2H9V9z"/>
-                          </svg>
-                          Dialog-Chat
-                        </CardTitle>
-                        <p className="text-sm text-gray-600">
-                          {dialogState.active 
-                            ? `Frage ${dialogState.questionIndex + 1} von ${dialogState.questions.length} • Stellen Sie Rückfragen oder antworten Sie direkt`
-                            : "Dialog bereit - klicken Sie 'Dialog beginnen' um zu starten"
-                          }
-                        </p>
-                      </div>
-                      
-                      {/* Chat Toggle */}
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setChatExpanded(!chatExpanded)}
-                        className="text-gray-600"
-                      >
-                        {chatExpanded ? "Minimieren" : "Erweitern"}
-                        <svg className={`w-4 h-4 ml-1 transform transition-transform ${chatExpanded ? 'rotate-180' : ''}`} fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"/>
-                        </svg>
-                      </Button>
-                    </div>
-                  </CardHeader>
-                  
-                  <CardContent className="p-4">
-                    {/* Chat Messages - AUTO-EXPANDING */}
-                    <div className={`overflow-y-auto space-y-3 mb-4 p-4 border border-gray-200 rounded-lg bg-gray-50 transition-all duration-300 ${
-                      chatExpanded 
-                        ? 'min-h-[400px] max-h-[600px]' 
-                        : chatHistory.length === 0 
-                          ? 'h-24' 
-                          : `min-h-[${Math.min(chatHistory.length * 60 + 100, 300)}px] max-h-[300px]`
-                    }`}>
-                      {chatHistory.length === 0 ? (
-                        <div className="text-center text-gray-500 py-4">
-                          <svg className="w-8 h-8 mx-auto mb-2 text-gray-300" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7z"/>
-                          </svg>
-                          <p className="text-sm">Dialog-Chat bereit</p>
-                        </div>
-                      ) : (
-                        chatHistory.map((msg, i) => (
-                          <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} mb-3`}>
-                            <div className={`max-w-[70%] px-4 py-3 rounded-lg shadow-sm ${
-                              msg.role === 'user' 
-                                ? 'bg-emerald-600 text-white' 
-                                : 'bg-white text-gray-900 border border-gray-200'
-                            }`}>
-                              <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</p>
-                              <div className={`text-xs mt-1 opacity-70 ${
-                                msg.role === 'user' ? 'text-emerald-100' : 'text-gray-500'
-                              }`}>
-                                {new Date().toLocaleTimeString('de-DE', { 
-                                  hour: '2-digit', 
-                                  minute: '2-digit' 
-                                })}
-                              </div>
-                            </div>
-                          </div>
-                        ))
-                      )}
-                      
-                      <div ref={chatEndRef} />
-                    </div>
-
-                    {/* Input Area */}
-                    <div className="space-y-3">
-                      <div className="flex gap-3">
-                        <input
-                          type="text"
-                          value={userInput}
-                          onChange={(e) => setUserInput(e.target.value)}
-                          onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
-                          placeholder={dialogState.active 
-                            ? "Ihre Antwort eingeben oder Rückfrage stellen..." 
-                            : "Dialog starten um zu antworten"
-                          }
-                          disabled={!dialogState.active}
-                          className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 disabled:bg-gray-100"
-                        />
-                        
-                        <Button 
-                          onClick={handleSendMessage}
-                          disabled={!dialogState.active || !userInput.trim()}
-                          className="bg-emerald-600 hover:bg-emerald-700 text-white px-6"
-                        >
-                          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                            <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"/>
-                          </svg>
-                        </Button>
-                      </div>
-                      
-                      {/* Quick Actions */}
-                      {dialogState.active && (
-                        <div className="flex flex-wrap gap-2">
-                          <button
-                            onClick={() => setUserInput("?")}
-                            className="text-xs px-3 py-1 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 rounded-full"
-                          >
-                            ? Hilfe
-                          </button>
-                          <button
-                            onClick={() => setUserInput("Welche Optionen gibt es?")}
-                            className="text-xs px-3 py-1 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-full"
-                          >
-                            💡 Optionen
-                          </button>
-                          <button
-                            onClick={() => setUserInput("Beispiele?")}
-                            className="text-xs px-3 py-1 bg-purple-100 hover:bg-purple-200 text-purple-700 rounded-full"
-                          >
-                            📝 Beispiele
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
+              {/* Help Information */}
+              <div className="mt-6 bg-blue-50 border border-blue-200 rounded-xl p-4">
+                <h4 className="text-sm font-semibold text-blue-900 mb-2">💡 Hilfreiche Tipps:</h4>
+                <ul className="text-sm text-blue-800 space-y-1">
+                  <li>• Antworten Sie natürlich und ausführlich auf die Fragen</li>
+                  <li>• Schreiben Sie "?" um spezifische Hilfe zur aktuellen Frage zu erhalten</li>
+                  <li>• Bei Unsicherheiten können Sie schätzen oder "unbekannt" angeben</li>
+                  <li>• Ihre Antworten werden automatisch gespeichert</li>
+                </ul>
               </div>
-            )}
-          </div>
-        )}
-      </main>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   )
 }

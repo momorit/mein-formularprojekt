@@ -1,41 +1,144 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+# FormularIQ - Professional .gitignore
 
-# dependencies
-/node_modules
-/.pnp
-.pnp.*
-.yarn/*
-!.yarn/patches
-!.yarn/plugins
-!.yarn/releases
-!.yarn/versions
-
-# testing
-/coverage
-
-# next.js
-/.next/
-/out/
-
-# production
-/build
-
-# misc
-.DS_Store
+# === SECURITY - NEVER COMMIT ===
+# Google Service Account Keys
+service-account-key.json
+**/service-account-key.json
+google-credentials.json
 *.pem
+*.p12
 
-# debug
+# Environment Variables
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+.env.*.local
+
+# === NODE.JS ===
+# Dependencies
+node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-.pnpm-debug.log*
+pnpm-debug.log*
+lerna-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env*
+# Runtime
+.pnpm-store/
+.npm/
+.eslintcache
 
-# vercel
+# Build outputs
+.next/
+out/
+build/
+dist/
+
+# === PYTHON ===
+# Virtual environments
+venv/
+env/
+ENV/
+.venv/
+.env/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+pip-log.txt
+pip-delete-this-directory.txt
+
+# === DATA & OUTPUTS ===
+# Study data (contains personal information)
+LLM Output/
+*.json
+!package.json
+!package-lock.json
+!tsconfig.json
+!next.config.js
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+
+# === DEVELOPMENT ===
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# === TEMPORARY FILES ===
+# Temporary folders
+tmp/
+temp/
+.tmp/
+
+# Cache directories
+.cache/
+.parcel-cache/
+
+# === TESTING ===
+# Test coverage
+coverage/
+.nyc_output/
+.coverage
+
+# === DEPLOYMENT ===
+# Vercel
 .vercel
 
-# typescript
-*.tsbuildinfo
-next-env.d.ts
+# Railway
+.railway/
+
+# Docker
+.dockerignore
+Dockerfile
+docker-compose.yml
+
+# === SYSTEM ===
+# MacOS
+.AppleDouble
+.LSOverride
+
+# Windows
+*.exe
+*.msi
+*.cab
+*.deb
+*.dmg
+*.rpm
+
+# Linux
+*~
+
+# === SCIENTIFIC DATA ===
+# Participant data - highly sensitive
+participant_data/
+study_results/
+analysis_data/
+*.csv
+*.xlsx
+*.spss
+
+# Backup files
+*.bak
+*.backup
+*.old
