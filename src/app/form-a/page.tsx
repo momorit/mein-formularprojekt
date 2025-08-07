@@ -1,73 +1,89 @@
-// src/app/form-a/page.tsx - COMPLETELY FIXED
+'use client'
 
-"use client"
-
-import { useState } from "react"
-import Link from "next/link"
-import { Textarea } from "@/components/ui/textarea"
-import { Button } from "@/components/ui/button"
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
-import { generateInstructions, getChatHelp, saveFormData } from "@/lib/api"
+import React, { useState } from 'react'
+import Link from 'next/link'
+import { generateInstructions, saveFormData, getChatHelp } from '@/lib/api'
+import type { FormInstructions, FormValues } from '@/lib/types'
 
 interface ChatMessage {
-  role: "user" | "assistant"
-  content: string
+  type: 'user' | 'bot'
+  message: string
+  timestamp: Date
 }
 
-export default function FormA() {
+export default function FormAPage() {
   const [context, setContext] = useState("")
-  const [instructions, setInstructions] = useState<Record<string, string> | null>(null)  // ✅ Simple strings
-  const [values, setValues] = useState<Record<string, string>>({})
+  const [instructions, setInstructions] = useState<FormInstructions | null>(null)
+  const [values, setValues] = useState<FormValues>({})
   const [loading, setLoading] = useState(false)
-  
-  // Chat state
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([])
   const [chatInput, setChatInput] = useState("")
   const [chatLoading, setChatLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [saveSuccess, setSaveSuccess] = useState("")
 
-  const handleGenerateFields = async () => {
+  const handleGenerate = async () => {
+    if (!context.trim()) {
+      alert("Bitte geben Sie einen Kontext ein")
+      return
+    }
+
     setLoading(true)
+    
     try {
       const result = await generateInstructions(context)
-      setInstructions(result)  // ✅ Simple string instructions
+      setInstructions(result.instructions)
       
-      // Initialize empty values
-      const initialValues: Record<string, string> = {}
-      Object.keys(result).forEach(key => {
-        initialValues[key] = ""
+      // Leere Formularwerte initialisieren
+      const emptyValues: FormValues = {}
+      Object.keys(result.instructions).forEach(key => {
+        emptyValues[key] = ""
       })
-      setValues(initialValues)
-      
-      // Add welcome message
-      setChatHistory([{
-        role: "assistant",
-        content: `✅ ${Object.keys(result).length} Formularfelder wurden generiert! Sie können nun das Formular ausfüllen. Fragen Sie mich gerne, wenn Sie Hilfe brauchen.`
-      }])
-
+      setValues(emptyValues)
     } catch (error) {
-      console.error("Fehler beim Generieren:", error)
-      alert("❌ Fehler beim Generieren der Felder. Bitte versuchen Sie es erneut.")
+      console.error("Generation failed:", error)
+      alert("❌ Fehler beim Generieren der Anweisungen")
     } finally {
       setLoading(false)
     }
   }
 
-  const handleSendChat = async () => {
-    if (!chatInput.trim()) return
+  const handleInputChange = (key: string, value: string) => {
+    setValues(prev => ({
+      ...prev,
+      [key]: value
+    }))
+  }
 
-    const userMessage = { role: "user" as const, content: chatInput }
+  const handleChatSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!chatInput.trim() || !context) return
+
+    const userMessage: ChatMessage = {
+      type: 'user',
+      message: chatInput,
+      timestamp: new Date()
+    }
+
     setChatHistory(prev => [...prev, userMessage])
     setChatLoading(true)
 
     try {
-      const response = await getChatHelp(chatInput)
-      const assistantMessage = { role: "assistant" as const, content: response }
-      setChatHistory(prev => [...prev, assistantMessage])
+      const response = await getChatHelp(chatInput, context)
+      
+      const botMessage: ChatMessage = {
+        type: 'bot',
+        message: response,
+        timestamp: new Date()
+      }
+      
+      setChatHistory(prev => [...prev, botMessage])
     } catch (error) {
-      console.error("Chat-Fehler:", error)
+      console.error("Chat error:", error)
       setChatHistory(prev => [...prev, { 
-        role: "assistant", 
-        content: "Entschuldigung, ich konnte Ihre Frage nicht verarbeiten. Bitte versuchen Sie es erneut." 
+        type: 'bot', 
+        message: "Entschuldigung, der Chat-Service ist momentan nicht verfügbar. Bitte versuchen Sie es erneut.", 
+        timestamp: new Date() 
       }])
     } finally {
       setChatLoading(false)
@@ -78,23 +94,42 @@ export default function FormA() {
   const handleSave = async () => {
     if (!instructions) return
 
+    setSaving(true)
+    setSaveSuccess("")
+
     try {
       const result = await saveFormData(instructions, values)
-      alert(`✅ Daten gespeichert: ${result.filename}`)
+      setSaveSuccess(`✅ Erfolgreich gespeichert in Google Drive!
+📁 Datei: ${result.filename}
+📂 Ordner: ${result.folder}
+🔗 Link: ${result.web_link ? 'Verfügbar' : 'Wird generiert...'}`)
+      
+      // Optional: Nach Erfolg zu Startseite weiterleiten
+      setTimeout(() => {
+        if (confirm("Daten erfolgreich gespeichert! Möchten Sie zur Startseite zurückkehren?")) {
+          window.location.href = '/'
+        }
+      }, 3000)
     } catch (error) {
       console.error("Speicher-Fehler:", error)
-      alert("❌ Fehler beim Speichern")
+      alert("❌ Fehler beim Speichern in Google Drive. Bitte versuchen Sie es erneut.")
+    } finally {
+      setSaving(false)
     }
   }
 
   const handleReset = () => {
-    setContext("")
-    setInstructions(null)
-    setValues({})
-    setChatHistory([])
-    setChatInput("")
-    setLoading(false)
-    setChatLoading(false)
+    if (confirm("Möchten Sie wirklich alle Eingaben zurücksetzen?")) {
+      setContext("")
+      setInstructions(null)
+      setValues({})
+      setChatHistory([])
+      setChatInput("")
+      setLoading(false)
+      setChatLoading(false)
+      setSaving(false)
+      setSaveSuccess("")
+    }
   }
 
   const filledFields = Object.keys(values).filter(key => values[key]?.trim()).length
@@ -102,250 +137,219 @@ export default function FormA() {
   const progress = totalFields > 0 ? (filledFields / totalFields) * 100 : 0
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Navigation */}
-      <nav className="bg-white border-b border-gray-200 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
-            <Link href="/" className="flex items-center space-x-3 hover:opacity-80 transition-opacity">
-              <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
-                <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M4 4a2 2 0 00-2 2v1h16V6a2 2 0 00-2-2H4zM18 9H2v5a2 2 0 002 2h12a2 2 0 002-2V9zM4 13a1 1 0 011-1h1a1 1 0 110 2H5a1 1 0 01-1-1z"/>
-                </svg>
-              </div>
-              <div>
-                <h1 className="text-xl font-semibold text-gray-900">FormularIQ</h1>
-                <p className="text-sm text-blue-600">Variante A - Sichtbares Formular</p>
-              </div>
-            </Link>
-            
-            <div className="flex items-center space-x-4">
-              <div className="flex items-center space-x-2 text-sm text-gray-600">
-                <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
-                  <span className="text-blue-600 font-semibold text-sm">A</span>
-                </div>
-                <span>Sichtbares Formular</span>
-              </div>
-              <Link href="/form-b">
-                <Button variant="outline" className="text-sm">
-                  Zu Variante B
-                </Button>
-              </Link>
-            </div>
-          </div>
-        </div>
-      </nav>
-
-      <main className="max-w-7xl mx-auto px-6 py-8">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+      <div className="max-w-6xl mx-auto">
         {/* Header */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-sm font-medium mb-4">
-            Sichtbare Formularfelder mit KI-Unterstützung
-          </div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-4">
-            Gebäudeformular erfassen
+          <Link href="/" className="inline-block text-blue-600 hover:text-blue-800 mb-4 text-sm">
+            ← Zurück zur Hauptseite
+          </Link>
+          <h1 className="text-3xl font-bold text-gray-800 mb-2">
+            📝 Variante A: Sichtbares Formular
           </h1>
-          <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-            Lassen Sie die KI ein personalisiertes Formular für Sie generieren und nutzen Sie den Chat-Assistant für Hilfe.
+          <p className="text-gray-600">
+            Generieren Sie ein Formular basierend auf Ihrem Kontext und füllen Sie es aus
           </p>
         </div>
 
-        <div className="grid lg:grid-cols-2 gap-8">
-          {/* Linke Spalte - Kontext & Formular */}
+        <div className="grid md:grid-cols-2 gap-8">
+          {/* Linke Spalte: Kontext & Formular */}
           <div className="space-y-6">
-            
             {/* Kontext-Eingabe */}
-            <Card className="bg-white border border-gray-200">
-              <CardHeader>
-                <CardTitle className="text-lg text-gray-900">
-                  {instructions ? "✅ Kontext eingegeben" : "1. Kontext eingeben (optional)"}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {!instructions ? (
+            <div className="bg-white rounded-xl shadow-lg p-6">
+              <h2 className="text-xl font-semibold text-gray-800 mb-4">
+                1️⃣ Kontext eingeben
+              </h2>
+              <textarea
+                value={context}
+                onChange={(e) => setContext(e.target.value)}
+                placeholder="Beschreiben Sie, welche Art von Formular Sie benötigen..."
+                className="w-full h-32 p-4 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                disabled={loading}
+              />
+              <button
+                onClick={handleGenerate}
+                disabled={loading || !context.trim()}
+                className="mt-4 w-full bg-blue-600 text-white py-3 px-6 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors flex items-center justify-center"
+              >
+                {loading ? (
                   <>
-                    <div className="space-y-2">
-                      <label className="block text-sm font-medium text-gray-700">
-                        Kontext für personalisierte Felder
-                      </label>
-                      <p className="text-sm text-gray-500">
-                        Beschreiben Sie Ihr Gebäude oder Vorhaben, um spezifische Formularfelder zu erhalten. 
-                        Leer lassen für Standard-Gebäudeformular.
-                      </p>
-                    </div>
-                    <Textarea
-                      placeholder="z.B. Energetische Sanierung eines Mehrfamilienhauses aus den 1970er Jahren mit Fokus auf Dämmung und neue Heizungsanlage..."
-                      value={context}
-                      onChange={(e) => setContext(e.target.value)}
-                      className="min-h-[120px] resize-none"
-                    />
-                    <Button 
-                      onClick={handleGenerateFields}
-                      disabled={loading}
-                      className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3"
-                    >
-                      {loading ? "🔄 Generiere Felder..." : "📋 Anweisungen generieren"}
-                    </Button>
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                    Anweisungen werden generiert...
                   </>
                 ) : (
-                  <div className="space-y-3">
-                    <div className="bg-blue-50 rounded-lg p-4">
-                      <p className="text-sm text-blue-800">
-                        <strong>Kontext:</strong> {context || "Standard-Gebäudeformular"}
-                      </p>
-                    </div>
-                    <Button 
-                      onClick={handleReset}
-                      variant="outline"
-                      className="w-full text-gray-600 border-gray-300"
-                    >
-                      🔄 Neu starten
-                    </Button>
-                  </div>
+                  "🚀 Anweisungen generieren"
                 )}
-              </CardContent>
-            </Card>
+              </button>
+            </div>
 
-            {/* Formular */}
+            {/* Generiertes Formular */}
             {instructions && (
-              <Card className="bg-white border border-gray-200">
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-lg text-gray-900">2. Formular ausfüllen</CardTitle>
-                    <div className="text-sm text-gray-500">
-                      {filledFields} von {totalFields} Feldern ausgefüllt
-                    </div>
+              <div className="bg-white rounded-xl shadow-lg p-6">
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-xl font-semibold text-gray-800">
+                    2️⃣ Generiertes Formular
+                  </h2>
+                  <div className="text-sm text-gray-600">
+                    {filledFields}/{totalFields} Felder ausgefüllt
                   </div>
-                  {/* Fortschrittsbalken */}
-                  <div className="w-full bg-gray-200 rounded-full h-2 mt-3">
-                    <div 
-                      className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                      style={{ width: `${progress}%` }}
-                    />
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {Object.entries(instructions).map(([fieldName, instruction]) => (
-                    <div key={fieldName} className="space-y-2">
-                      <label className="block text-sm font-medium text-gray-900">
-                        {fieldName}
+                </div>
+
+                {/* Fortschrittsbalken */}
+                <div className="w-full bg-gray-200 rounded-full h-2 mb-6">
+                  <div 
+                    className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                    style={{ width: `${progress}%` }}
+                  ></div>
+                </div>
+
+                {/* Formularfelder */}
+                <div className="space-y-4">
+                  {Object.entries(instructions).map(([key, field]) => (
+                    <div key={key}>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        {field.label}
+                        {field.required && <span className="text-red-500 ml-1">*</span>}
                       </label>
-                      <p className="text-xs text-gray-600 leading-relaxed">
-                        {instruction}
-                      </p>
-                      <input
-                        type="text"
-                        value={values[fieldName] || ""}
-                        onChange={(e) => setValues(prev => ({ ...prev, [fieldName]: e.target.value }))}
-                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                        placeholder={`${fieldName} eingeben...`}
-                      />
+                      
+                      {field.type === 'select' && field.options ? (
+                        <select
+                          value={values[key] || ''}
+                          onChange={(e) => handleInputChange(key, e.target.value)}
+                          className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          required={field.required}
+                        >
+                          <option value="">Bitte wählen...</option>
+                          {field.options.map((option, index) => (
+                            <option key={index} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input
+                          type={field.type}
+                          value={values[key] || ''}
+                          onChange={(e) => handleInputChange(key, e.target.value)}
+                          placeholder={field.placeholder}
+                          className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          required={field.required}
+                        />
+                      )}
                     </div>
                   ))}
+                </div>
+
+                {/* Speicher-Aktionen */}
+                <div className="mt-8 space-y-4">
+                  {saveSuccess && (
+                    <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                      <div className="text-green-800 whitespace-pre-line">
+                        {saveSuccess}
+                      </div>
+                    </div>
+                  )}
                   
-                  <div className="pt-6 border-t border-gray-200">
-                    <Button 
+                  <div className="flex gap-4">
+                    <button
                       onClick={handleSave}
-                      disabled={filledFields === 0}
-                      className="w-full bg-green-600 hover:bg-green-700 text-white py-3"
+                      disabled={saving || filledFields === 0}
+                      className="flex-1 bg-green-600 text-white py-3 px-6 rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors flex items-center justify-center"
                     >
-                      💾 Als JSON speichern ({filledFields} Felder ausgefüllt)
-                    </Button>
+                      {saving ? (
+                        <>
+                          <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                          Speichere in Google Drive...
+                        </>
+                      ) : (
+                        "💾 In Google Drive speichern"
+                      )}
+                    </button>
+                    
+                    <button
+                      onClick={handleReset}
+                      className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                    >
+                      🔄 Zurücksetzen
+                    </button>
                   </div>
-                </CardContent>
-              </Card>
+                  
+                  <div className="text-sm text-gray-500 bg-gray-50 p-3 rounded-lg">
+                    <strong>ℹ️ Hinweis:</strong> Ihre Daten werden automatisch in Ihrem Google Drive im Ordner "FormularIQ_Daten" gespeichert. 
+                    Sie erhalten keinen Download, da alles zentral für Sie verwaltet wird.
+                  </div>
+                </div>
+              </div>
             )}
           </div>
 
-          {/* Rechte Spalte - Chat-Hilfe */}
-          <div className="space-y-6">
-            <Card className="bg-white border border-gray-200 h-[600px] flex flex-col">
-              <CardHeader>
-                <CardTitle className="text-lg text-gray-900 flex items-center">
-                  <svg className="w-5 h-5 mr-2 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-2v2h2V9zM9 9h2v2H9V9z"/>
-                  </svg>
-                  KI-Hilfe Chat
-                </CardTitle>
-                <p className="text-sm text-gray-600">
-                  Fragen Sie den Assistenten bei Unklarheiten zum Formular.
-                </p>
-              </CardHeader>
-              
-              <CardContent className="flex-1 flex flex-col">
-                {/* Chat Messages */}
-                <div className="flex-1 overflow-y-auto border border-gray-200 rounded-lg p-4 mb-4 space-y-4 max-h-[400px]">
-                  {chatHistory.length === 0 ? (
-                    <div className="text-center text-gray-500 py-8">
-                      <svg className="w-12 h-12 mx-auto mb-4 text-gray-300" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7z"/>
-                      </svg>
-                      <p className="font-medium">Chat-Assistent bereit</p>
-                      <p className="text-sm">Generieren Sie zuerst Formularfelder, dann kann ich Ihnen beim Ausfüllen helfen.</p>
-                    </div>
-                  ) : (
-                    chatHistory.map((msg, i) => (
-                      <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                        <div className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
-                          msg.role === 'user' 
-                            ? 'bg-blue-600 text-white' 
-                            : 'bg-gray-100 text-gray-900'
+          {/* Rechte Spalte: Chat-Hilfe */}
+          <div className="bg-white rounded-xl shadow-lg p-6 h-fit">
+            <h2 className="text-xl font-semibold text-gray-800 mb-4 flex items-center">
+              💬 <span className="ml-2">Chat-Hilfe</span>
+            </h2>
+            
+            <div className="h-64 border border-gray-200 rounded-lg p-4 overflow-y-auto mb-4 bg-gray-50">
+              {chatHistory.length === 0 ? (
+                <div className="text-gray-500 text-center py-8">
+                  Stellen Sie Fragen zum Formular...
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {chatHistory.map((msg, index) => (
+                    <div key={index} className={`flex ${msg.type === 'user' ? 'justify-end' : 'justify-start'}`}>
+                      <div className={`max-w-xs px-4 py-2 rounded-lg text-sm ${
+                        msg.type === 'user' 
+                          ? 'bg-blue-600 text-white' 
+                          : 'bg-white border border-gray-200 text-gray-800'
+                      }`}>
+                        {msg.message}
+                        <div className={`text-xs mt-1 opacity-70 ${
+                          msg.type === 'user' ? 'text-blue-100' : 'text-gray-500'
                         }`}>
-                          <p className="text-sm leading-relaxed">{msg.content}</p>
+                          {msg.timestamp.toLocaleTimeString()}
                         </div>
                       </div>
-                    ))
-                  )}
+                    </div>
+                  ))}
                   {chatLoading && (
                     <div className="flex justify-start">
-                      <div className="bg-gray-100 text-gray-900 px-4 py-2 rounded-lg">
-                        <p className="text-sm">🤔 Denke nach...</p>
+                      <div className="bg-white border border-gray-200 text-gray-800 px-4 py-2 rounded-lg text-sm">
+                        <div className="flex items-center">
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600 mr-2"></div>
+                          Tippt...
+                        </div>
                       </div>
                     </div>
                   )}
                 </div>
+              )}
+            </div>
 
-                {/* Chat Input */}
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={chatInput}
-                    onChange={(e) => setChatInput(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && !chatLoading && handleSendChat()}
-                    placeholder="Frage zum Formular stellen..."
-                    disabled={chatLoading}
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
-                  />
-                  <Button 
-                    onClick={handleSendChat}
-                    disabled={!chatInput.trim() || chatLoading}
-                    className="bg-blue-600 hover:bg-blue-700 text-white px-4"
-                  >
-                    {chatLoading ? "⏳" : "📤"}
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Progress Card */}
-            {instructions && (
-              <Card className="bg-blue-50 border border-blue-200">
-                <CardContent className="p-4">
-                  <div className="text-center">
-                    <div className="text-3xl font-bold text-blue-600 mb-1">
-                      {Math.round(progress)}%
-                    </div>
-                    <div className="text-sm text-blue-700 mb-2">Vervollständigung</div>
-                    <div className="text-xs text-blue-600">
-                      {filledFields} von {totalFields} Feldern ausgefüllt
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
+            <form onSubmit={handleChatSubmit} className="flex gap-2">
+              <input
+                type="text"
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                placeholder="Fragen Sie nach Hilfe..."
+                className="flex-1 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                disabled={chatLoading || !context}
+              />
+              <button
+                type="submit"
+                disabled={chatLoading || !chatInput.trim() || !context}
+                className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+              >
+                {chatLoading ? "..." : "📤"}
+              </button>
+            </form>
+            
+            <div className="text-xs text-gray-500 mt-2">
+              Der Chat hilft Ihnen beim Ausfüllen des Formulars
+            </div>
           </div>
         </div>
-      </main>
+      </div>
     </div>
   )
 }

@@ -1,555 +1,379 @@
-// src/app/form-b/page.tsx - VOLLSTÄNDIG GEFIXT
+'use client'
 
-"use client"
+import React, { useState } from 'react'
+import Link from 'next/link'
+import { startDialog, sendDialogMessage, saveDialogData } from '@/lib/api'
+import type { DialogQuestion, DialogStartResponse, ChatMessage } from '@/lib/types'
 
-import { useState, useRef, useEffect } from "react"  // ✅ useRef & useEffect hinzugefügt
-import Link from "next/link"
-import { Textarea } from "@/components/ui/textarea"
-import { Button } from "@/components/ui/button"
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
-import { startDialog, sendDialogMessage, saveDialogData } from "@/lib/api"
-
-interface ChatMessage {
-  role: "user" | "assistant"
-  content: string
-}
-
-// ✅ FIX: Correct interface matching backend
-interface DialogQuestion {
-  question: string  // Backend sendet "question"
-  field: string     // Backend sendet "field"
-}
-
-interface DialogState {
-  active: boolean
-  questionIndex: number
-  questions: DialogQuestion[]  // ✅ Richtige Typen
-  answers: Record<string, string>
-}
-
-export default function FormB() {
-  // ✅ ALLE STATE VARIABLES:
+export default function FormBPage() {
   const [context, setContext] = useState("")
-  const [dialogState, setDialogState] = useState<DialogState>({
-    active: false,
-    questionIndex: 0,
-    questions: [],
-    answers: {}
-  })
+  const [pdfFile, setPdfFile] = useState<File | null>(null)
+  const [questions, setQuestions] = useState<DialogQuestion[]>([])
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
+  const [answers, setAnswers] = useState<Record<string, string>>({})
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([])
   const [userInput, setUserInput] = useState("")
   const [loading, setLoading] = useState(false)
-  const [dialogCompleted, setDialogCompleted] = useState(false)
-  const [chatExpanded, setChatExpanded] = useState(false)  // ✅ NEU
+  const [dialogActive, setDialogActive] = useState(false)
+  const [dialogComplete, setDialogComplete] = useState(false)
+  const [autoSaving, setAutoSaving] = useState(false)
+  const [saveSuccess, setSaveSuccess] = useState("")
 
-  // ✅ REFS:
-  const chatEndRef = useRef<HTMLDivElement>(null)  // ✅ NEU
-
-  // ✅ EFFECTS:
-  useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" })
-  }, [chatHistory])
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file && file.type === 'application/pdf') {
+      setPdfFile(file)
+      setContext(prev => prev + (prev ? ' ' : '') + `[PDF hochgeladen: ${file.name}]`)
+    } else {
+      alert("Bitte laden Sie nur PDF-Dateien hoch")
+    }
+  }
 
   const handleStartDialog = async () => {
+    if (!context.trim()) {
+      alert("Bitte geben Sie einen Kontext ein oder laden Sie eine PDF hoch")
+      return
+    }
+
     setLoading(true)
+    
     try {
-      // ✅ Bereits gefixt: Direkt string übergeben
-      const result = await startDialog(context || "")
+      const result: DialogStartResponse = await startDialog(context)
+      setQuestions(result.questions)
+      setCurrentQuestionIndex(0)
+      setDialogActive(true)
       
-      setDialogState({
-        active: false,
-        questionIndex: 0,
-        questions: result.questions,  // ✅ Backend format: {question, field}
-        answers: {}
-      })
-
-      alert(`✅ ${result.questions.length} Fragen generiert! Klicken Sie "Dialog beginnen".`)
-
+      // Erste Frage als Chat-Nachricht hinzufügen
+      const firstQuestion: ChatMessage = {
+        type: 'bot',
+        message: result.questions[0]?.question || "Beginnen wir mit den Fragen...",
+        timestamp: new Date()
+      }
+      setChatHistory([firstQuestion])
+      
     } catch (error) {
-      console.error("Fehler beim Dialog-Start:", error)
-      alert("❌ Fehler beim Starten des Dialogs. Bitte erneut versuchen.")
+      console.error("Dialog-Start failed:", error)
+      alert("❌ Fehler beim Starten des Dialogs")
     } finally {
       setLoading(false)
     }
   }
 
-  const handleBeginDialog = () => {
-    setDialogState(prev => ({
-      ...prev,
-      active: true
-    }))
+  const handleSendMessage = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!userInput.trim() || !dialogActive) return
 
-    setChatHistory([
-      {
-        role: "assistant",
-        content: "Willkommen! Ich führe Sie durch das Formular. Lassen Sie uns beginnen."
-      },
-      {
-        role: "assistant", 
-        content: dialogState.questions[0]?.question || "Keine Fragen generiert."  // ✅ .question statt .frage
-      }
-    ])
+    const currentQuestion = questions[currentQuestionIndex]
+    if (!currentQuestion) return
 
-    setUserInput("")
-  }
-
-  // ✅ NEUE handleSendMessage Funktion (IN form-b/page.tsx ERSETZEN)
-  const handleSendMessage = async () => {
-    if (!userInput.trim() || !dialogState.active) return
-
-    const userMessage = { role: "user" as const, content: userInput }
-    setChatHistory(prev => [...prev, userMessage])
-
-    // Antwort speichern (NUR wenn es keine Rückfrage ist)
-    const currentQuestion = dialogState.questions[dialogState.questionIndex]
-    const isHelpRequest = userInput.endsWith('?') || 
-                         userInput.toLowerCase().includes('was') ||
-                         userInput.toLowerCase().includes('welche') ||
-                         userInput.toLowerCase().includes('arten') ||
-                         userInput === '?'
-
-    if (currentQuestion && !isHelpRequest) {
-      setDialogState(prev => ({
-        ...prev,
-        answers: { ...prev.answers, [currentQuestion.field]: userInput }
-      }))
+    // User-Nachricht hinzufügen
+    const userMessage: ChatMessage = {
+      type: 'user',
+      message: userInput,
+      timestamp: new Date()
     }
+    setChatHistory(prev => [...prev, userMessage])
 
     try {
       const response = await sendDialogMessage(
         userInput,
         currentQuestion,
-        dialogState.questionIndex,
-        dialogState.questions.length
+        currentQuestionIndex,
+        questions.length
       )
 
-      const assistantMessage = { role: "assistant" as const, content: response.response }
-      setChatHistory(prev => [...prev, assistantMessage])
+      // Bot-Antwort hinzufügen
+      const botMessage: ChatMessage = {
+        type: 'bot',
+        message: response.response,
+        timestamp: new Date()
+      }
+      setChatHistory(prev => [...prev, botMessage])
 
-      // ✅ NEUE LOGIC: Unterscheide zwischen Hilfe und normalen Antworten
-      if (response.helpProvided) {
-        // 🆘 HILFE GEGEBEN - BEI AKTUELLER FRAGE BLEIBEN
-        console.log("🆘 Hilfe wurde gegeben, bleibe bei aktueller Frage")
+      // Antwort speichern (außer bei Hilfe-Anfragen)
+      if (userInput !== "?" && !response.helpProvided) {
+        setAnswers(prev => ({
+          ...prev,
+          [currentQuestion.field]: userInput
+        }))
+      }
+
+      if (response.nextQuestion && response.questionIndex !== undefined) {
+        // Zur nächsten Frage
+        setCurrentQuestionIndex(response.questionIndex)
         
-        // Nach kurzer Pause die gleiche Frage nochmal stellen
-        setTimeout(() => {
-          setChatHistory(prev => [...prev, { 
-            role: "assistant", 
-            content: `${currentQuestion.question}` 
-          }])
-        }, 1500)
+        if (response.questionIndex < questions.length) {
+          const nextQuestion = questions[response.questionIndex]
+          const nextQuestionMessage: ChatMessage = {
+            type: 'bot',
+            message: nextQuestion.question,
+            timestamp: new Date()
+          }
+          setChatHistory(prev => [...prev, nextQuestionMessage])
+        }
+      }
+
+      if (response.dialogComplete) {
+        setDialogComplete(true)
+        setDialogActive(false)
         
-      } else if (response.dialogComplete) {
-        // 🎉 DIALOG KOMPLETT BEENDET
-        console.log("🎉 Dialog wurde beendet")
-        setDialogCompleted(true)
-        setDialogState(prev => ({ ...prev, active: false }))
-        
-      } else if (response.nextQuestion && dialogState.questionIndex + 1 < dialogState.questions.length) {
-        // ➡️ NÄCHSTE FRAGE
-        console.log(`➡️ Springe zu Frage ${dialogState.questionIndex + 2}`)
-        setDialogState(prev => ({ ...prev, questionIndex: prev.questionIndex + 1 }))
-        
-        const nextQuestion = dialogState.questions[dialogState.questionIndex + 1]
-        setTimeout(() => {
-          setChatHistory(prev => [...prev, { 
-            role: "assistant", 
-            content: nextQuestion.question
-          }])
-        }, 1000)
-        
-      } else if (!response.nextQuestion && !response.helpProvided) {
-        // 🏁 ALLE FRAGEN BEANTWORTET
-        console.log("🏁 Alle Fragen beantwortet")
-        setDialogCompleted(true)
-        setDialogState(prev => ({ ...prev, active: false }))
+        // Automatisches Speichern nach Abschluss
+        await handleAutoSave()
       }
 
     } catch (error) {
-      console.error("Dialog-Fehler:", error)
-      setChatHistory(prev => [...prev, { 
-        role: "assistant", 
-        content: "Entschuldigung, ein Fehler ist aufgetreten. Bitte versuchen Sie es erneut." 
-      }])
+      console.error("Dialog message error:", error)
+      const errorMessage: ChatMessage = {
+        type: 'bot',
+        message: "Entschuldigung, es gab einen Fehler. Bitte versuchen Sie es erneut.",
+        timestamp: new Date()
+      }
+      setChatHistory(prev => [...prev, errorMessage])
     }
 
     setUserInput("")
   }
 
-  const handleSaveResults = async () => {
+  const handleAutoSave = async () => {
+    setAutoSaving(true)
+    setSaveSuccess("")
+
     try {
-      const result = await saveDialogData(
-        dialogState.questions,
-        dialogState.answers,
-        chatHistory
-      )
-      alert(`✅ Dialog gespeichert: ${result.filename}`)
+      const result = await saveDialogData(questions, answers, chatHistory)
+      setSaveSuccess(`✅ Dialog automatisch in Google Drive gespeichert!
+📁 Datei: ${result.filename}
+📂 Ordner: ${result.folder}
+🔗 Link: ${result.web_link ? 'Verfügbar' : 'Wird generiert...'}`)
+      
+      // Optional: Nach Erfolg zur Startseite weiterleiten
+      setTimeout(() => {
+        if (confirm("Dialog erfolgreich abgeschlossen und gespeichert! Möchten Sie zur Startseite zurückkehren?")) {
+          window.location.href = '/'
+        }
+      }, 4000)
     } catch (error) {
-      console.error("Speicher-Fehler:", error)
-      alert("❌ Fehler beim Speichern")
+      console.error("Auto-Save error:", error)
+      setSaveSuccess("❌ Automatisches Speichern fehlgeschlagen. Versuchen Sie es manuell.")
+    } finally {
+      setAutoSaving(false)
     }
+  }
+
+  const handleManualSave = async () => {
+    await handleAutoSave()
   }
 
   const handleReset = () => {
-    setDialogState({ active: false, questionIndex: 0, questions: [], answers: {} })
-    setChatHistory([])
-    setContext("")
-    setUserInput("")
-    setDialogCompleted(false)
-    setLoading(false)
+    if (confirm("Möchten Sie den Dialog wirklich zurücksetzen? Alle Antworten gehen verloren.")) {
+      setContext("")
+      setPdfFile(null)
+      setQuestions([])
+      setCurrentQuestionIndex(0)
+      setAnswers({})
+      setChatHistory([])
+      setUserInput("")
+      setLoading(false)
+      setDialogActive(false)
+      setDialogComplete(false)
+      setAutoSaving(false)
+      setSaveSuccess("")
+    }
   }
 
-  const progress = dialogState.questions.length > 0 
-    ? Math.round((Object.keys(dialogState.answers).length / dialogState.questions.length) * 100)
-    : 0
+  const progress = questions.length > 0 ? (Object.keys(answers).length / questions.length) * 100 : 0
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Navigation */}
-      <nav className="bg-white border-b border-gray-200 sticky top-0 z-50">
-        <div className="max-w-6xl mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 bg-emerald-600 rounded-lg flex items-center justify-center">
-                <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M8 12a4 4 0 100-8 4 4 0 000 8zM2 21a6 6 0 1112 0H2z"/>
-                </svg>
-              </div>
-              <div>
-                <h1 className="text-xl font-semibold text-gray-900">FormularIQ</h1>
-                <p className="text-sm text-emerald-600">Variante B - Dialog-basiert</p>
+    <div className="min-h-screen bg-gradient-to-br from-green-50 to-emerald-100 p-4">
+      <div className="max-w-4xl mx-auto">
+        {/* Header */}
+        <div className="text-center mb-8">
+          <Link href="/" className="inline-block text-green-600 hover:text-green-800 mb-4 text-sm">
+            ← Zurück zur Hauptseite
+          </Link>
+          <h1 className="text-3xl font-bold text-gray-800 mb-2">
+            💬 Variante B: Dialog-System
+          </h1>
+          <p className="text-gray-600">
+            Interaktiver Dialog mit Schritt-für-Schritt Fragen
+          </p>
+        </div>
+
+        <div className="grid gap-8">
+          {/* Kontext & Setup */}
+          {!dialogActive && !dialogComplete && (
+            <div className="bg-white rounded-xl shadow-lg p-6">
+              <h2 className="text-xl font-semibold text-gray-800 mb-4">
+                1️⃣ Kontext & Material
+              </h2>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Kontext-Beschreibung
+                  </label>
+                  <textarea
+                    value={context}
+                    onChange={(e) => setContext(e.target.value)}
+                    placeholder="Beschreiben Sie, worüber Sie befragt werden möchten..."
+                    className="w-full h-32 p-4 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    disabled={loading}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    PDF-Dokument hochladen (optional)
+                  </label>
+                  <input
+                    type="file"
+                    accept=".pdf"
+                    onChange={handleFileUpload}
+                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    disabled={loading}
+                  />
+                  {pdfFile && (
+                    <div className="mt-2 text-sm text-green-600">
+                      ✅ {pdfFile.name} hochgeladen
+                    </div>
+                  )}
+                </div>
+
+                <button
+                  onClick={handleStartDialog}
+                  disabled={loading || !context.trim()}
+                  className="w-full bg-green-600 text-white py-3 px-6 rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors flex items-center justify-center"
+                >
+                  {loading ? (
+                    <>
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                      Dialog wird vorbereitet...
+                    </>
+                  ) : (
+                    "🚀 Dialog starten"
+                  )}
+                </button>
               </div>
             </div>
-            <Link 
-              href="/"
-              className="px-4 py-2 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
-            >
-              ← Zurück zur Übersicht
-            </Link>
-          </div>
-        </div>
-      </nav>
+          )}
 
-      <main className="max-w-4xl mx-auto px-6 py-8">
-        
-        {/* Dialog Completed Screen */}
-        {dialogCompleted && (
-          <Card className="bg-gradient-to-r from-emerald-50 to-green-50 border border-emerald-200 mb-8">
-            <CardHeader className="text-center">
-              <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <svg className="w-8 h-8 text-emerald-600" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"/>
-                </svg>
+          {/* Dialog-Bereich */}
+          {(dialogActive || dialogComplete) && (
+            <div className="bg-white rounded-xl shadow-lg p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-semibold text-gray-800">
+                  2️⃣ Dialog {dialogComplete ? "(Abgeschlossen)" : "(Aktiv)"}
+                </h2>
+                <div className="text-sm text-gray-600">
+                  Frage {Math.min(currentQuestionIndex + 1, questions.length)} von {questions.length}
+                </div>
               </div>
-              <CardTitle className="text-2xl text-emerald-900">
-                🎉 Dialog erfolgreich abgeschlossen!
-              </CardTitle>
-              <p className="text-emerald-700 mt-2">
-                Sie haben alle {dialogState.questions.length} Fragen beantwortet.
-              </p>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="bg-white rounded-lg border p-4 max-h-48 overflow-y-auto">
-                  <h3 className="font-medium text-gray-900 mb-3">Ihre Antworten:</h3>
-                  <div className="space-y-2">
-                    {dialogState.questions.map((question, index) => (
-                      <div key={index} className="text-sm">
-                        <span className="font-medium text-gray-700">{question.field}:</span>
-                        <span className="ml-2 text-gray-600 italic">
-                          "{dialogState.answers[question.field] || "Nicht beantwortet"}"
-                        </span>
+
+              {/* Fortschrittsbalken */}
+              <div className="w-full bg-gray-200 rounded-full h-2 mb-6">
+                <div 
+                  className="bg-green-600 h-2 rounded-full transition-all duration-300"
+                  style={{ width: `${progress}%` }}
+                ></div>
+              </div>
+
+              {/* Chat-History */}
+              <div className="h-96 border border-gray-200 rounded-lg p-4 overflow-y-auto mb-4 bg-gray-50">
+                <div className="space-y-3">
+                  {chatHistory.map((msg, index) => (
+                    <div key={index} className={`flex ${msg.type === 'user' ? 'justify-end' : 'justify-start'}`}>
+                      <div className={`max-w-md px-4 py-2 rounded-lg text-sm ${
+                        msg.type === 'user' 
+                          ? 'bg-green-600 text-white' 
+                          : 'bg-white border border-gray-200 text-gray-800'
+                      }`}>
+                        {msg.message}
+                        <div className={`text-xs mt-1 opacity-70 ${
+                          msg.type === 'user' ? 'text-green-100' : 'text-gray-500'
+                        }`}>
+                          {msg.timestamp.toLocaleTimeString()}
+                        </div>
                       </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="flex gap-3">
-                  <Button 
-                    onClick={handleSaveResults}
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white"
-                  >
-                    💾 Ergebnisse speichern
-                  </Button>
-                  <Button 
-                    onClick={handleReset}
-                    variant="outline"
-                    className="text-gray-600 border-gray-300 hover:bg-gray-50"
-                  >
-                    🔄 Neu starten
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* NEUES LAYOUT: Chat unten statt rechts */}
-        {!dialogCompleted && (
-          <div className="space-y-8">
-            
-            {/* Setup / Control Panel - JETZT FULL WIDTH */}
-            <div className="w-full max-w-4xl mx-auto">
-              
-              {!dialogState.questions.length ? (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-xl text-gray-900">Dialog starten</CardTitle>
-                    <p className="text-gray-600 text-sm">
-                      Generieren Sie personalisierte Fragen für Ihr Gebäudeformular.
-                    </p>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Kontextinformationen (optional)
-                      </label>
-                      <Textarea
-                        value={context}
-                        onChange={(e) => setContext(e.target.value)}
-                        placeholder="z.B. Energetische Sanierung eines Mehrfamilienhauses aus den 1970er Jahren..."
-                        className="w-full h-24 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
-                      />
-                      <p className="text-xs text-gray-500 mt-1">
-                        Beschreiben Sie Ihr Gebäude oder Ihr Vorhaben, um spezifische Fragen zu erhalten.
-                      </p>
                     </div>
+                  ))}
+                </div>
+              </div>
 
-                    <Button 
-                      onClick={handleStartDialog}
-                      disabled={loading}
-                      className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-3"
+              {/* Dialog-Input */}
+              {dialogActive && (
+                <form onSubmit={handleSendMessage} className="flex gap-2 mb-4">
+                  <input
+                    type="text"
+                    value={userInput}
+                    onChange={(e) => setUserInput(e.target.value)}
+                    placeholder="Ihre Antwort... (Tipp: '?' für Hilfe)"
+                    className="flex-1 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  />
+                  <button
+                    type="submit"
+                    disabled={!userInput.trim()}
+                    className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                  >
+                    📤 Senden
+                  </button>
+                </form>
+              )}
+
+              {/* Auto-Save Status */}
+              {(dialogComplete || autoSaving) && (
+                <div className="space-y-4">
+                  {saveSuccess && (
+                    <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                      <div className="text-green-800 whitespace-pre-line">
+                        {saveSuccess}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {autoSaving && (
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-center">
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600 mr-3"></div>
+                      <span className="text-blue-800">
+                        Speichere automatisch in Google Drive...
+                      </span>
+                    </div>
+                  )}
+                  
+                  {dialogComplete && !autoSaving && !saveSuccess && (
+                    <button
+                      onClick={handleManualSave}
+                      className="w-full bg-green-600 text-white py-3 px-6 rounded-lg hover:bg-green-700 transition-colors"
                     >
-                      {loading ? "Fragen werden generiert..." : "📋 Fragen generieren"}
-                    </Button>
-                  </CardContent>
-                </Card>
-              ) : (
-                <div className="grid md:grid-cols-2 gap-6">
-                  {/* Generated Questions Preview - Links */}
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-lg text-gray-900">
-                        ✅ {dialogState.questions.length} Fragen generiert
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="bg-gray-50 rounded-lg p-4 max-h-48 overflow-y-auto mb-4">
-                        <div className="space-y-1 text-sm">
-                          {dialogState.questions.map((q, i) => (
-                            <div key={i} className={`text-gray-700 p-2 rounded ${
-                              i === dialogState.questionIndex && dialogState.active 
-                                ? 'bg-emerald-100 border-l-4 border-emerald-500 font-medium' 
-                                : ''
-                            }`}>
-                              {i + 1}. {q.question}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                      
-                      {!dialogState.active ? (
-                        <Button 
-                          onClick={handleBeginDialog}
-                          className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
-                        >
-                          🎯 Dialog beginnen
-                        </Button>
-                      ) : (
-                        <div className="text-center p-4 bg-emerald-50 rounded-lg border border-emerald-200">
-                          <div className="text-2xl font-bold text-emerald-600">{progress}%</div>
-                          <div className="text-sm text-emerald-700">Fortschritt</div>
-                          <div className="text-xs text-emerald-600 mt-1">
-                            Frage {dialogState.questionIndex + 1} von {dialogState.questions.length}
-                          </div>
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-
-                  {/* Controls - Rechts */}
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-lg text-gray-900">Dialog-Status</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div className="grid grid-cols-2 gap-4 text-center">
-                        <div className="bg-blue-50 rounded-lg p-3">
-                          <div className="text-lg font-bold text-blue-600">
-                            {Object.keys(dialogState.answers).length}
-                          </div>
-                          <div className="text-xs text-blue-700">Beantwortet</div>
-                        </div>
-                        <div className="bg-gray-50 rounded-lg p-3">
-                          <div className="text-lg font-bold text-gray-600">
-                            {dialogState.questions.length - Object.keys(dialogState.answers).length}
-                          </div>
-                          <div className="text-xs text-gray-700">Noch offen</div>
-                        </div>
-                      </div>
-                      
-                      <Button 
-                        onClick={handleReset}
-                        variant="outline"
-                        className="w-full text-gray-600 border-gray-300 hover:bg-gray-50"
-                      >
-                        🔄 Neu starten
-                      </Button>
-                      
-                      {Object.keys(dialogState.answers).length > 0 && (
-                        <div className="bg-gray-50 rounded-lg p-3">
-                          <h4 className="text-sm font-medium text-gray-900 mb-2">Aktuelle Antworten:</h4>
-                          <div className="space-y-1 max-h-32 overflow-y-auto">
-                            {Object.entries(dialogState.answers).map(([field, answer]) => (
-                              <div key={field} className="text-xs">
-                                <span className="font-medium text-gray-700">{field}:</span>
-                                <span className="ml-1 text-gray-600">"{answer}"</span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
+                      💾 Manuell in Google Drive speichern
+                    </button>
+                  )}
                 </div>
               )}
-            </div>
 
-            {/* CHAT INTERFACE - JETZT UNTEN UND BREIT */}
-            {dialogState.questions.length > 0 && (
-              <div className="w-full max-w-6xl mx-auto">
-                <Card className="border-t-4 border-emerald-500">
-                  <CardHeader className="pb-3">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <CardTitle className="text-lg text-gray-900 flex items-center">
-                          <svg className="w-5 h-5 mr-2 text-emerald-600" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-2v2h2V9zM9 9h2v2H9V9z"/>
-                          </svg>
-                          Dialog-Chat
-                        </CardTitle>
-                        <p className="text-sm text-gray-600">
-                          {dialogState.active 
-                            ? `Frage ${dialogState.questionIndex + 1} von ${dialogState.questions.length} • Stellen Sie Rückfragen oder antworten Sie direkt`
-                            : "Dialog bereit - klicken Sie 'Dialog beginnen' um zu starten"
-                          }
-                        </p>
-                      </div>
-                      
-                      {/* Chat Toggle */}
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setChatExpanded(!chatExpanded)}
-                        className="text-gray-600"
-                      >
-                        {chatExpanded ? "Minimieren" : "Erweitern"}
-                        <svg className={`w-4 h-4 ml-1 transform transition-transform ${chatExpanded ? 'rotate-180' : ''}`} fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"/>
-                        </svg>
-                      </Button>
-                    </div>
-                  </CardHeader>
-                  
-                  <CardContent className="p-4">
-                    {/* Chat Messages - AUTO-EXPANDING */}
-                    <div className={`overflow-y-auto space-y-3 mb-4 p-4 border border-gray-200 rounded-lg bg-gray-50 transition-all duration-300 ${
-                      chatExpanded 
-                        ? 'min-h-[400px] max-h-[600px]' 
-                        : chatHistory.length === 0 
-                          ? 'h-24' 
-                          : `min-h-[${Math.min(chatHistory.length * 60 + 100, 300)}px] max-h-[300px]`
-                    }`}>
-                      {chatHistory.length === 0 ? (
-                        <div className="text-center text-gray-500 py-4">
-                          <svg className="w-8 h-8 mx-auto mb-2 text-gray-300" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7z"/>
-                          </svg>
-                          <p className="text-sm">Dialog-Chat bereit</p>
-                        </div>
-                      ) : (
-                        chatHistory.map((msg, i) => (
-                          <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} mb-3`}>
-                            <div className={`max-w-[70%] px-4 py-3 rounded-lg shadow-sm ${
-                              msg.role === 'user' 
-                                ? 'bg-emerald-600 text-white' 
-                                : 'bg-white text-gray-900 border border-gray-200'
-                            }`}>
-                              <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</p>
-                              <div className={`text-xs mt-1 opacity-70 ${
-                                msg.role === 'user' ? 'text-emerald-100' : 'text-gray-500'
-                              }`}>
-                                {new Date().toLocaleTimeString('de-DE', { 
-                                  hour: '2-digit', 
-                                  minute: '2-digit' 
-                                })}
-                              </div>
-                            </div>
-                          </div>
-                        ))
-                      )}
-                      
-                      <div ref={chatEndRef} />
-                    </div>
-
-                    {/* Input Area */}
-                    <div className="space-y-3">
-                      <div className="flex gap-3">
-                        <input
-                          type="text"
-                          value={userInput}
-                          onChange={(e) => setUserInput(e.target.value)}
-                          onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
-                          placeholder={dialogState.active 
-                            ? "Ihre Antwort eingeben oder Rückfrage stellen..." 
-                            : "Dialog starten um zu antworten"
-                          }
-                          disabled={!dialogState.active}
-                          className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 disabled:bg-gray-100"
-                        />
-                        
-                        <Button 
-                          onClick={handleSendMessage}
-                          disabled={!dialogState.active || !userInput.trim()}
-                          className="bg-emerald-600 hover:bg-emerald-700 text-white px-6"
-                        >
-                          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                            <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"/>
-                          </svg>
-                        </Button>
-                      </div>
-                      
-                      {/* Quick Actions */}
-                      {dialogState.active && (
-                        <div className="flex flex-wrap gap-2">
-                          <button
-                            onClick={() => setUserInput("?")}
-                            className="text-xs px-3 py-1 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 rounded-full"
-                          >
-                            ? Hilfe
-                          </button>
-                          <button
-                            onClick={() => setUserInput("Welche Optionen gibt es?")}
-                            className="text-xs px-3 py-1 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-full"
-                          >
-                            💡 Optionen
-                          </button>
-                          <button
-                            onClick={() => setUserInput("Beispiele?")}
-                            className="text-xs px-3 py-1 bg-purple-100 hover:bg-purple-200 text-purple-700 rounded-full"
-                          >
-                            📝 Beispiele
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
+              {/* Hilfsinformationen */}
+              <div className="text-sm text-gray-500 bg-gray-50 p-3 rounded-lg">
+                <strong>💡 Tipps:</strong>
+                <ul className="mt-2 space-y-1">
+                  <li>• Antworten Sie natürlich auf die Fragen</li>
+                  <li>• Schreiben Sie "?" für Hilfe zur aktuellen Frage</li>
+                  <li>• Ihre Daten werden automatisch in Google Drive gespeichert</li>
+                </ul>
               </div>
-            )}
-          </div>
-        )}
-      </main>
+            </div>
+          )}
+
+          {/* Reset-Button */}
+          {(dialogActive || dialogComplete) && (
+            <div className="text-center">
+              <button
+                onClick={handleReset}
+                className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                🔄 Dialog zurücksetzen
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   )
 }

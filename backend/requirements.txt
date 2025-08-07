@@ -1,9 +1,16 @@
 fastapi==0.104.1
 uvicorn==0.24.0
-python-multipart==0.0.6
-pdfplumber==0.10.3
-ollama==0.1.7
-python-jose==3.3.0
 pydantic==2.5.0
-groq>=0.4.1
-python-dotenv>=1.0.0
+python-multipart==0.0.6
+aiofiles==23.2.1
+python-jose==3.3.0
+
+# Google Drive Integration
+google-auth==2.23.4
+google-auth-oauthlib==1.1.0
+google-auth-httplib2==0.1.1
+google-api-python-client==2.108.0
+
+# PDF Processing (falls benötigt)
+PyPDF2==3.0.1
+pdfplumber==0.10.3

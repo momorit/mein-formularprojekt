@@ -1,256 +1,238 @@
-# backend/main.py - BULLETPROOF CORS FIX (Konflikt gelöst)
-
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+from typing import Dict, Any, List, Optional
 import json
 import os
-from datetime import datetime
-from typing import Dict, Any, List, Optional
 import uvicorn
+from datetime import datetime
+import aiofiles
+import asyncio
+from pathlib import Path
 
-app = FastAPI(
-    title="FormularIQ Backend",
-    description="LLM-gestützte Formularbearbeitung",
-    version="1.0.0"
+# === GOOGLE DRIVE IMPORTS ===
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaIoBaseUpload
+import io
+
+app = FastAPI(title="FormularIQ Backend mit Google Drive", version="2.0.0")
+
+# === CORS MIDDLEWARE ===
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
-# BULLETPROOF CORS - Erlaubt ALLE Vercel-Domains
-@app.middleware("http")
-async def cors_handler(request: Request, call_next):
-    """Custom CORS Handler - Updated für alle Vercel-URLs"""
-    
-    # Hole Origin aus Request
-    origin = request.headers.get("origin")
-    
-    # Führe Request aus
-    response = await call_next(request)
-    
-    # Erweiterte Vercel-Domain-Erkennung
-    if origin and (
-        "vercel.app" in origin or 
-        "localhost" in origin or 
-        "127.0.0.1" in origin or
-        "railway.app" in origin or
-        "momorits-projects.vercel.app" in origin  # ✅ Deine Subdomain
-    ):
-        response.headers["Access-Control-Allow-Origin"] = origin
-        response.headers["Access-Control-Allow-Credentials"] = "true"
-        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
-        response.headers["Access-Control-Allow-Headers"] = "*"
-    
-    return response
+# === GOOGLE DRIVE SETUP ===
+SCOPES = ['https://www.googleapis.com/auth/drive.file']
+SERVICE_ACCOUNT_FILE = 'service-account-key.json'
+DRIVE_FOLDER_NAME = 'FormularIQ_Daten'
 
-# OPTIONS Handler für Preflight-Requests
-@app.options("/{path:path}")
-async def options_handler(request: Request, path: str):
-    """Behandelt alle OPTIONS-Requests für CORS"""
-    origin = request.headers.get("origin", "")
-    
-    if ("vercel.app" in origin or 
-        "localhost" in origin or 
-        "momorits-projects.vercel.app" in origin):  # ✅ Deine Subdomain
-        headers = {
-            "Access-Control-Allow-Origin": origin,
-            "Access-Control-Allow-Credentials": "true", 
-            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-            "Access-Control-Allow-Headers": "*",
+def get_drive_service():
+    """Google Drive Service initialisieren"""
+    try:
+        credentials = service_account.Credentials.from_service_account_file(
+            SERVICE_ACCOUNT_FILE, scopes=SCOPES)
+        service = build('drive', 'v3', credentials=credentials)
+        return service
+    except Exception as e:
+        print(f"❌ Google Drive Setup Fehler: {e}")
+        return None
+
+def create_or_get_folder(service, folder_name):
+    """Ordner erstellen oder finden"""
+    try:
+        # Suche existierenden Ordner
+        results = service.files().list(
+            q=f"name='{folder_name}' and mimeType='application/vnd.google-apps.folder'",
+            fields="files(id, name)"
+        ).execute()
+        
+        if results['files']:
+            return results['files'][0]['id']
+        
+        # Neuen Ordner erstellen
+        file_metadata = {
+            'name': folder_name,
+            'mimeType': 'application/vnd.google-apps.folder'
         }
-        return JSONResponse(content={}, headers=headers)
-    
-    return JSONResponse(content={"error": "CORS not allowed"}, status_code=403)
+        folder = service.files().create(body=file_metadata, fields='id').execute()
+        print(f"✅ Ordner '{folder_name}' erstellt: {folder.get('id')}")
+        return folder.get('id')
+        
+    except Exception as e:
+        print(f"❌ Ordner-Fehler: {e}")
+        return None
 
-# Pydantic Models
-class ContextRequest(BaseModel):
+def upload_to_drive(service, data, filename, folder_id):
+    """Datei zu Google Drive hochladen"""
+    try:
+        # JSON-Daten in String konvertieren
+        json_content = json.dumps(data, ensure_ascii=False, indent=2)
+        
+        # Upload vorbereiten
+        file_metadata = {
+            'name': filename,
+            'parents': [folder_id] if folder_id else []
+        }
+        
+        # Media Upload
+        media = MediaIoBaseUpload(
+            io.BytesIO(json_content.encode('utf-8')),
+            mimetype='application/json'
+        )
+        
+        # Upload durchführen
+        file = service.files().create(
+            body=file_metadata,
+            media_body=media,
+            fields='id, name, webViewLink'
+        ).execute()
+        
+        print(f"✅ Datei hochgeladen: {file.get('name')} (ID: {file.get('id')})")
+        return file.get('id'), file.get('webViewLink')
+        
+    except Exception as e:
+        print(f"❌ Upload-Fehler: {e}")
+        return None, None
+
+# === PYDANTIC MODELS ===
+class GenerateRequest(BaseModel):
     context: str
-
-class ChatRequest(BaseModel):
-    message: str
 
 class SaveRequest(BaseModel):
     instructions: Dict[str, Any]
     values: Dict[str, str]
     filename: str
 
+class ChatRequest(BaseModel):
+    message: str
+    context: str
+
 class DialogStartRequest(BaseModel):
-    context: Optional[str] = ""
+    context: str = ""
+
+class DialogQuestion(BaseModel):
+    question: str
+    field: str
 
 class DialogMessageRequest(BaseModel):
     message: str
-    currentQuestion: Dict[str, str]
+    currentQuestion: DialogQuestion
     questionIndex: int
     totalQuestions: int
 
 class DialogSaveRequest(BaseModel):
-    questions: List[Dict[str, str]]
+    questions: List[DialogQuestion]
     answers: Dict[str, str]
-    chatHistory: List[Dict[str, str]]
+    chatHistory: List[Dict[str, Any]]
     filename: str
 
-# Ausgabe-Verzeichnis erstellen
-os.makedirs("LLM Output", exist_ok=True)
-
-def call_llm(prompt: str, context: str = "") -> str:
-    """LLM-Aufruf mit Groq (primär) und Fallbacks"""
-    try:
-        # 1. Versuche Groq (für Online-Deployment)
-        groq_key = os.getenv("GROQ_API_KEY")
-        if groq_key and groq_key.startswith('gsk_'):
-            try:
-                from groq import Groq
-                client = Groq(api_key=groq_key)
-                
-                system_prompt = """Du bist ein Experte für Gebäudeformulare und hilfst Nutzern beim Ausfüllen komplexer Formulare. 
-                Du gibst präzise, hilfreiche und kontextbezogene Anweisungen auf Deutsch. 
-                Deine Antworten sind klar, verständlich und praxisorientiert."""
-                
-                response = client.chat.completions.create(
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": f"Kontext: {context}\n\nAufgabe: {prompt}"}
-                    ],
-                    model="llama3-8b-8192",
-                    temperature=0.7,
-                    max_tokens=2048
-                )
-                return response.choices[0].message.content
-            except Exception as groq_error:
-                print(f"Groq-Fehler: {groq_error}")
-        
-        # 2. Fallback zu Ollama (für Local Development)
+# === LLM INTEGRATION ===
+def call_llm(prompt: str, max_retries: int = 3) -> str:
+    """LLM-Aufruf mit Ollama"""
+    import subprocess
+    
+    for attempt in range(max_retries):
         try:
-            import ollama
-            response = ollama.chat(
-                model='llama3',
-                messages=[
-                    {
-                        'role': 'user',
-                        'content': f"Du bist ein Experte für Gebäudeformulare. Kontext: {context}\n\nAufgabe: {prompt}"
-                    }
-                ],
-                options={
-                    'temperature': 0.7,
-                    'top_p': 0.9,
-                    'max_tokens': 2048
-                }
-            )
-            return response['message']['content']
-        except Exception as ollama_error:
-            print(f"Ollama-Fehler: {ollama_error}")
-        
-        # 3. Demo-Fallback für Testing/Demo
-        if "formular" in prompt.lower() or "anweisungen" in prompt.lower():
-            return json.dumps({
-                "GEBÄUDEART": "Bitte geben Sie die Art Ihres Gebäudes an (z.B. Einfamilienhaus, Mehrfamilienhaus)",
-                "BAUJAHR": "In welchem Jahr wurde das Gebäude errichtet?",
-                "WOHNFLÄCHE": "Wie groß ist die Wohnfläche in Quadratmetern?",
-                "HEIZUNGSART": "Welche Art der Heizung ist installiert? (z.B. Gas, Öl, Wärmepumpe)",
-                "DACHTYP": "Beschreiben Sie die Art des Daches (z.B. Satteldach, Flachdach)",
-                "ANZAHL_STOCKWERKE": "Wie viele Stockwerke hat das Gebäude?",
-                "KELLER_VORHANDEN": "Ist ein Keller vorhanden? (Ja/Nein)",
-                "ISOLIERUNG": "Welche Art der Dämmung ist vorhanden?",
-                "FENSTERTYP": "Welche Art von Fenstern sind installiert?",
-                "ENERGIEAUSWEIS": "Liegt ein Energieausweis vor? Wenn ja, welche Energieklasse?"
-            }, ensure_ascii=False, indent=2)
-        
-        return "Demo-Antwort: LLM temporär nicht verfügbar. Bitte versuchen Sie es später erneut."
-        
-    except Exception as e:
-        print(f"Allgemeiner LLM-Fehler: {e}")
-        return "Entschuldigung, es gab einen technischen Fehler. Bitte versuchen Sie es erneut."
+            result = subprocess.run([
+                'ollama', 'run', 'llama3',
+                prompt
+            ], capture_output=True, text=True, timeout=30)
+            
+            if result.returncode == 0 and result.stdout.strip():
+                return result.stdout.strip()
+            else:
+                print(f"⚠️ LLM Versuch {attempt + 1} fehlgeschlagen")
+                
+        except subprocess.TimeoutExpired:
+            print(f"⚠️ LLM Timeout bei Versuch {attempt + 1}")
+        except Exception as e:
+            print(f"⚠️ LLM Fehler bei Versuch {attempt + 1}: {e}")
+    
+    return "Entschuldigung, der LLM-Service ist momentan nicht verfügbar."
 
-@app.get("/")
-async def root():
-    return {
-        "message": "FormularIQ Backend läuft", 
-        "status": "OK",
-        "cors": "bulletproof",
-        "environment": "production" if os.getenv("RAILWAY_ENVIRONMENT") else "development"
-    }
+# === API ENDPOINTS ===
 
 @app.get("/health")
-async def health():
-    return {"message": "FormularIQ Backend läuft", "status": "OK", "cors": "bulletproof"}
+async def health_check():
+    """Health Check"""
+    drive_service = get_drive_service()
+    return {
+        "status": "healthy",
+        "google_drive": "connected" if drive_service else "disconnected",
+        "timestamp": datetime.now().isoformat()
+    }
 
-# Test-Endpoint für CORS
-@app.get("/api/test")
-async def test_cors():
-    return {"message": "CORS funktioniert!", "status": "OK", "timestamp": datetime.now().isoformat()}
-
-@app.post("/api/instructions")
-async def generate_instructions(request: ContextRequest):
-    """Generiert Formular-Anweisungen mit robustem Logging"""
+@app.post("/api/generate")
+async def generate_instructions(request: GenerateRequest):
+    """Formular-Anweisungen generieren"""
     try:
-        print(f"🔍 Instructions-Request empfangen: {request.context[:50]}...")
+        prompt = f"""
+Erstelle ein JSON-Objekt mit Formularfeldern basierend auf diesem Kontext: {request.context}
+
+Das JSON sollte folgende Struktur haben:
+{{
+  "FELDNAME": {{
+    "label": "Benutzerfreundliche Bezeichnung",
+    "type": "text|number|email|tel|date|select",
+    "required": true/false,
+    "placeholder": "Hilfstext",
+    "options": ["Option1", "Option2"] // nur bei type: "select"
+  }}
+}}
+
+Erstelle 5-10 relevante Felder. Antworte nur mit dem JSON, keine Erklärungen.
+"""
         
-        if request.context.strip():
-            prompt = f"""
-Erstelle hilfreiche Anweisungen für ein Gebäudeformular basierend auf diesem Kontext: {request.context}
-
-Erstelle ein JSON-Objekt mit Formularfeldern als Schlüssel und hilfreichen Anweisungen als Werte.
-Beispiel-Felder: GEBÄUDEART, BAUJAHR, WOHNFLÄCHE, HEIZUNGSART, DACHTYP, ANZAHL_STOCKWERKE, SANIERUNGSBEDARF
-
-Gib nur das JSON zurück, keine weiteren Erklärungen."""
-        else:
-            prompt = """
-Erstelle Standard-Anweisungen für ein Gebäudeformular.
-
-Erstelle ein JSON-Objekt mit typischen Gebäudeformular-Feldern als Schlüssel und hilfreichen Anweisungen als Werte.
-Beispiel-Felder: GEBÄUDEART, BAUJAHR, WOHNFLÄCHE, HEIZUNGSART, DACHTYP, ANZAHL_STOCKWERKE, SANIERUNGSBEDARF
-
-Gib nur das JSON zurück, keine weiteren Erklärungen."""
+        llm_response = call_llm(prompt)
         
-        response = call_llm(prompt, request.context)
-        print(f"🤖 LLM-Response erhalten: {response[:100]}...")
-        
-        # Versuche JSON zu parsen
         try:
-            # Extrahiere JSON aus der Antwort
-            start = response.find('{')
-            end = response.rfind('}') + 1
-            if start != -1 and end != 0:
-                json_str = response[start:end]
-                instructions = json.loads(json_str)
-                print(f"✅ JSON erfolgreich geparst: {len(instructions)} Felder")
-                return instructions
-            else:
-                raise ValueError("Kein JSON gefunden")
-        except Exception as parse_error:
-            print(f"⚠️ JSON-Parse-Fehler: {parse_error}, verwende Fallback")
-            # Fallback bei JSON-Parse-Fehler
-            return {
-                "GEBÄUDEART": "Bitte geben Sie die Art Ihres Gebäudes an (z.B. Einfamilienhaus, Mehrfamilienhaus)",
-                "BAUJAHR": "In welchem Jahr wurde das Gebäude errichtet?",
-                "WOHNFLÄCHE": "Wie groß ist die Wohnfläche in Quadratmetern?", 
-                "HEIZUNGSART": "Welche Art der Heizung ist installiert? (z.B. Gas, Öl, Wärmepumpe)",
-                "DACHTYP": "Beschreiben Sie die Art des Daches (z.B. Satteldach, Flachdach)",
-                "ANZAHL_STOCKWERKE": "Wie viele Stockwerke hat das Gebäude?",
-                "SANIERUNGSBEDARF": "Welche Sanierungsmaßnahmen sind geplant oder erforderlich?"
-            }
-        
+            instructions = json.loads(llm_response)
+            return {"instructions": instructions}
+        except json.JSONDecodeError:
+            print(f"⚠️ JSON-Parse-Fehler: {llm_response}")
+            
+            # Fallback-Formular
+            return {"instructions": {
+                "NAME": {
+                    "label": "Name",
+                    "type": "text",
+                    "required": True,
+                    "placeholder": "Ihr vollständiger Name"
+                },
+                "EMAIL": {
+                    "label": "E-Mail",
+                    "type": "email",
+                    "required": True,
+                    "placeholder": "ihre@email.de"
+                },
+                "NACHRICHT": {
+                    "label": "Nachricht",
+                    "type": "text",
+                    "required": False,
+                    "placeholder": "Ihre Nachricht oder Anmerkungen"
+                }
+            }}
+            
     except Exception as e:
-        print(f"❌ Instructions-Fehler: {e}")
-        # Fallback-Instructions
-        return {
-            "GEBÄUDEART": "Bitte geben Sie die Art Ihres Gebäudes an",
-            "BAUJAHR": "In welchem Jahr wurde das Gebäude errichtet?",
-            "WOHNFLÄCHE": "Wie groß ist die Wohnfläche in Quadratmetern?",
-            "HEIZUNGSART": "Welche Art der Heizung ist installiert?",
-            "DACHTYP": "Beschreiben Sie die Art des Daches"
-        }
+        print(f"❌ Generate-Fehler: {e}")
+        raise HTTPException(status_code=500, detail="Fehler beim Generieren")
 
 @app.post("/api/chat")
 async def chat_help(request: ChatRequest):
-    """Chat-Hilfe für Formulare"""
+    """Chat-Hilfe"""
     try:
-        print(f"💬 Chat-Request: {request.message}")
         prompt = f"""
-Ein Nutzer braucht Hilfe beim Ausfüllen eines Gebäudeformulars.
-Frage: {request.message}
+Kontext: {request.context}
 
-Gib eine hilfreiche, konkrete Antwort auf Deutsch in 2-3 Sätzen.
-Sei freundlich und praxisorientiert.
+Nutzerfrage: {request.message}
+
+Gib eine hilfreiche, kurze Antwort auf Deutsch (2-3 Sätze).
 """
         
         response = call_llm(prompt)
@@ -258,47 +240,94 @@ Sei freundlich und praxisorientiert.
         
     except Exception as e:
         print(f"❌ Chat-Fehler: {e}")
-        return {"response": "Entschuldigung, ich konnte Ihre Frage nicht beantworten."}
+        raise HTTPException(status_code=500, detail="Chat-Service nicht verfügbar")
+
+@app.post("/api/save")
+async def save_form_data(request: SaveRequest):
+    """Formulardaten in Google Drive speichern"""
+    try:
+        # Google Drive Service
+        drive_service = get_drive_service()
+        if not drive_service:
+            raise HTTPException(status_code=500, detail="Google Drive nicht verfügbar")
+        
+        # Ordner erstellen/finden
+        folder_id = create_or_get_folder(drive_service, DRIVE_FOLDER_NAME)
+        
+        # Daten vorbereiten
+        save_data = {
+            "type": "form_data",
+            "timestamp": datetime.now().isoformat(),
+            "instructions": request.instructions,
+            "values": request.values,
+            "metadata": {
+                "total_fields": len(request.instructions),
+                "filled_fields": len([v for v in request.values.values() if v.strip()]),
+                "completion_rate": f"{len([v for v in request.values.values() if v.strip()]) / len(request.instructions) * 100:.1f}%"
+            }
+        }
+        
+        # Filename mit Zeitstempel
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"formular_data_{timestamp}.json"
+        
+        # Upload zu Google Drive
+        file_id, web_link = upload_to_drive(drive_service, save_data, filename, folder_id)
+        
+        if file_id:
+            return {
+                "message": "✅ Daten erfolgreich in Google Drive gespeichert!",
+                "filename": filename,
+                "google_drive_id": file_id,
+                "web_link": web_link,
+                "folder": DRIVE_FOLDER_NAME
+            }
+        else:
+            raise HTTPException(status_code=500, detail="Upload zu Google Drive fehlgeschlagen")
+            
+    except Exception as e:
+        print(f"❌ Speicher-Fehler: {e}")
+        raise HTTPException(status_code=500, detail="Fehler beim Speichern in Google Drive")
 
 @app.post("/api/dialog/start")
 async def start_dialog(request: DialogStartRequest):
-    """Startet Dialog-Modus"""
+    """Dialog starten"""
     try:
-        print(f"🎭 Dialog-Start mit Kontext: {request.context}")
-        prompt = f"""
-Erstelle 8-10 wichtige Fragen für ein Gebäudeformular-Interview basierend auf diesem Kontext: {request.context}
+        if request.context:
+            prompt = f"""
+Basierend auf diesem Kontext: {request.context}
 
-Erstelle ein JSON-Array mit Objekten im Format:
+Erstelle 5-7 präzise Fragen für einen strukturierten Dialog. 
+
+Antworte mit einem JSON-Array:
 [
-  {{"question": "Welche Art von Gebäude möchten Sie erfassen?", "field": "GEBÄUDEART"}},
-  {{"question": "In welchem Jahr wurde das Gebäude erbaut?", "field": "BAUJAHR"}},
-  {{"question": "Wie groß ist die Wohnfläche in Quadratmetern?", "field": "WOHNFLÄCHE"}}
+  {{"question": "Frage 1?", "field": "FELDNAME1"}},
+  {{"question": "Frage 2?", "field": "FELDNAME2"}}
 ]
 
-Die Fragen sollten natürlich klingen und logisch aufeinander aufbauen.
-Gib nur das JSON-Array zurück."""
-        
-        response = call_llm(prompt, request.context)
-        
-        try:
-            # JSON Array parsen
-            start = response.find('[')
-            end = response.rfind(']') + 1
-            if start != -1 and end != 0:
-                json_str = response[start:end]
-                questions = json.loads(json_str)
-            else:
-                raise ValueError("Kein JSON Array gefunden")
-        except Exception as parse_error:
-            print(f"⚠️ Dialog JSON-Parse-Fehler: {parse_error}")
-            # Fallback-Fragen
+Nur JSON, keine Erklärungen.
+"""
+            
+            llm_response = call_llm(prompt)
+            
+            try:
+                questions = json.loads(llm_response)
+            except json.JSONDecodeError:
+                print(f"⚠️ Dialog-JSON-Fehler: {llm_response}")
+                questions = [
+                    {"question": "Welche Art von Gebäude möchten Sie erfassen?", "field": "GEBÄUDEART"},
+                    {"question": "In welchem Jahr wurde das Gebäude errichtet?", "field": "BAUJAHR"},
+                    {"question": "Wie groß ist die Wohnfläche in Quadratmetern?", "field": "WOHNFLÄCHE"},
+                    {"question": "Welche Art der Heizung ist installiert?", "field": "HEIZUNGSART"},
+                    {"question": "Welche Art von Dach hat das Gebäude?", "field": "DACHTYP"}
+                ]
+        else:
             questions = [
                 {"question": "Welche Art von Gebäude möchten Sie erfassen?", "field": "GEBÄUDEART"},
-                {"question": "In welchem Jahr wurde das Gebäude erbaut?", "field": "BAUJAHR"},
+                {"question": "In welchem Jahr wurde das Gebäude errichtet?", "field": "BAUJAHR"},
                 {"question": "Wie groß ist die Wohnfläche in Quadratmetern?", "field": "WOHNFLÄCHE"},
-                {"question": "Welche Heizungsart ist installiert?", "field": "HEIZUNGSART"},
-                {"question": "Welche Art von Dach hat das Gebäude?", "field": "DACHTYP"},
-                {"question": "Wie viele Stockwerke hat das Gebäude?", "field": "ANZAHL_STOCKWERKE"}
+                {"question": "Welche Art der Heizung ist installiert?", "field": "HEIZUNGSART"},
+                {"question": "Welche Art von Dach hat das Gebäude?", "field": "DACHTYP"}
             ]
         
         return {
@@ -306,184 +335,119 @@ Gib nur das JSON-Array zurück."""
             "totalQuestions": len(questions),
             "currentQuestionIndex": 0
         }
-            
+        
     except Exception as e:
         print(f"❌ Dialog-Start-Fehler: {e}")
-        raise HTTPException(status_code=500, detail="Fehler beim Starten des Dialogs")
-
-@app.post("/api/dialog/message")
-# backend/main.py - Dialog-Message Fix (NUR DIESE FUNKTION ERSETZEN)
-
-# backend/main.py - Dialog-Message Fix (KOMPLETTE FUNKTION ERSETZEN)
+        raise HTTPException(status_code=500, detail="Dialog-Start fehlgeschlagen")
 
 @app.post("/api/dialog/message")
 async def dialog_message(request: DialogMessageRequest):
-    """Verarbeitet Dialog-Nachrichten mit Kontext-bewussten Rückfragen"""
+    """Dialog-Nachricht verarbeiten"""
     try:
-        current_q = request.currentQuestion
         user_message = request.message.strip()
         
-        print(f"💬 Dialog-Message: '{user_message}' bei Frage {request.questionIndex + 1}/{request.totalQuestions}")
-        print(f"🎯 Aktuelle Frage: {current_q.get('question', '')}")
-        
-        # ✅ INTELLIGENTE HILFE-ERKENNUNG (erweitert)
-        def is_help_request(message: str) -> bool:
-            """Erkennt Hilfe-Anfragen und Rückfragen"""
-            message_lower = message.lower()
+        if user_message == "?":
+            # Hilfe-Anfrage
+            current_field = request.currentQuestion.field
+            current_question = request.currentQuestion.question
             
-            # Explizite Hilfe
-            if message == "?":
-                return True
-            
-            # Fragen mit Fragezeichen
-            if message.endswith("?"):
-                return True
-                
-            # Fragewörter
-            question_starters = [
-                "was", "welche", "welcher", "welches", "wie", "wo", "wann", "warum",
-                "gibt es", "können sie", "kannst du", "hilfe", "beispiel", "beispiele",
-                "erklärung", "arten", "typen", "möglichkeiten", "optionen"
-            ]
-            
-            for starter in question_starters:
-                if message_lower.startswith(starter) or starter in message_lower:
-                    return True
-                    
-            # Kurze, frageartige Antworten
-            if len(message.split()) <= 4 and any(word in message_lower for word in ["was", "wie", "welche", "arten"]):
-                return True
-                
-            return False
-        
-        # ✅ RÜCKFRAGEN MIT KONTEXT BEANTWORTEN
-        if is_help_request(user_message):
-            print(f"🆘 Rückfrage erkannt: '{user_message}'")
-            
-            # Kontext aus der aktuellen Frage ableiten
-            current_field = current_q.get('field', '')
-            current_question_text = current_q.get('question', '')
-            
-            # Erweiterte Hilfe mit Groq generieren
-            context_help_prompt = f"""
-Du hilfst einem Nutzer beim Ausfüllen eines Gebäudeformulars. 
+            prompt = f"""
+Der Nutzer braucht Hilfe bei der Frage: "{current_question}"
+Feld: {current_field}
 
-AKTUELLE FRAGE: "{current_question_text}"
-FELD: {current_field}
-NUTZER-RÜCKFRAGE: "{user_message}"
-
-Beantworte die Rückfrage des Nutzers präzise und hilfreich auf Deutsch. 
-Gib konkrete Beispiele und Optionen für das aktuelle Formularfeld.
-
-Beispiel-Antworten je nach Feld:
-- GEBÄUDEART: "Es gibt verschiedene Gebäudetypen: Einfamilienhaus, Mehrfamilienhaus, Reihenhaus, Doppelhaushälfte, Bürogebäude, Gewerbeimmobilie, Industriegebäude, etc."
-- HEIZUNGSART: "Mögliche Heizungsarten: Gasheizung, Ölheizung, Fernwärme, Wärmepumpe (Luft/Wasser), Pelletheizung, Elektroheizung, Solarthermie, etc."
-- BAUJAHR: "Geben Sie das Jahr der Fertigstellung an, z.B. 1985, 2010, 2023. Bei unsicheren Angaben können Sie auch Jahrzehnte angeben wie '1970er Jahre'."
-- WOHNFLÄCHE: "Die Wohnfläche wird in Quadratmetern (m²) angegeben, z.B. 85, 120, 150. Gemeint ist die beheizbare Wohnfläche ohne Keller oder Dachboden."
-
-Beantworte die Frage spezifisch für das aktuelle Feld "{current_field}".
+Gib eine hilfreiche Erklärung in 2-3 Sätzen auf Deutsch.
+Sei spezifisch und hilfreich, keine allgemeinen Phrasen.
 """
-
-            try:
-                help_response = call_llm(context_help_prompt)
-                print(f"🤖 Kontextuelle Hilfe generiert: {help_response[:100]}...")
-                
-                return {
-                    "response": help_response,
-                    "nextQuestion": False,  # ✅ WICHTIG: Bei aktueller Frage bleiben!
-                    "questionIndex": request.questionIndex,  # ✅ Gleicher Index
-                    "helpProvided": True  # ✅ Marker für Frontend
-                }
-                
-            except Exception as llm_error:
-                print(f"❌ LLM-Hilfe-Fehler: {llm_error}")
-                
-                # Fallback-Hilfe basierend auf Feld
-                fallback_responses = {
-                    "GEBÄUDEART": "Gebäudetypen: Einfamilienhaus, Mehrfamilienhaus, Reihenhaus, Bürogebäude, Gewerbe, etc.",
-                    "HEIZUNGSART": "Heizungsarten: Gas, Öl, Fernwärme, Wärmepumpe, Pellets, Elektro, Solar, etc.",
-                    "BAUJAHR": "Geben Sie das Baujahr als vierstellige Zahl ein, z.B. 1985, 2010, 2023.",
-                    "WOHNFLÄCHE": "Wohnfläche in m², z.B. 85, 120, 150 (ohne Keller/Dachboden).",
-                    "STOCKWERKE": "Anzahl der Stockwerke/Etagen, z.B. 1, 2, 3 (Erdgeschoss + Obergeschosse).",
-                    "ZIMMER": "Anzahl der Zimmer/Räume, z.B. 3, 4, 5 (ohne Bad/Küche)."
-                }
-                
-                fallback_help = fallback_responses.get(
-                    current_field, 
-                    f"Bitte geben Sie eine spezifische Antwort für das Feld '{current_field}' ein."
-                )
-                
-                return {
-                    "response": fallback_help,
-                    "nextQuestion": False,  # ✅ Bei aktueller Frage bleiben
-                    "questionIndex": request.questionIndex,
-                    "helpProvided": True
-                }
-                
-        else:
-            # ✅ NORMALE ANTWORT - ZUR NÄCHSTEN FRAGE
-            print(f"✅ Normale Antwort: '{user_message}' → Frage {request.questionIndex + 1} beantwortet")
+            help_response = call_llm(prompt)
             
+            return {
+                "response": help_response,
+                "nextQuestion": False,
+                "questionIndex": request.questionIndex,
+                "helpProvided": True
+            }
+        else:
+            # Normale Antwort verarbeiten
             if request.questionIndex < request.totalQuestions - 1:
                 return {
-                    "response": f"Danke! '{user_message}' wurde gespeichert. Nächste Frage:",
-                    "nextQuestion": True,  # ✅ Zur nächsten Frage springen
+                    "response": f"✅ Ihre Antwort '{user_message}' wurde gespeichert. Nächste Frage:",
+                    "nextQuestion": True,
                     "questionIndex": request.questionIndex + 1,
                     "helpProvided": False
                 }
             else:
                 return {
-                    "response": "🎉 Herzlichen Glückwunsch! Sie haben alle Fragen beantwortet. Sie können nun Ihre Daten speichern.",
+                    "response": "🎉 Herzlichen Glückwunsch! Sie haben alle Fragen beantwortet. Ihre Daten werden automatisch gespeichert.",
                     "nextQuestion": False,
                     "questionIndex": request.questionIndex,
-                    "dialogComplete": True,  # ✅ Dialog beenden
+                    "dialogComplete": True,
                     "helpProvided": False
                 }
         
     except Exception as e:
         print(f"❌ Dialog-Message-Fehler: {e}")
-        raise HTTPException(status_code=500, detail="Fehler beim Verarbeiten der Nachricht")
-    
-@app.post("/api/save")
-async def save_form_data(request: SaveRequest):
-    """Speichert Formulardaten"""
-    try:
-        output_path = f"LLM Output/{request.filename}"
-        with open(output_path, 'w', encoding='utf-8') as f:
-            json.dump({
-                "instructions": request.instructions,
-                "values": request.values,
-                "timestamp": datetime.now().isoformat(),
-                "type": "form_data"
-            }, f, ensure_ascii=False, indent=2)
-        
-        return {"message": "Daten erfolgreich gespeichert", "filename": request.filename}
-    
-    except Exception as e:
-        print(f"❌ Speicher-Fehler: {e}")
-        raise HTTPException(status_code=500, detail="Fehler beim Speichern")
+        raise HTTPException(status_code=500, detail="Dialog-Verarbeitung fehlgeschlagen")
 
 @app.post("/api/dialog/save")
 async def save_dialog_data(request: DialogSaveRequest):
-    """Speichert Dialog-Daten"""
+    """Dialog-Daten in Google Drive speichern"""
     try:
-        output_path = f"LLM Output/{request.filename}"
-        with open(output_path, 'w', encoding='utf-8') as f:
-            json.dump({
-                "questions": request.questions,
-                "answers": request.answers,
-                "chatHistory": request.chatHistory,
-                "timestamp": datetime.now().isoformat(),
-                "type": "dialog_data"
-            }, f, ensure_ascii=False, indent=2)
+        # Google Drive Service
+        drive_service = get_drive_service()
+        if not drive_service:
+            raise HTTPException(status_code=500, detail="Google Drive nicht verfügbar")
         
-        return {"message": "Dialog-Daten erfolgreich gespeichert", "filename": request.filename}
-    
+        # Ordner erstellen/finden
+        folder_id = create_or_get_folder(drive_service, DRIVE_FOLDER_NAME)
+        
+        # Daten strukturieren
+        save_data = {
+            "type": "dialog_data",
+            "timestamp": datetime.now().isoformat(),
+            "questions": request.questions,
+            "answers": request.answers,
+            "chatHistory": request.chatHistory,
+            "metadata": {
+                "total_questions": len(request.questions),
+                "answered_questions": len(request.answers),
+                "completion_rate": f"{len(request.answers) / len(request.questions) * 100:.1f}%",
+                "chat_interactions": len(request.chatHistory)
+            }
+        }
+        
+        # Filename mit Zeitstempel
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"dialog_data_{timestamp}.json"
+        
+        # Upload zu Google Drive
+        file_id, web_link = upload_to_drive(drive_service, save_data, filename, folder_id)
+        
+        if file_id:
+            return {
+                "message": "✅ Dialog-Daten erfolgreich in Google Drive gespeichert!",
+                "filename": filename,
+                "google_drive_id": file_id,
+                "web_link": web_link,
+                "folder": DRIVE_FOLDER_NAME
+            }
+        else:
+            raise HTTPException(status_code=500, detail="Upload zu Google Drive fehlgeschlagen")
+            
     except Exception as e:
         print(f"❌ Dialog-Speicher-Fehler: {e}")
-        raise HTTPException(status_code=500, detail="Fehler beim Speichern der Dialog-Daten")
+        raise HTTPException(status_code=500, detail="Dialog-Speicher-Fehler")
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8000))
-    print(f"🚀 Starte FormularIQ Backend mit Bulletproof CORS auf Port {port}")
+    print(f"🚀 FormularIQ Backend mit Google Drive Integration")
+    print(f"📁 Google Drive Ordner: {DRIVE_FOLDER_NAME}")
+    print(f"🌐 Server läuft auf Port {port}")
+    
+    # Google Drive Test
+    drive_service = get_drive_service()
+    if drive_service:
+        print("✅ Google Drive Service erfolgreich initialisiert")
+    else:
+        print("❌ Google Drive Service nicht verfügbar - prüfe service-account-key.json")
+    
     uvicorn.run(app, host="0.0.0.0", port=port)
