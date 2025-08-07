@@ -16,7 +16,7 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 import io
 
-app = FastAPI(title="FormularIQ Backend mit Google Drive", version="2.0.0")
+app = FastAPI(title="FormularIQ Backend - Vereinfachte Version", version="2.1.0")
 
 # === CORS MIDDLEWARE ===
 app.add_middleware(
@@ -101,9 +101,6 @@ def upload_to_drive(service, data, filename, folder_id):
         return None, None
 
 # === PYDANTIC MODELS ===
-class GenerateRequest(BaseModel):
-    context: str
-
 class SaveRequest(BaseModel):
     instructions: Dict[str, Any]
     values: Dict[str, str]
@@ -113,12 +110,10 @@ class ChatRequest(BaseModel):
     message: str
     context: str
 
-class DialogStartRequest(BaseModel):
-    context: str = ""
-
 class DialogQuestion(BaseModel):
     question: str
     field: str
+    difficulty: Optional[str] = None
 
 class DialogMessageRequest(BaseModel):
     message: str
@@ -165,74 +160,44 @@ async def health_check():
     return {
         "status": "healthy",
         "google_drive": "connected" if drive_service else "disconnected",
-        "timestamp": datetime.now().isoformat()
+        "timestamp": datetime.now().isoformat(),
+        "version": "simplified_4-5_fields"
     }
-
-@app.post("/api/generate")
-async def generate_instructions(request: GenerateRequest):
-    """Formular-Anweisungen generieren"""
-    try:
-        prompt = f"""
-Erstelle ein JSON-Objekt mit Formularfeldern basierend auf diesem Kontext: {request.context}
-
-Das JSON sollte folgende Struktur haben:
-{{
-  "FELDNAME": {{
-    "label": "Benutzerfreundliche Bezeichnung",
-    "type": "text|number|email|tel|date|select",
-    "required": true/false,
-    "placeholder": "Hilfstext",
-    "options": ["Option1", "Option2"] // nur bei type: "select"
-  }}
-}}
-
-Erstelle 5-10 relevante Felder. Antworte nur mit dem JSON, keine Erklärungen.
-"""
-        
-        llm_response = call_llm(prompt)
-        
-        try:
-            instructions = json.loads(llm_response)
-            return {"instructions": instructions}
-        except json.JSONDecodeError:
-            print(f"⚠️ JSON-Parse-Fehler: {llm_response}")
-            
-            # Fallback-Formular
-            return {"instructions": {
-                "NAME": {
-                    "label": "Name",
-                    "type": "text",
-                    "required": True,
-                    "placeholder": "Ihr vollständiger Name"
-                },
-                "EMAIL": {
-                    "label": "E-Mail",
-                    "type": "email",
-                    "required": True,
-                    "placeholder": "ihre@email.de"
-                },
-                "NACHRICHT": {
-                    "label": "Nachricht",
-                    "type": "text",
-                    "required": False,
-                    "placeholder": "Ihre Nachricht oder Anmerkungen"
-                }
-            }}
-            
-    except Exception as e:
-        print(f"❌ Generate-Fehler: {e}")
-        raise HTTPException(status_code=500, detail="Fehler beim Generieren")
 
 @app.post("/api/chat")
 async def chat_help(request: ChatRequest):
-    """Chat-Hilfe"""
+    """Chat-Hilfe für Gebäudeformulare"""
     try:
-        prompt = f"""
-Kontext: {request.context}
+        # Spezifische Prompts je nach Kontext
+        if "Variante A" in request.context:
+            prompt = f"""
+Ein Nutzer braucht Hilfe beim Ausfüllen eines Gebäudeformulars (Variante A - Sichtbares Formular).
+
+Die Formularfelder sind:
+- Gebäudeart (leicht): Verschiedene Haustypen
+- Baujahr (leicht): Jahr der Errichtung  
+- Energieausweis (schwer): Energieklassen A+ bis H mit kWh/m²a Werten
+- Sanierungsmaßnahmen (schwer): Detaillierte Planung von energetischen Sanierungen
 
 Nutzerfrage: {request.message}
 
-Gib eine hilfreiche, kurze Antwort auf Deutsch (2-3 Sätze).
+Gib eine hilfreiche, konkrete Antwort auf Deutsch in 2-3 Sätzen.
+Sei freundlich und praxisorientiert. Fokussiere auf die oben genannten Themen.
+"""
+        else:
+            prompt = f"""
+Ein Nutzer braucht Hilfe beim Ausfüllen eines Gebäudeformulars (Variante B - Dialog-System).
+
+Die Dialog-Themen sind:
+- Wohnfläche (leicht): Quadratmeter-Angaben
+- Heizungsart (leicht): Verschiedene Heizungssysteme
+- Dachtyp & Details (schwer): Detaillierte Dachbeschreibung mit Material und Zustand
+- Isolierung & Dämmung (schwer): Umfassende Beschreibung aller Dämmmaßnahmen
+
+Nutzerfrage: {request.message}
+
+Gib eine hilfreiche, konkrete Antwort auf Deutsch in 2-3 Sätzen.
+Sei freundlich und praxisorientiert. Fokussiere auf die oben genannten Themen.
 """
         
         response = call_llm(prompt)
@@ -240,7 +205,7 @@ Gib eine hilfreiche, kurze Antwort auf Deutsch (2-3 Sätze).
         
     except Exception as e:
         print(f"❌ Chat-Fehler: {e}")
-        raise HTTPException(status_code=500, detail="Chat-Service nicht verfügbar")
+        return {"response": "Entschuldigung, ich konnte Ihre Frage nicht beantworten."}
 
 @app.post("/api/save")
 async def save_form_data(request: SaveRequest):
@@ -256,20 +221,26 @@ async def save_form_data(request: SaveRequest):
         
         # Daten vorbereiten
         save_data = {
-            "type": "form_data",
+            "type": "form_data_simplified",
+            "variant": "A_sichtbares_formular",
             "timestamp": datetime.now().isoformat(),
             "instructions": request.instructions,
             "values": request.values,
             "metadata": {
                 "total_fields": len(request.instructions),
                 "filled_fields": len([v for v in request.values.values() if v.strip()]),
-                "completion_rate": f"{len([v for v in request.values.values() if v.strip()]) / len(request.instructions) * 100:.1f}%"
+                "completion_rate": f"{len([v for v in request.values.values() if v.strip()]) / len(request.instructions) * 100:.1f}%",
+                "field_difficulties": {
+                    field: details.get("difficulty", "unknown") 
+                    for field, details in request.instructions.items() 
+                    if isinstance(details, dict)
+                }
             }
         }
         
         # Filename mit Zeitstempel
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"formular_data_{timestamp}.json"
+        filename = f"variante_a_formular_{timestamp}.json"
         
         # Upload zu Google Drive
         file_id, web_link = upload_to_drive(drive_service, save_data, filename, folder_id)
@@ -289,57 +260,6 @@ async def save_form_data(request: SaveRequest):
         print(f"❌ Speicher-Fehler: {e}")
         raise HTTPException(status_code=500, detail="Fehler beim Speichern in Google Drive")
 
-@app.post("/api/dialog/start")
-async def start_dialog(request: DialogStartRequest):
-    """Dialog starten"""
-    try:
-        if request.context:
-            prompt = f"""
-Basierend auf diesem Kontext: {request.context}
-
-Erstelle 5-7 präzise Fragen für einen strukturierten Dialog. 
-
-Antworte mit einem JSON-Array:
-[
-  {{"question": "Frage 1?", "field": "FELDNAME1"}},
-  {{"question": "Frage 2?", "field": "FELDNAME2"}}
-]
-
-Nur JSON, keine Erklärungen.
-"""
-            
-            llm_response = call_llm(prompt)
-            
-            try:
-                questions = json.loads(llm_response)
-            except json.JSONDecodeError:
-                print(f"⚠️ Dialog-JSON-Fehler: {llm_response}")
-                questions = [
-                    {"question": "Welche Art von Gebäude möchten Sie erfassen?", "field": "GEBÄUDEART"},
-                    {"question": "In welchem Jahr wurde das Gebäude errichtet?", "field": "BAUJAHR"},
-                    {"question": "Wie groß ist die Wohnfläche in Quadratmetern?", "field": "WOHNFLÄCHE"},
-                    {"question": "Welche Art der Heizung ist installiert?", "field": "HEIZUNGSART"},
-                    {"question": "Welche Art von Dach hat das Gebäude?", "field": "DACHTYP"}
-                ]
-        else:
-            questions = [
-                {"question": "Welche Art von Gebäude möchten Sie erfassen?", "field": "GEBÄUDEART"},
-                {"question": "In welchem Jahr wurde das Gebäude errichtet?", "field": "BAUJAHR"},
-                {"question": "Wie groß ist die Wohnfläche in Quadratmetern?", "field": "WOHNFLÄCHE"},
-                {"question": "Welche Art der Heizung ist installiert?", "field": "HEIZUNGSART"},
-                {"question": "Welche Art von Dach hat das Gebäude?", "field": "DACHTYP"}
-            ]
-        
-        return {
-            "questions": questions,
-            "totalQuestions": len(questions),
-            "currentQuestionIndex": 0
-        }
-        
-    except Exception as e:
-        print(f"❌ Dialog-Start-Fehler: {e}")
-        raise HTTPException(status_code=500, detail="Dialog-Start fehlgeschlagen")
-
 @app.post("/api/dialog/message")
 async def dialog_message(request: DialogMessageRequest):
     """Dialog-Nachricht verarbeiten"""
@@ -347,21 +267,51 @@ async def dialog_message(request: DialogMessageRequest):
         user_message = request.message.strip()
         
         if user_message == "?":
-            # Hilfe-Anfrage
+            # Spezifische Hilfe basierend auf dem Dialog-Feld
             current_field = request.currentQuestion.field
             current_question = request.currentQuestion.question
             
-            prompt = f"""
-Der Nutzer braucht Hilfe bei der Frage: "{current_question}"
-Feld: {current_field}
+            # Detaillierte Hilfe-Prompts für die Dialog-Felder (Variante B)
+            help_prompts = {
+                "WOHNFLÄCHE": f"""
+Der Nutzer braucht Hilfe bei: '{current_question}'
 
-Gib eine hilfreiche Erklärung in 2-3 Sätzen auf Deutsch.
-Sei spezifisch und hilfreich, keine allgemeinen Phrasen.
+Erkläre in 2-3 Sätzen:
+- Wie man die Wohnfläche korrekt misst (nur beheizte Räume)
+- Unterschied zwischen Wohnfläche und Grundfläche
+- Typische Wohnflächengrößen für verschiedene Gebäudetypen
+""",
+                "HEIZUNGSART": f"""
+Der Nutzer braucht Hilfe bei: '{current_question}'
+
+Erkläre in 2-3 Sätzen:
+- Die häufigsten Heizungsarten (Gas, Öl, Wärmepumpe, Fernwärme)
+- Wo man die Heizungsart erkennen kann (Keller, Heizungsetikett)
+- Unterschiede zwischen den Systemen
+""",
+                "DACHTYP_DETAIL": f"""
+Der Nutzer braucht Hilfe bei: '{current_question}'
+
+Erkläre in 2-3 Sätzen:
+- Unterschiede zwischen Satteldach, Flachdach, Walmdach
+- Wichtige Details wie Eindeckungsmaterial (Ziegel, Schiefer, Blech)
+- Worauf bei Zustand und Dämmung zu achten ist
+""",
+                "ISOLIERUNG_DETAIL": f"""
+Der Nutzer braucht Hilfe bei: '{current_question}'
+
+Erkläre in 2-3 Sätzen:
+- Verschiedene Dämmungsarten (WDVS, Kerndämmung, Dachdämmung)
+- Wie man vorhandene Dämmung erkennt
+- Wichtige Details wie U-Werte und Dämmstärken
 """
+            }
+            
+            prompt = help_prompts.get(current_field, f"Der Nutzer braucht Hilfe bei: '{current_question}'. Gib eine hilfreiche Erklärung in 2-3 Sätzen auf Deutsch.")
             help_response = call_llm(prompt)
             
             return {
-                "response": help_response,
+                "response": f"💡 Hilfe: {help_response}",
                 "nextQuestion": False,
                 "questionIndex": request.questionIndex,
                 "helpProvided": True
@@ -370,14 +320,14 @@ Sei spezifisch und hilfreich, keine allgemeinen Phrasen.
             # Normale Antwort verarbeiten
             if request.questionIndex < request.totalQuestions - 1:
                 return {
-                    "response": f"✅ Ihre Antwort '{user_message}' wurde gespeichert. Nächste Frage:",
+                    "response": f"✅ Ihre Antwort wurde gespeichert. Weiter zur nächsten Frage:",
                     "nextQuestion": True,
                     "questionIndex": request.questionIndex + 1,
                     "helpProvided": False
                 }
             else:
                 return {
-                    "response": "🎉 Herzlichen Glückwunsch! Sie haben alle Fragen beantwortet. Ihre Daten werden automatisch gespeichert.",
+                    "response": "🎉 Alle Fragen beantwortet! Sie können nun die Umfrage beenden.",
                     "nextQuestion": False,
                     "questionIndex": request.questionIndex,
                     "dialogComplete": True,
@@ -402,7 +352,8 @@ async def save_dialog_data(request: DialogSaveRequest):
         
         # Daten strukturieren
         save_data = {
-            "type": "dialog_data",
+            "type": "dialog_data_simplified",
+            "variant": "B_dialog_system",
             "timestamp": datetime.now().isoformat(),
             "questions": request.questions,
             "answers": request.answers,
@@ -411,13 +362,16 @@ async def save_dialog_data(request: DialogSaveRequest):
                 "total_questions": len(request.questions),
                 "answered_questions": len(request.answers),
                 "completion_rate": f"{len(request.answers) / len(request.questions) * 100:.1f}%",
-                "chat_interactions": len(request.chatHistory)
+                "chat_interactions": len(request.chatHistory),
+                "question_difficulties": {
+                    q.field: q.difficulty for q in request.questions if hasattr(q, 'difficulty')
+                }
             }
         }
         
         # Filename mit Zeitstempel
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"dialog_data_{timestamp}.json"
+        filename = f"variante_b_dialog_{timestamp}.json"
         
         # Upload zu Google Drive
         file_id, web_link = upload_to_drive(drive_service, save_data, filename, folder_id)
@@ -439,9 +393,11 @@ async def save_dialog_data(request: DialogSaveRequest):
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8000))
-    print(f"🚀 FormularIQ Backend mit Google Drive Integration")
+    print(f"🚀 FormularIQ Backend - Vereinfachte Version")
     print(f"📁 Google Drive Ordner: {DRIVE_FOLDER_NAME}")
     print(f"🌐 Server läuft auf Port {port}")
+    print(f"📝 Variante A: 4 Felder (Gebäudeart, Baujahr, Energieausweis, Sanierung)")
+    print(f"💬 Variante B: 4 Fragen (Wohnfläche, Heizung, Dach, Dämmung)")
     
     # Google Drive Test
     drive_service = get_drive_service()

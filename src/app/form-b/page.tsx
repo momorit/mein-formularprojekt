@@ -2,61 +2,63 @@
 
 import React, { useState } from 'react'
 import Link from 'next/link'
-import { startDialog, sendDialogMessage, saveDialogData } from '@/lib/api'
-import type { DialogQuestion, DialogStartResponse, ChatMessage } from '@/lib/types'
+import { sendDialogMessage, saveDialogData } from '@/lib/api'
+import type { DialogQuestion, ChatMessage } from '@/lib/types'
+
+// Variante B: 4 Dialog-Fragen (2 leichte + 2 schwere, andere Themen als Variante A)
+const FIXED_QUESTIONS: DialogQuestion[] = [
+  {
+    question: "Wie groß ist die Wohnfläche Ihres Gebäudes insgesamt? (Bitte in Quadratmetern angeben, z.B. 120)",
+    field: "WOHNFLÄCHE",
+    difficulty: "leicht"
+  },
+  {
+    question: "Welche Art der Heizung ist in Ihrem Gebäude installiert? (z.B. Gas-Zentralheizung, Wärmepumpe, Fernwärme, Ölheizung)",
+    field: "HEIZUNGSART", 
+    difficulty: "leicht"
+  },
+  {
+    question: "Beschreiben Sie detailliert den Dachtyp und Dachzustand Ihres Gebäudes. Berücksichtigen Sie dabei: Art des Daches (Satteldach, Flachdach, Walmdach, etc.), Eindeckungsmaterial (Ziegel, Schiefer, Blech, etc.), Zustand der Dachrinnen, eventuelle Dachfenster oder Gauben, und ob das Dach bereits gedämmt ist.",
+    field: "DACHTYP_DETAIL",
+    difficulty: "schwer"
+  },
+  {
+    question: "Geben Sie eine umfassende Beschreibung der vorhandenen Isolierung und Dämmung Ihres Gebäudes. Berücksichtigen Sie dabei: Fassadendämmung (WDVS, Kerndämmung, oder keine), Dachdämmung (Zwischensparren, Aufsparren, oder Geschossdecke), Kellerdämmung, U-Werte falls bekannt, Zeitpunkt der Dämmarbeiten, und geplante Verbesserungen der Dämmung.",
+    field: "ISOLIERUNG_DETAIL",
+    difficulty: "schwer"
+  }
+]
 
 export default function FormBPage() {
-  const [context, setContext] = useState("")
-  const [pdfFile, setPdfFile] = useState<File | null>(null)
-  const [questions, setQuestions] = useState<DialogQuestion[]>([])
+  const [questions] = useState<DialogQuestion[]>(FIXED_QUESTIONS)
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
   const [answers, setAnswers] = useState<Record<string, string>>({})
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([])
   const [userInput, setUserInput] = useState("")
-  const [loading, setLoading] = useState(false)
   const [dialogActive, setDialogActive] = useState(false)
   const [dialogComplete, setDialogComplete] = useState(false)
-  const [autoSaving, setAutoSaving] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [completed, setCompleted] = useState(false)
   const [saveSuccess, setSaveSuccess] = useState("")
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file && file.type === 'application/pdf') {
-      setPdfFile(file)
-      setContext(prev => prev + (prev ? ' ' : '') + `[PDF hochgeladen: ${file.name}]`)
-    } else {
-      alert("Bitte laden Sie nur PDF-Dateien hoch")
-    }
-  }
-
-  const handleStartDialog = async () => {
-    if (!context.trim()) {
-      alert("Bitte geben Sie einen Kontext ein oder laden Sie eine PDF hoch")
-      return
-    }
-
-    setLoading(true)
+  const handleStartDialog = () => {
+    setDialogActive(true)
+    setCurrentQuestionIndex(0)
     
-    try {
-      const result: DialogStartResponse = await startDialog(context)
-      setQuestions(result.questions)
-      setCurrentQuestionIndex(0)
-      setDialogActive(true)
-      
-      // Erste Frage als Chat-Nachricht hinzufügen
-      const firstQuestion: ChatMessage = {
-        type: 'bot',
-        message: result.questions[0]?.question || "Beginnen wir mit den Fragen...",
-        timestamp: new Date()
-      }
-      setChatHistory([firstQuestion])
-      
-    } catch (error) {
-      console.error("Dialog-Start failed:", error)
-      alert("❌ Fehler beim Starten des Dialogs")
-    } finally {
-      setLoading(false)
+    // Willkommensnachricht und erste Frage
+    const welcomeMessage: ChatMessage = {
+      type: 'bot',
+      message: "Willkommen zur Gebäudeerfassung! Ich stelle Ihnen 4 Fragen zu Ihrem Gebäude. Sie können jederzeit '?' eingeben, um Hilfe zu einer Frage zu erhalten.",
+      timestamp: new Date()
     }
+    
+    const firstQuestion: ChatMessage = {
+      type: 'bot',
+      message: `Frage 1 von ${questions.length} (${questions[0].difficulty}): ${questions[0].question}`,
+      timestamp: new Date()
+    }
+    
+    setChatHistory([welcomeMessage, firstQuestion])
   }
 
   const handleSendMessage = async (e: React.FormEvent) => {
@@ -106,7 +108,7 @@ export default function FormBPage() {
           const nextQuestion = questions[response.questionIndex]
           const nextQuestionMessage: ChatMessage = {
             type: 'bot',
-            message: nextQuestion.question,
+            message: `Frage ${response.questionIndex + 1} von ${questions.length} (${nextQuestion.difficulty}): ${nextQuestion.question}`,
             timestamp: new Date()
           }
           setChatHistory(prev => [...prev, nextQuestionMessage])
@@ -117,8 +119,13 @@ export default function FormBPage() {
         setDialogComplete(true)
         setDialogActive(false)
         
-        // Automatisches Speichern nach Abschluss
-        await handleAutoSave()
+        // Zeige "Umfrage beenden" Button
+        const finishMessage: ChatMessage = {
+          type: 'bot',
+          message: "🎉 Alle Fragen beantwortet! Sie können nun die Umfrage beenden um Ihre Antworten zu speichern.",
+          timestamp: new Date()
+        }
+        setChatHistory(prev => [...prev, finishMessage])
       }
 
     } catch (error) {
@@ -134,50 +141,54 @@ export default function FormBPage() {
     setUserInput("")
   }
 
-  const handleAutoSave = async () => {
-    setAutoSaving(true)
-    setSaveSuccess("")
+  const handleFinishSurvey = async () => {
+    setSaving(true)
 
     try {
       const result = await saveDialogData(questions, answers, chatHistory)
-      setSaveSuccess(`✅ Dialog automatisch in Google Drive gespeichert!
-📁 Datei: ${result.filename}
-📂 Ordner: ${result.folder}
-🔗 Link: ${result.web_link ? 'Verfügbar' : 'Wird generiert...'}`)
       
-      // Optional: Nach Erfolg zur Startseite weiterleiten
-      setTimeout(() => {
-        if (confirm("Dialog erfolgreich abgeschlossen und gespeichert! Möchten Sie zur Startseite zurückkehren?")) {
-          window.location.href = '/'
-        }
-      }, 4000)
+      setSaveSuccess(`✅ Umfrage erfolgreich abgeschlossen und gespeichert!
+      
+📁 Ihre Daten wurden automatisch gespeichert.
+📂 Google Drive Ordner: ${result.folder}
+📄 Dateiname: ${result.filename}
+
+Sie können das Browserfenster jetzt schließen.`)
+      
+      setCompleted(true)
+      
     } catch (error) {
       console.error("Auto-Save error:", error)
-      setSaveSuccess("❌ Automatisches Speichern fehlgeschlagen. Versuchen Sie es manuell.")
+      setSaveSuccess("❌ Speichern fehlgeschlagen. Bitte versuchen Sie es erneut.")
     } finally {
-      setAutoSaving(false)
+      setSaving(false)
     }
   }
 
-  const handleManualSave = async () => {
-    await handleAutoSave()
-  }
-
-  const handleReset = () => {
-    if (confirm("Möchten Sie den Dialog wirklich zurücksetzen? Alle Antworten gehen verloren.")) {
-      setContext("")
-      setPdfFile(null)
-      setQuestions([])
-      setCurrentQuestionIndex(0)
-      setAnswers({})
-      setChatHistory([])
-      setUserInput("")
-      setLoading(false)
-      setDialogActive(false)
-      setDialogComplete(false)
-      setAutoSaving(false)
-      setSaveSuccess("")
-    }
+  if (completed) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-green-50 to-emerald-100 p-4">
+        <div className="max-w-2xl mx-auto">
+          <div className="bg-white rounded-xl shadow-lg p-8 text-center">
+            <div className="text-6xl mb-6">🎉</div>
+            <h1 className="text-2xl font-bold text-green-800 mb-4">
+              Umfrage erfolgreich abgeschlossen!
+            </h1>
+            <div className="bg-green-50 border border-green-200 rounded-lg p-6 mb-6">
+              <div className="text-green-800 whitespace-pre-line text-left">
+                {saveSuccess}
+              </div>
+            </div>
+            <p className="text-gray-600 mb-6">
+              Vielen Dank für Ihre Teilnahme an der Studie zur Gebäudeerfassung!
+            </p>
+            <div className="text-sm text-gray-500">
+              Sie können dieses Browserfenster jetzt schließen.
+            </div>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   const progress = questions.length > 0 ? (Object.keys(answers).length / questions.length) * 100 : 0
@@ -194,63 +205,39 @@ export default function FormBPage() {
             💬 Variante B: Dialog-System
           </h1>
           <p className="text-gray-600">
-            Interaktiver Dialog mit Schritt-für-Schritt Fragen
+            Interaktiver Dialog mit {questions.length} Fragen zur Gebäudeerfassung
           </p>
         </div>
 
         <div className="grid gap-8">
-          {/* Kontext & Setup */}
+          {/* Start-Button */}
           {!dialogActive && !dialogComplete && (
-            <div className="bg-white rounded-xl shadow-lg p-6">
+            <div className="bg-white rounded-xl shadow-lg p-6 text-center">
               <h2 className="text-xl font-semibold text-gray-800 mb-4">
-                1️⃣ Kontext & Material
+                🏢 Gebäudeerfassung - Dialog starten
               </h2>
               
               <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Kontext-Beschreibung
-                  </label>
-                  <textarea
-                    value={context}
-                    onChange={(e) => setContext(e.target.value)}
-                    placeholder="Beschreiben Sie, worüber Sie befragt werden möchten..."
-                    className="w-full h-32 p-4 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                    disabled={loading}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    PDF-Dokument hochladen (optional)
-                  </label>
-                  <input
-                    type="file"
-                    accept=".pdf"
-                    onChange={handleFileUpload}
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                    disabled={loading}
-                  />
-                  {pdfFile && (
-                    <div className="mt-2 text-sm text-green-600">
-                      ✅ {pdfFile.name} hochgeladen
-                    </div>
-                  )}
+                <p className="text-gray-600">
+                  Ich führe Sie durch {questions.length} Fragen zur Erfassung Ihres Gebäudes 
+                  für die energetische Sanierung.
+                </p>
+                
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-800">
+                  <strong>💡 Fragen-Überblick:</strong>
+                  <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+                    <div>• Wohnfläche (leicht)</div>
+                    <div>• Heizungsart (leicht)</div>
+                    <div>• Dachtyp & Details (schwer)</div>
+                    <div>• Isolierung & Dämmung (schwer)</div>
+                  </div>
                 </div>
 
                 <button
                   onClick={handleStartDialog}
-                  disabled={loading || !context.trim()}
-                  className="w-full bg-green-600 text-white py-3 px-6 rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors flex items-center justify-center"
+                  className="w-full bg-green-600 text-white py-3 px-6 rounded-lg hover:bg-green-700 transition-colors text-lg"
                 >
-                  {loading ? (
-                    <>
-                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
-                      Dialog wird vorbereitet...
-                    </>
-                  ) : (
-                    "🚀 Dialog starten"
-                  )}
+                  🚀 Dialog starten
                 </button>
               </div>
             </div>
@@ -261,10 +248,10 @@ export default function FormBPage() {
             <div className="bg-white rounded-xl shadow-lg p-6">
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-xl font-semibold text-gray-800">
-                  2️⃣ Dialog {dialogComplete ? "(Abgeschlossen)" : "(Aktiv)"}
+                  🏢 Gebäudeerfassung {dialogComplete ? "(Bereit zum Beenden)" : "(Aktiv)"}
                 </h2>
                 <div className="text-sm text-gray-600">
-                  Frage {Math.min(currentQuestionIndex + 1, questions.length)} von {questions.length}
+                  {Object.keys(answers).length}/{questions.length} Fragen beantwortet
                 </div>
               </div>
 
@@ -318,34 +305,27 @@ export default function FormBPage() {
                 </form>
               )}
 
-              {/* Auto-Save Status */}
-              {(dialogComplete || autoSaving) && (
-                <div className="space-y-4">
-                  {saveSuccess && (
-                    <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                      <div className="text-green-800 whitespace-pre-line">
-                        {saveSuccess}
-                      </div>
-                    </div>
-                  )}
+              {/* Umfrage beenden Button */}
+              {dialogComplete && (
+                <div className="mt-6">
+                  <button
+                    onClick={handleFinishSurvey}
+                    disabled={saving}
+                    className="w-full bg-green-600 text-white py-4 px-6 rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors text-lg font-medium flex items-center justify-center"
+                  >
+                    {saving ? (
+                      <>
+                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white mr-3"></div>
+                        Umfrage wird gespeichert...
+                      </>
+                    ) : (
+                      "🎯 Umfrage beenden"
+                    )}
+                  </button>
                   
-                  {autoSaving && (
-                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-center">
-                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600 mr-3"></div>
-                      <span className="text-blue-800">
-                        Speichere automatisch in Google Drive...
-                      </span>
-                    </div>
-                  )}
-                  
-                  {dialogComplete && !autoSaving && !saveSuccess && (
-                    <button
-                      onClick={handleManualSave}
-                      className="w-full bg-green-600 text-white py-3 px-6 rounded-lg hover:bg-green-700 transition-colors"
-                    >
-                      💾 Manuell in Google Drive speichern
-                    </button>
-                  )}
+                  <div className="text-sm text-gray-500 text-center mt-3">
+                    Ihre Daten werden automatisch und sicher gespeichert
+                  </div>
                 </div>
               )}
 
@@ -355,21 +335,10 @@ export default function FormBPage() {
                 <ul className="mt-2 space-y-1">
                   <li>• Antworten Sie natürlich auf die Fragen</li>
                   <li>• Schreiben Sie "?" für Hilfe zur aktuellen Frage</li>
-                  <li>• Ihre Daten werden automatisch in Google Drive gespeichert</li>
+                  <li>• Bei den schweren Fragen können Sie schätzen falls Sie unsicher sind</li>
+                  <li>• Seien Sie bei komplexen Fragen möglichst detailliert</li>
                 </ul>
               </div>
-            </div>
-          )}
-
-          {/* Reset-Button */}
-          {(dialogActive || dialogComplete) && (
-            <div className="text-center">
-              <button
-                onClick={handleReset}
-                className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                🔄 Dialog zurücksetzen
-              </button>
             </div>
           )}
         </div>
