@@ -426,6 +426,7 @@ async def dialog_message(request: DialogMessageRequest):
         
     except Exception as e:
         print(f"❌ Dialog-Message-Fehler: {e}")
+<<<<<<< HEAD
         raise HTTPException(status_code=500, detail="Dialog-Verarbeitung fehlgeschlagen")
 =======
         raise HTTPException(status_code=500, detail="Fehler beim Verarbeiten der Nachricht")
