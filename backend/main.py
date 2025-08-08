@@ -427,6 +427,29 @@ async def dialog_message(request: DialogMessageRequest):
     except Exception as e:
         print(f"❌ Dialog-Message-Fehler: {e}")
         raise HTTPException(status_code=500, detail="Dialog-Verarbeitung fehlgeschlagen")
+=======
+        raise HTTPException(status_code=500, detail="Fehler beim Verarbeiten der Nachricht")
+    
+@app.post("/api/save")
+async def save_form_data(request: SaveRequest):
+    """Speichert Formulardaten"""
+    try:
+        output_path = f"LLM Output/{request.filename}"
+        with open(output_path, 'w', encoding='utf-8') as f:
+            json.dump({
+                "instructions": request.instructions,
+                "values": request.values,
+                "timestamp": datetime.now().isoformat(),
+                "type": "form_data"
+            }, f, ensure_ascii=False, indent=2)
+        
+        return {"message": "Daten erfolgreich gespeichert", "filename": request.filename}#d
+    
+    except Exception as e:
+        print(f"❌ Speicher-Fehler: {e}")
+        raise HTTPException(status_code=500, detail="Fehler beim Speichern")
+
+>>>>>>> 2d4054c7063d489f85c5ffb14163299784a8dd0a
 
 @app.post("/api/dialog/save")
 async def save_dialog_data(request: DialogSaveRequest):
