@@ -1,4 +1,4 @@
-// src/app/study-analytics.ts - MINIMAL WORKING VERSION
+// src/app/study-analytics.ts - VOLLSTÄNDIG KORRIGIERTE VERSION
 
 import { useState, useEffect, useRef } from 'react'
 
