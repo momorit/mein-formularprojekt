@@ -3,6 +3,7 @@
 // src/app/study/page.tsx - VOLLSTÄNDIGE Study Page mit allen Schritten
 
 import { useState, useEffect, useRef } from 'react'
+import Link from 'next/link'
 import { 
   CheckCircle, 
   AlertCircle, 
@@ -1083,12 +1084,12 @@ export default function StudyPage() {
 
             {/* Optional: Link zur Homepage */}
             <div className="pt-4 border-t">
-              <a 
+              <Link 
                 href="/" 
                 className="text-blue-600 hover:text-blue-800 underline"
               >
                 Zurück zur Startseite
-              </a>
+              </Link>
             </div>
           </div>
         </div>

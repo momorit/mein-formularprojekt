@@ -1,4 +1,4 @@
-// src/app/study-analytics.ts - MINIMAL WORKING VERSION (NO ERRORS!)
+// src/app/study-analytics.ts - KOMPLETT KORREKTE VERSION
 
 import { useState, useEffect, useRef } from 'react'
 
@@ -84,6 +84,8 @@ export class StudyAnalytics {
     const errors = this.timer.events.filter(e => e.type === 'error').length
     const fieldsCompleted = Object.values(fieldsData).filter(v => v && String(v).trim()).length
     const totalFields = Object.keys(fieldsData).length
+    
+    // FIX: Vollständig ausgeschriebener ternärer Operator
     const completionRate = totalFields > 0 ? Math.round((fieldsCompleted / totalFields) * 100) : 0
 
     return {
