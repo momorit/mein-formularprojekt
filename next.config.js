@@ -2,7 +2,6 @@
 const nextConfig = {
   // Production-optimierte Konfiguration
   reactStrictMode: true,
-  swcMinify: true,
   
   // Custom redirects - leitet / automatisch zu /study weiter
   async redirects() {

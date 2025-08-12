@@ -1,4 +1,6 @@
-// src/lib/study-analytics.ts - Study Timer & Analytics System
+// src/app/study-analytics.ts - FIXED VERSION (TypeScript Error behoben)
+
+import { useState, useEffect, useRef } from 'react'
 
 export interface StudyTimer {
   startTime: Date | null
@@ -9,7 +11,7 @@ export interface StudyTimer {
 
 export interface StudyEvent {
   timestamp: Date
-  type: 'help_request' | 'field_focus' | 'field_complete' | 'error' | 'completion'
+  type: 'start' | 'help_request' | 'field_focus' | 'field_complete' | 'error' | 'completion'  // ✅ 'start' hinzugefügt
   data?: any
 }
 
@@ -40,7 +42,7 @@ export class StudyAnalytics {
 
   startTimer(): void {
     this.timer.startTime = new Date()
-    this.addEvent('start', { variant: this.variant, questionSet: this.questionSet })
+    this.addEvent('start', { variant: this.variant, questionSet: this.questionSet })  // ✅ Jetzt erlaubt
   }
 
   stopTimer(): number {
@@ -110,8 +112,6 @@ export class StudyAnalytics {
 }
 
 // React Hook für Study Analytics
-import { useState, useEffect, useRef } from 'react'
-
 export function useStudyAnalytics(variant: 'A' | 'B', questionSet: 'SET-A' | 'SET-B') {
   const analyticsRef = useRef<StudyAnalytics | null>(null)
   const [metrics, setMetrics] = useState<VariantMetrics | null>(null)
@@ -196,56 +196,30 @@ export const QUESTION_SETS = {
         label: 'ENERGIETRÄGER',
         question: 'Welcher Energieträger wird aktuell für die Heizung verwendet?',
         type: 'select',
-        options: ['Heizöl', 'Erdgas', 'Fernwärme', 'Wärmepumpe', 'Pellets', 'Strom', 'Sonstige'],
-        difficulty: 'medium'
-      }
-    ],
-    hard: [
-      {
-        id: 'u_wert',
-        label: 'U-WERT FASSADE',
-        question: 'Welcher U-Wert hat die Fassade aktuell? (W/m²K)',
-        type: 'number',
-        help: 'Der U-Wert beschreibt den Wärmedurchgangskoeffizienten. Typische Werte: 0,2-0,4 (gedämmt), 1,0-2,0 (ungedämmt)',
-        difficulty: 'hard',
-        hasUncertainty: true
-      }
-    ]
-  },
-  'SET-B': {
-    easy: [
-      {
-        id: 'gebaeudeseite',
-        label: 'GEBÄUDESEITE',
-        question: 'Welche Gebäudeseite soll hauptsächlich saniert werden?',
-        type: 'select',
-        options: ['Eingangsfassade (Straßenseite)', 'Hoffassade (Rückseite)', 'Seitenfassade links', 'Seitenfassade rechts', 'Alle Seiten'],
-        difficulty: 'easy'
-      }
-    ],
-    medium: [
-      {
-        id: 'material',
-        label: 'DÄMMATERIAL',
-        question: 'Welches Dämmaterial ist für die Sanierung vorgesehen?',
-        type: 'select',
-        options: ['Mineralwolle', 'Polystyrol (EPS)', 'Polyurethan (PUR)', 'Holzfaser', 'Noch nicht festgelegt'],
-        difficulty: 'medium'
+        options: ['Gas', 'Öl', 'Fernwärme', 'Strom', 'Wärmepumpe', 'Holz/Pellets', 'Solar'],
+        difficulty: 'medium',
+        help: 'Der hauptsächlich genutzte Energieträger für Raumheizung und Warmwasser.'
       },
       {
-        id: 'modernisiert',
-        label: 'BEREITS MODERNISIERT',
-        question: 'Wurden bereits Teile des Gebäudes energetisch modernisiert?',
-        type: 'radio',
-        options: ['Nein, noch nichts', 'Teilweise (Dachgeschoss)', 'Teilweise (einzelne Wohnungen)', 'Ja, größere Bereiche'],
+        id: 'fensterart',
+        label: 'FENSTERART',
+        question: 'Welche Art von Fenstern ist überwiegend verbaut?',
+        type: 'select',
+        options: [
+          'Einfachverglasung',
+          'Doppelverglasung (älter)',
+          'Wärmeschutzverglasung 2-fach',
+          'Wärmeschutzverglasung 3-fach',
+          'Gemischt (verschiedene Typen)'
+        ],
         difficulty: 'medium'
       }
     ],
     hard: [
       {
-        id: 'massnahme_art',
-        label: 'MASSNAHME-ART',
-        question: 'Welche Art der Fassadensanierung ist geplant?',
+        id: 'daemmsystem',
+        label: 'DÄMMUNGSYSTEM',
+        question: 'Welches Fassadendämmungssystem kommt zum Einsatz?',
         type: 'select',
         options: [
           'WDVS mit Putz',
@@ -257,6 +231,93 @@ export const QUESTION_SETS = {
         help: 'WDVS = Wärmedämmverbundsystem. Bei Unsicherheit wählen Sie die Kombination.',
         difficulty: 'hard',
         hasUncertainty: true
+      },
+      {
+        id: 'luftdichtheit',
+        label: 'LUFTDICHTHEIT',
+        question: 'Wie würden Sie die Luftdichtheit des Gebäudes einschätzen?',
+        type: 'select',
+        options: [
+          'Sehr gut (Blower-Door-Test n50 < 1,5)',
+          'Gut (wenig spürbare Zugluft)',
+          'Mittel (gelegentlich spürbare Zugluft)',
+          'Schlecht (deutlich spürbare Zugluft)',
+          'Sehr schlecht (starke Zugluft)'
+        ],
+        difficulty: 'hard',
+        help: 'Luftdichtheit beeinflusst den Energieverlust erheblich. Bei Unsicherheit: "Mittel" wählen.'
+      }
+    ]
+  },
+  'SET-B': {
+    easy: [
+      {
+        id: 'gebaeudeart',
+        label: 'GEBÄUDEART',
+        question: 'Um welche Art von Gebäude handelt es sich?',
+        type: 'select',
+        options: [
+          'Einfamilienhaus freistehend',
+          'Einfamilienhaus Doppelhaushälfte',
+          'Reihenhaus',
+          'Mehrfamilienhaus',
+          'Wohn- und Geschäftshaus'
+        ],
+        difficulty: 'easy'
+      },
+      {
+        id: 'baujahr',
+        label: 'BAUJAHR',
+        question: 'Aus welchem Jahr stammt das Gebäude?',
+        type: 'number',
+        help: 'Das ursprüngliche Baujahr (vor größeren Sanierungen)',
+        difficulty: 'easy'
+      }
+    ],
+    medium: [
+      {
+        id: 'wohnflaeche',
+        label: 'WOHNFLÄCHE',
+        question: 'Wie groß ist die Gesamtwohnfläche des Gebäudes?',
+        type: 'number',
+        unit: 'm²',
+        difficulty: 'medium',
+        help: 'Gesamte beheizte Wohnfläche aller Etagen.'
+      },
+      {
+        id: 'heizungsart',
+        label: 'HEIZUNGSART',
+        question: 'Welche Heizungsart ist aktuell installiert?',
+        type: 'select',
+        options: [
+          'Gas-Brennwertkessel',
+          'Gas-Niedertemperaturkessel',
+          'Öl-Brennwertkessel',
+          'Öl-Niedertemperaturkessel',
+          'Fernwärme',
+          'Wärmepumpe (Luft)',
+          'Wärmepumpe (Erdreich)',
+          'Nachtspeicherheizung',
+          'Kaminofen/Einzelöfen'
+        ],
+        difficulty: 'medium'
+      }
+    ],
+    hard: [
+      {
+        id: 'daemmzustand',
+        label: 'DÄMMZUSTAND',
+        question: 'Wie ist der aktuelle Dämmzustand des Gebäudes?',
+        type: 'select',
+        options: [
+          'Keine Dämmung vorhanden',
+          'Teilweise gedämmt (nur Dach oder Fassade)',
+          'Grunddämmung vorhanden (5-10 cm)',
+          'Gute Dämmung (10-20 cm)',
+          'Sehr gute Dämmung (>20 cm)'
+        ],
+        difficulty: 'hard',
+        help: 'Bezieht sich auf Außenwände, Dach und Kellerdecke zusammen.'
       }
     ]
   }
