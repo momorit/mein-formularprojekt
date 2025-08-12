@@ -1,241 +1,64 @@
-// src/app/study/page.tsx - COMPLETE VERSION
+// src/app/study/page.tsx - OPTIMIERTE VERSION (Interface-Fix)
 
 'use client'
 
 import React, { useState, useEffect } from 'react'
+import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { SUSQuestionnaire } from '@/components/Questionnaire/SUSQuestionnaire'
-import { CustomUsabilityItems } from '@/components/Questionnaire/CustomUsabilityItems'
-import { ComparisonQuestionnaire } from '@/components/Questionnaire/ComparisonQuestionnaire'
-import { DemographicsForm } from '@/components/Questionnaire/DemographicsForm'
-import { useTimingTracker } from '@/components/Questionnaire/TimingTracker'
 
-// Types
+type StudyStep = 'welcome' | 'overview' | 'scenario' | 'variant-selection' | 'complete'
+
 interface StudyData {
   participantId: string
-  randomization: 'A-B' | 'B-A'
   startTime: Date
-  demographics?: DemographicData
-  variantA?: VariantResponse
-  variantB?: VariantResponse
-  comparison?: ComparisonData
-  timingData?: any
+  scenarioAcknowledged: boolean
 }
-
-interface DemographicData {
-  age: string
-  role: string
-  experience: string
-  techAffinity: number
-  formularFrequency: string
-  device: string
-  browser: string
-}
-
-interface VariantResponse {
-  susResponses: Record<string, number>
-  customResponses: Record<string, number | string>
-  completedAt: Date
-  variant: 'A' | 'B'
-}
-
-interface ComparisonData {
-  responses: Record<string, string>
-  completedAt: Date
-}
-
-type StudyStep = 
-  | 'welcome' 
-  | 'demographics' 
-  | 'scenario' 
-  | 'variant-a' 
-  | 'questionnaire-a' 
-  | 'variant-b' 
-  | 'questionnaire-b' 
-  | 'comparison' 
-  | 'complete'
 
 export default function StudyPage() {
   const [currentStep, setCurrentStep] = useState<StudyStep>('welcome')
-  const [studyData, setStudyData] = useState<StudyData>(() => ({
+  const [studyData, setStudyData] = useState<StudyData>({
     participantId: generateParticipantId(),
-    randomization: Math.random() > 0.5 ? 'A-B' : 'B-A',
-    startTime: new Date()
-  }))
+    startTime: new Date(),
+    scenarioAcknowledged: false
+  })
 
-  const { 
-    timingData, 
-    startVariant, 
-    endVariant, 
-    startQuestionnaire, 
-    endQuestionnaire, 
-    finishStudy 
-  } = useTimingTracker()
-
-  // Auto-start timing for each step
-  useEffect(() => {
-    if (currentStep === 'demographics') {
-      startQuestionnaire('demographics')
-    } else if (currentStep === 'questionnaire-a') {
-      startQuestionnaire('variantA')
-    } else if (currentStep === 'questionnaire-b') {
-      startQuestionnaire('variantB')
-    } else if (currentStep === 'comparison') {
-      startQuestionnaire('comparison')
-    }
-  }, [currentStep])
-
-  // Generate unique participant ID
   function generateParticipantId(): string {
     const timestamp = Date.now().toString(36)
     const random = Math.random().toString(36).substr(2, 5)
     return `P_${timestamp}_${random}`.toUpperCase()
   }
 
-  // Get first variant based on randomization
-  const firstVariant = studyData.randomization === 'A-B' ? 'A' : 'B'
-  const secondVariant = studyData.randomization === 'A-B' ? 'B' : 'A'
-  const firstVariantName = firstVariant === 'A' ? 'Sichtbares Formular' : 'Dialog-System'
-  const secondVariantName = secondVariant === 'A' ? 'Sichtbares Formular' : 'Dialog-System'
-
-  // Render based on current step
+  // Render basierend auf aktuellem Schritt
   switch (currentStep) {
     case 'welcome':
-      return <WelcomeStep studyData={studyData} onProceed={() => setCurrentStep('demographics')} />
+      return <WelcomeStep onProceed={() => setCurrentStep('overview')} />
     
-    case 'demographics':
-      return (
-        <DemographicsStep 
-          studyData={studyData} 
-          onComplete={(demographics) => {
-            endQuestionnaire('demographics')
-            setStudyData(prev => ({ ...prev, demographics }))
-            setCurrentStep('scenario')
-          }} 
-        />
-      )
-    
+    case 'overview':
+      return <OverviewStep onProceed={() => setCurrentStep('scenario')} />
+      
     case 'scenario':
       return (
         <ScenarioStep 
-          studyData={studyData}
-          firstVariant={firstVariant}
-          firstVariantName={firstVariantName}
-          onProceed={() => {
-            startVariant(firstVariant as 'A' | 'B')
-            setCurrentStep(firstVariant === 'A' ? 'variant-a' : 'variant-b')
+          scenarioAcknowledged={studyData.scenarioAcknowledged}
+          onAcknowledge={() => {
+            setStudyData(prev => ({ ...prev, scenarioAcknowledged: true }))
+            setCurrentStep('variant-selection')
           }}
         />
       )
-    
-    case 'variant-a':
-      return (
-        <VariantTestStep
-          variant="A"
-          variantName="Sichtbares Formular"
-          redirectUrl="/form-a"
-          onComplete={() => {
-            endVariant('A')
-            setCurrentStep('questionnaire-a')
-          }}
-        />
-      )
-    
-    case 'variant-b':
-      return (
-        <VariantTestStep
-          variant="B"
-          variantName="Dialog-System"
-          redirectUrl="/form-b"
-          onComplete={() => {
-            endVariant('B')
-            setCurrentStep('questionnaire-b')
-          }}
-        />
-      )
-    
-    case 'questionnaire-a':
-      return (
-        <QuestionnaireStep
-          variant="A"
-          variantName="Sichtbares Formular"
-          onComplete={(responses) => {
-            endQuestionnaire('variantA')
-            setStudyData(prev => ({ 
-              ...prev, 
-              variantA: {
-                ...responses,
-                completedAt: new Date(),
-                variant: 'A'
-              }
-            }))
-            
-            // Go to second variant or comparison
-            if (secondVariant === 'B') {
-              startVariant('B')
-              setCurrentStep('variant-b')
-            } else if (secondVariant === 'A') {
-              // This shouldn't happen, but just in case
-              setCurrentStep('comparison')
-            } else {
-              setCurrentStep('comparison')
-            }
-          }}
-        />
-      )
-    
-    case 'questionnaire-b':
-  return (
-    <QuestionnaireStep
-      variant="B"
-      variantName="Dialog-System"
-      onComplete={(responses) => {
-        endQuestionnaire('variantB')
-        setStudyData(prev => ({ 
-          ...prev, 
-          variantB: {
-            ...responses,
-            completedAt: new Date(),
-            variant: 'B'
-          }
-        }))
-        
-        // ✅ FIX: Nach Variante B prüfen, ob Variante A noch getestet werden muss
-        if (!studyData.variantA) {
-          // Variante A noch nicht getestet → als nächstes A testen
-          startVariant('A')
-          setCurrentStep('variant-a')
-        } else {
-          // Beide Varianten getestet → zum Vergleich
-          setCurrentStep('comparison')
-        }
-      }}
-    />
-  )
-    
-    case 'comparison':
-      return (
-        <ComparisonStep
-          onComplete={(comparison) => {
-            endQuestionnaire('comparison')
-            setStudyData(prev => ({ ...prev, comparison }))
-            finishStudy()
-            setCurrentStep('complete')
-          }}
-        />
-      )
-    
-    case 'complete':
-      return <CompletionStep studyData={studyData} timingData={timingData} />
-    
+      
+    case 'variant-selection':
+      return <VariantSelectionStep studyData={studyData} />
+      
     default:
       return <div>Unbekannter Schritt</div>
   }
 }
 
-// Individual Step Components
-function WelcomeStep({ studyData, onProceed }: { studyData: StudyData, onProceed: () => void }) {
+// === INDIVIDUAL COMPONENTS ===
+
+function WelcomeStep({ onProceed }: { onProceed: () => void }) {
   const [consent, setConsent] = useState(false)
 
   return (
@@ -249,203 +72,70 @@ function WelcomeStep({ studyData, onProceed }: { studyData: StudyData, onProceed
             Vergleich verschiedener Formular-Interaktionen
           </p>
           <p className="text-sm text-gray-500 mt-2">
-            HAW Hamburg • Studienprojekt 2025
+            HAW Hamburg • Masterarbeit 2025 • Moritz Treu
           </p>
         </div>
 
-        <Card className="mb-8 shadow-lg">
+        <Card className="shadow-lg">
           <CardHeader className="bg-gradient-to-r from-blue-600 to-purple-600 text-white">
             <CardTitle className="text-2xl">Willkommen zur Studie</CardTitle>
             <p className="text-blue-100">
               Helfen Sie uns dabei, die beste Art der Formular-Interaktion zu finden!
             </p>
           </CardHeader>
-          <CardContent className="space-y-6 p-8">
-            
-            {/* Study Info */}
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
-              <h3 className="text-lg font-semibold text-blue-900 mb-4">📋 Was Sie erwartet:</h3>
-              <div className="grid md:grid-cols-2 gap-4 text-sm text-blue-800">
-                <div className="flex items-center">
-                  <span className="w-8 h-8 bg-blue-200 rounded-full flex items-center justify-center text-blue-900 font-bold mr-3">1</span>
-                  <span>Kurzer Fragebogen zu Ihrer Person (2-3 Min.)</span>
-                </div>
-                <div className="flex items-center">
-                  <span className="w-8 h-8 bg-blue-200 rounded-full flex items-center justify-center text-blue-900 font-bold mr-3">2</span>
-                  <span>Szenario-Beschreibung lesen (1 Min.)</span>
-                </div>
-                <div className="flex items-center">
-                  <span className="w-8 h-8 bg-blue-200 rounded-full flex items-center justify-center text-blue-900 font-bold mr-3">3</span>
-                  <span>2 verschiedene Formular-Varianten testen (8-10 Min.)</span>
-                </div>
-                <div className="flex items-center">
-                  <span className="w-8 h-8 bg-blue-200 rounded-full flex items-center justify-center text-blue-900 font-bold mr-3">4</span>
-                  <span>Bewertung und Vergleich (5-7 Min.)</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Time & Data Info */}
-            <div className="grid md:grid-cols-3 gap-6">
-              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                <h4 className="font-semibold text-green-900 mb-2 flex items-center">
-                  ⏱️ <span className="ml-2">Zeitaufwand</span>
-                </h4>
-                <p className="text-green-800 text-sm">Ca. 15-20 Minuten</p>
-              </div>
-              <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-                <h4 className="font-semibold text-purple-900 mb-2 flex items-center">
-                  📊 <span className="ml-2">Ihre Daten</span>
-                </h4>
-                <p className="text-purple-800 text-sm">Anonym & DSGVO-konform</p>
-              </div>
-              <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
-                <h4 className="font-semibold text-orange-900 mb-2 flex items-center">
-                  🎯 <span className="ml-2">Ziel</span>
-                </h4>
-                <p className="text-orange-800 text-sm">Bessere Formular-Designs</p>
-              </div>
-            </div>
-
-            {/* Participant Info */}
-            <div className="bg-gray-50 border border-gray-200 rounded-lg p-6">
-              <div className="grid md:grid-cols-2 gap-6">
-                <div>
-                  <h4 className="font-semibold text-gray-900 mb-2">🆔 Ihre Teilnehmer-ID:</h4>
-                  <p className="text-lg text-gray-700 font-mono bg-white px-3 py-2 rounded border">
-                    {studyData.participantId}
-                  </p>
-                </div>
-                <div>
-                  <h4 className="font-semibold text-gray-900 mb-2">🔄 Test-Reihenfolge:</h4>
-                  <p className="text-lg text-gray-700 bg-white px-3 py-2 rounded border">
-                    {studyData.randomization === 'A-B' ? 
-                      '1. Sichtbares Formular → 2. Dialog-System' : 
-                      '1. Dialog-System → 2. Sichtbares Formular'
-                    }
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* DSGVO Consent */}
-            <div className="border-2 border-gray-300 rounded-lg p-6 bg-white">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-                🔒 <span className="ml-2">Datenschutz & Einverständnis</span>
-              </h3>
-              
-              <div className="space-y-3 text-sm text-gray-700 mb-6">
-                <div className="flex items-start">
-                  <span className="text-green-600 mr-2">✓</span>
-                  <span><strong>Anonymität:</strong> Ihre Daten werden vollständig anonymisiert gespeichert</span>
-                </div>
-                <div className="flex items-start">
-                  <span className="text-green-600 mr-2">✓</span>
-                  <span><strong>Verwendung:</strong> Nur für wissenschaftliche Zwecke (Studienprojekt HAW Hamburg)</span>
-                </div>
-                <div className="flex items-start">
-                  <span className="text-green-600 mr-2">✓</span>
-                  <span><strong>Speicherung:</strong> Lokal in Ihrem Browser, keine Server-Übertragung</span>
-                </div>
-                <div className="flex items-start">
-                  <span className="text-green-600 mr-2">✓</span>
-                  <span><strong>Löschung:</strong> Sie können jederzeit abbrechen und Daten löschen</span>
-                </div>
+          <CardContent className="p-8">
+            <div className="space-y-6">
+              <div>
+                <h3 className="text-lg font-semibold mb-3">Was erwartet Sie?</h3>
+                <ul className="space-y-2 text-gray-700">
+                  <li className="flex items-center">
+                    <span className="w-2 h-2 bg-blue-500 rounded-full mr-3"></span>
+                    Test von zwei verschiedenen Formular-Systemen
+                  </li>
+                  <li className="flex items-center">
+                    <span className="w-2 h-2 bg-blue-500 rounded-full mr-3"></span>
+                    Ausfüllen eines Gebäude-Energieberatungsformulars
+                  </li>
+                  <li className="flex items-center">
+                    <span className="w-2 h-2 bg-blue-500 rounded-full mr-3"></span>
+                    Kurze Bewertung der beiden Systeme
+                  </li>
+                  <li className="flex items-center">
+                    <span className="w-2 h-2 bg-blue-500 rounded-full mr-3"></span>
+                    Geschätzte Dauer: 15-20 Minuten
+                  </li>
+                </ul>
               </div>
 
-              <label className="flex items-start space-x-3 cursor-pointer bg-blue-50 p-4 rounded-lg border border-blue-200">
-                <input
-                  type="checkbox"
-                  checked={consent}
+              <div className="bg-green-50 p-6 rounded-lg border border-green-200">
+                <h3 className="text-lg font-semibold text-green-800 mb-3">Datenschutz & Anonymität</h3>
+                <ul className="space-y-1 text-green-700 text-sm">
+                  <li>✅ Vollständig anonyme Teilnahme</li>
+                  <li>✅ DSGVO-konforme Datenspeicherung</li>
+                  <li>✅ Nur wissenschaftliche Nutzung der Daten</li>
+                  <li>✅ Jederzeit Studienabbruch möglich</li>
+                </ul>
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <input 
+                  type="checkbox" 
+                  id="consent" 
+                  checked={consent} 
                   onChange={(e) => setConsent(e.target.checked)}
-                  className="mt-1 w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                  className="w-4 h-4 text-blue-600" 
                 />
-                <span className="text-sm text-gray-700 leading-relaxed">
-                  <strong>Ich stimme zu:</strong> Ich habe die Datenschutzinformationen gelesen und verstanden. 
-                  Ich stimme der anonymen Datenerhebung für wissenschaftliche Zwecke zu. 
-                  Mir ist bewusst, dass ich jederzeit abbrechen kann.
-                </span>
-              </label>
-            </div>
+                <label htmlFor="consent" className="text-gray-700">
+                  Ich stimme der Teilnahme an der Studie zu und bin mit der anonymen Datenverarbeitung einverstanden.
+                </label>
+              </div>
 
-            {/* Start Button */}
-            <div className="text-center pt-6">
-              <Button
+              <Button 
                 onClick={onProceed}
                 disabled={!consent}
-                size="lg"
-                className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white px-12 py-4 text-lg font-semibold shadow-lg"
+                className="w-full bg-blue-600 hover:bg-blue-700 text-lg py-4"
               >
-                📋 Studie starten
-              </Button>
-              
-              {!consent && (
-                <p className="text-sm text-red-500 mt-3">
-                  ⚠️ Bitte stimmen Sie der Datenerhebung zu, um fortzufahren.
-                </p>
-              )}
-              
-              {consent && (
-                <p className="text-sm text-green-600 mt-3">
-                  ✅ Bereit zum Start! Klicken Sie den Button, um zu beginnen.
-                </p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    </div>
-  )
-}
-
-function DemographicsStep({ studyData, onComplete }: { studyData: StudyData, onComplete: (data: DemographicData) => void }) {
-  const [formData, setFormData] = useState<DemographicData>({
-    age: '',
-    role: '',
-    experience: '',
-    techAffinity: 0,
-    formularFrequency: '',
-    device: '',
-    browser: getBrowserName()
-  })
-
-  const isValid = () => {
-    return formData.age && 
-           formData.role && 
-           formData.experience && 
-           formData.techAffinity > 0 && 
-           formData.formularFrequency && 
-           formData.device
-  }
-
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 py-8">
-      <div className="max-w-4xl mx-auto px-4">
-        
-        {/* Header */}
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Schritt 1: Über Sie</h1>
-          <p className="text-gray-600">Teilnehmer-ID: <span className="font-mono">{studyData.participantId}</span></p>
-        </div>
-
-        <Card className="shadow-lg">
-          <CardContent className="p-8">
-            <DemographicsForm 
-              formData={formData}
-              onChange={setFormData}
-            />
-
-            <div className="flex justify-between items-center mt-8 pt-6 border-t border-gray-200">
-              <div className="text-sm text-gray-500">
-                Schritt 1 von 7 • Demografische Daten
-              </div>
-              <Button
-                onClick={() => onComplete(formData)}
-                disabled={!isValid()}
-                size="lg"
-                className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 px-8"
-              >
-                Weiter zum Szenario →
+                Studie beginnen
               </Button>
             </div>
           </CardContent>
@@ -455,511 +145,320 @@ function DemographicsStep({ studyData, onComplete }: { studyData: StudyData, onC
   )
 }
 
-function ScenarioStep({ studyData, firstVariant, firstVariantName, onProceed }: any) {
-  const [readComplete, setReadComplete] = useState(false)
-
+function OverviewStep({ onProceed }: { onProceed: () => void }) {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 py-8">
-      <div className="max-w-4xl mx-auto px-4">
-        
-        {/* Header */}
+      <div className="max-w-6xl mx-auto px-4">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Schritt 2: Ihr Szenario</h1>
-          <p className="text-gray-600">Teilnehmer-ID: <span className="font-mono">{studyData.participantId}</span></p>
-        </div>
-
-        <Card className="shadow-lg">
-          <CardHeader className="bg-gradient-to-r from-green-600 to-teal-600 text-white">
-            <CardTitle className="text-2xl">🏠 Ihr Testszenario</CardTitle>
-          </CardHeader>
-          <CardContent className="p-8 space-y-6">
-            
-            {/* Main Scenario */}
-            <div className="bg-green-50 border border-green-200 rounded-lg p-6">
-              <h3 className="text-xl font-semibold text-green-800 mb-4">🎭 Stellen Sie sich vor:</h3>
-              <div className="text-green-700 space-y-3">
-                <p className="text-lg leading-relaxed">
-                  Sie sind <strong>Eigentümer eines Mehrfamilienhauses</strong> aus den 1980er Jahren 
-                  mit 6 Wohneinheiten in Hamburg. Das Gebäude wird aktuell saniert.
-                </p>
-                <p>
-                  Sie müssen für die Stadtverwaltung ein <strong>Gebäudeerfassungsformular</strong> ausfüllen, 
-                  um Fördergelder für die energetische Sanierung zu beantragen.
-                </p>
-                <p>
-                  <strong>Sie haben alle nötigen Informationen zur Hand:</strong> Baupläne, 
-                  Energieausweis, Heizungsunterlagen, etc.
-                </p>
-              </div>
-            </div>
-
-            {/* Building Details */}
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
-              <h3 className="text-lg font-semibold text-blue-800 mb-3">🏢 Gebäudedaten (als Hilfe):</h3>
-              <div className="grid md:grid-cols-2 gap-4 text-sm text-blue-700">
-                <div>• <strong>Typ:</strong> Mehrfamilienhaus</div>
-                <div>• <strong>Baujahr:</strong> 1984</div>
-                <div>• <strong>Wohnfläche:</strong> ca. 480 m²</div>
-                <div>• <strong>Stockwerke:</strong> 3 + Keller</div>
-                <div>• <strong>Wohneinheiten:</strong> 6</div>
-                <div>• <strong>Heizung:</strong> Gas-Zentralheizung</div>
-                <div>• <strong>Dach:</strong> Satteldach, teilgedämmt</div>
-                <div>• <strong>Fenster:</strong> Kunststoff, Doppelverglasung</div>
-              </div>
-            </div>
-
-            {/* Instructions */}
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
-              <h3 className="text-lg font-semibold text-yellow-800 mb-3">📝 Ihre Aufgabe:</h3>
-              <div className="text-yellow-700 space-y-2">
-                <p>
-                  Bei unsicheren Angaben verwenden Sie die bereitgestellten 
-                  Informationen als Anhaltspunkt - Sie müssen teilweise <strong>schätzen oder nachfragen</strong>.
-                </p>
-                <p className="text-green-700 text-sm mt-2">
-                  💡 <em>Hinweis: Es gibt "Weiß ich nicht" und "Müsste ich nachschlagen" Optionen bei schwierigeren Fragen.</em>
-                </p>
-              </div>
-            </div>
-
-            {/* Next Steps */}
-            <div className="bg-purple-50 border border-purple-200 rounded-lg p-6">
-              <h3 className="text-lg font-semibold text-purple-900 mb-3">📋 Ihr Testablauf:</h3>
-              <div className="space-y-3 text-sm text-purple-700">
-                <div className="flex items-center">
-                  <span className="w-8 h-8 bg-purple-200 rounded-full flex items-center justify-center text-purple-900 font-bold mr-3 text-xs">1</span>
-                  <span>Sie testen <strong>Variante {firstVariant} ({firstVariantName})</strong></span>
-                </div>
-                <div className="flex items-center">
-                  <span className="w-8 h-8 bg-purple-200 rounded-full flex items-center justify-center text-purple-900 font-bold mr-3 text-xs">2</span>
-                  <span>Kurzer Fragebogen zu dieser Variante</span>
-                </div>
-                <div className="flex items-center">
-                  <span className="w-8 h-8 bg-purple-200 rounded-full flex items-center justify-center text-purple-900 font-bold mr-3 text-xs">3</span>
-                  <span>Variante {studyData.randomization === 'A-B' ? 'B' : 'A'} testen</span>
-                </div>
-                <div className="flex items-center">
-                  <span className="w-8 h-8 bg-purple-200 rounded-full flex items-center justify-center text-purple-900 font-bold mr-3 text-xs">4</span>
-                  <span>Fragebogen und direkter Vergleich</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Confirmation */}
-            <div className="border-2 border-gray-300 rounded-lg p-6 bg-white">
-              <label className="flex items-start space-x-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={readComplete}
-                  onChange={(e) => setReadComplete(e.target.checked)}
-                  className="mt-1 w-5 h-5 text-green-600 border-gray-300 rounded focus:ring-green-500"
-                />
-                <span className="text-sm text-gray-700 leading-relaxed">
-                  <strong>✅ Bereit zum Test:</strong> Ich habe das Szenario gelesen und verstanden. 
-                  Ich bin bereit, das Formular als Eigentümer des beschriebenen Mehrfamilienhauses auszufüllen.
-                </span>
-              </label>
-            </div>
-
-            {/* Action */}
-            <div className="flex justify-between items-center pt-6 border-t border-gray-200">
-              <div className="text-sm text-gray-500">
-                Schritt 2 von 7 • Szenario-Einführung
-              </div>
-              <Button
-                onClick={onProceed}
-                disabled={!readComplete}
-                size="lg"
-                className="bg-gradient-to-r from-green-600 to-teal-600 hover:from-green-700 hover:to-teal-700 px-8"
-              >
-                🚀 Variante {firstVariant} starten
-              </Button>
-            </div>
-            
-            {!readComplete && (
-              <p className="text-sm text-red-500 text-center">
-                ⚠️ Bitte bestätigen Sie, dass Sie das Szenario gelesen haben.
-              </p>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-    </div>
-  )
-}
-
-function VariantTestStep({ variant, variantName, redirectUrl, onComplete }: any) {
-  const [testStarted, setTestStarted] = useState(false)
-  
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 py-8">
-      <div className="max-w-4xl mx-auto px-4">
-        
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            Test: Variante {variant}
+          <h1 className="text-3xl font-bold text-gray-900 mb-4">
+            📋 Übersicht der Varianten
           </h1>
-          <p className="text-xl text-gray-600">{variantName}</p>
-        </div>
-
-        <Card className="shadow-lg">
-          <CardHeader className="bg-gradient-to-r from-purple-600 to-pink-600 text-white">
-            <CardTitle className="text-2xl">🚀 Bereit zum Testen</CardTitle>
-          </CardHeader>
-          <CardContent className="p-8 space-y-6">
-            
-            <div className="bg-purple-50 border border-purple-200 rounded-lg p-6">
-              <h3 className="text-lg font-semibold text-purple-800 mb-4">
-                📝 So geht's weiter:
-              </h3>
-              <div className="space-y-3 text-purple-700">
-                <div className="flex items-start">
-                  <span className="text-purple-600 mr-2 font-bold">1.</span>
-                  <span>Klicken Sie auf "Variante {variant} öffnen" (öffnet in neuem Tab)</span>
-                </div>
-                <div className="flex items-start">
-                  <span className="text-purple-600 mr-2 font-bold">2.</span>
-                  <span>Füllen Sie das Formular als Gebäude-Eigentümer aus</span>
-                </div>
-                <div className="flex items-start">
-                  <span className="text-purple-600 mr-2 font-bold">3.</span>
-                  <span>Kehren Sie hierher zurück und klicken "Test abgeschlossen"</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-              <p className="text-yellow-800 text-sm">
-                💡 <strong>Tipp:</strong> Nutzen Sie die Hilfe-Funktionen, falls Sie unsicher sind. 
-                Das ist Teil des Tests!
-              </p>
-            </div>
-            
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Button
-                onClick={() => {
-                  setTestStarted(true)
-                  window.open(redirectUrl, '_blank')
-                }}
-                size="lg"
-                className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 px-8"
-              >
-                📝 Variante {variant} öffnen
-              </Button>
-              
-              <Button
-                onClick={onComplete}
-                disabled={!testStarted}
-                variant={testStarted ? "default" : "outline"}
-                size="lg"
-                className={testStarted ? "bg-green-600 hover:bg-green-700 text-white px-8" : "px-8"}
-              >
-                ✅ Test abgeschlossen
-              </Button>
-            </div>
-
-            {!testStarted && (
-              <p className="text-sm text-gray-500 text-center">
-                Öffnen Sie zuerst die Variante, bevor Sie "Test abgeschlossen" klicken können.
-              </p>
-            )}
-
-            <div className="text-center pt-4 border-t border-gray-200">
-              <div className="text-sm text-gray-500">
-                Schritt {variant === 'A' ? '3' : '5'} von 7 • Variante {variant} testen
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    </div>
-  )
-}
-
-function QuestionnaireStep({ 
-  variant, 
-  variantName, 
-  onComplete 
-}: { 
-  variant: 'A' | 'B'
-  variantName: string 
-  onComplete: (responses: { susResponses: Record<string, number>, customResponses: Record<string, number | string> }) => void 
-}) {
-  const [susResponses, setSusResponses] = useState<Record<string, number>>({})
-  const [customResponses, setCustomResponses] = useState<Record<string, number | string>>({})
-  const [currentSection, setCurrentSection] = useState<'sus' | 'custom'>('sus')
-
-  const handleNext = () => {
-    if (currentSection === 'sus') {
-      setCurrentSection('custom')
-    } else {
-      onComplete({ susResponses, customResponses })
-    }
-  }
-
-  const handleBack = () => {
-    setCurrentSection('sus')
-  }
-
-  const isSUSComplete = () => {
-    return Object.keys(susResponses).filter(key => key.startsWith('sus_')).length === 10
-  }
-
-  const isCustomComplete = () => {
-    const requiredKeys = ['helpfulness', 'efficiency', 'trust', 'frustration', 'satisfaction']
-    return requiredKeys.every(key => customResponses[key] && customResponses[key] !== 0)
-  }
-
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 py-8">
-      <div className="max-w-4xl mx-auto px-4">
-        
-        {/* Header */}
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            Bewertung: {variantName}
-          </h1>
-          <p className="text-gray-600">
-            {currentSection === 'sus' ? 'System Usability Scale (SUS)' : 'Spezifische Bewertung'}
+          <p className="text-lg text-gray-600">
+            Sie werden zwei verschiedene Ansätze für das Ausfüllen von Formularen testen
           </p>
         </div>
 
-        <Card className="shadow-lg">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-xl text-gray-900">
-                Fragebogen zu Variante {variant}
-              </CardTitle>
-              <div className="text-sm text-gray-500">
-                Teil {currentSection === 'sus' ? '1' : '2'} von 2
+        <div className="grid md:grid-cols-2 gap-8 mb-8">
+          {/* Variante A Erklärung */}
+          <Card className="shadow-xl border-2 border-blue-200">
+            <CardHeader className="bg-gradient-to-r from-blue-500 to-blue-600 text-white">
+              <div className="flex items-center space-x-3">
+                <div className="w-12 h-12 bg-white bg-opacity-20 rounded-xl flex items-center justify-center">
+                  <span className="text-white font-bold text-xl">A</span>
+                </div>
+                <div>
+                  <CardTitle className="text-2xl">Sichtbares Formular</CardTitle>
+                  <p className="text-blue-100">Traditioneller Ansatz mit KI-Unterstützung</p>
+                </div>
               </div>
-            </div>
-            <div className="w-full bg-gray-200 rounded-full h-3 mt-4">
-              <div 
-                className="bg-gradient-to-r from-blue-600 to-purple-600 h-3 rounded-full transition-all duration-500"
-                style={{ width: currentSection === 'sus' ? '50%' : '100%' }}
-              />
-            </div>
-          </CardHeader>
-          <CardContent className="p-8">
-            {currentSection === 'sus' ? (
-              <SUSQuestionnaire
-                responses={susResponses}
-                onChange={setSusResponses}
-                variantName={variantName}
-              />
-            ) : (
-              <CustomUsabilityItems
-                responses={customResponses}
-                onChange={setCustomResponses}
-              />
-            )}
+            </CardHeader>
+            <CardContent className="p-6">
+              <div className="space-y-4">
+                <div>
+                  <h4 className="font-semibold text-gray-800 mb-2">🎯 Konzept</h4>
+                  <p className="text-gray-600 text-sm">
+                    Ein klassisches Formular, bei dem alle Felder sichtbar sind. Ein KI-Chat-Assistent 
+                    hilft bei spezifischen Fragen und gibt kontextuelle Unterstützung.
+                  </p>
+                </div>
+                <div>
+                  <h4 className="font-semibold text-gray-800 mb-2">⚡ Vorteile</h4>
+                  <ul className="text-sm text-gray-600 space-y-1">
+                    <li>• Vollständige Übersicht über alle Felder</li>
+                    <li>• Freie Navigationsreihenfolge</li>
+                    <li>• Vertraute Benutzeroberfläche</li>
+                    <li>• KI-Hilfe bei Bedarf verfügbar</li>
+                  </ul>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
 
-            <div className="flex justify-between items-center mt-8 pt-6 border-t border-gray-200">
-              <div className="text-sm text-gray-500">
-                Schritt {variant === 'A' ? '4' : '6'} von 7 • Fragebogen {variant}
+          {/* Variante B Erklärung */}
+          <Card className="shadow-xl border-2 border-green-200">
+            <CardHeader className="bg-gradient-to-r from-green-500 to-green-600 text-white">
+              <div className="flex items-center space-x-3">
+                <div className="w-12 h-12 bg-white bg-opacity-20 rounded-xl flex items-center justify-center">
+                  <span className="text-white font-bold text-xl">B</span>
+                </div>
+                <div>
+                  <CardTitle className="text-2xl">Dialog-System</CardTitle>
+                  <p className="text-green-100">Konversationeller Ansatz</p>
+                </div>
               </div>
-              
-              <div className="flex gap-4">
-                {currentSection === 'custom' && (
-                  <Button
-                    onClick={handleBack}
-                    variant="outline"
-                    size="lg"
-                  >
-                    ← Zurück
-                  </Button>
-                )}
-                <Button
-                  onClick={handleNext}
-                  disabled={currentSection === 'sus' ? !isSUSComplete() : !isCustomComplete()}
-                  size="lg"
-                  className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 px-8"
-                >
-                  {currentSection === 'sus' ? 'Weiter →' : 'Fragebogen abschließen →'}
-                </Button>
+            </CardHeader>
+            <CardContent className="p-6">
+              <div className="space-y-4">
+                <div>
+                  <h4 className="font-semibold text-gray-800 mb-2">🎯 Konzept</h4>
+                  <p className="text-gray-600 text-sm">
+                    Die KI führt Sie durch einen strukturierten Dialog und stellt nacheinander 
+                    alle notwendigen Fragen. Das System passt sich dynamisch Ihren Antworten an.
+                  </p>
+                </div>
+                <div>
+                  <h4 className="font-semibold text-gray-800 mb-2">⚡ Vorteile</h4>
+                  <ul className="text-sm text-gray-600 space-y-1">
+                    <li>• Geführter Prozess ohne Überforderung</li>
+                    <li>• Kontextuelle Nachfragen</li>
+                    <li>• Intelligente Anpassung</li>
+                    <li>• Natürliche Konversation</li>
+                  </ul>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        <Card className="shadow-lg bg-yellow-50 border-yellow-200">
+          <CardContent className="p-6">
+            <div className="flex items-start space-x-3">
+              <div className="text-yellow-600 text-2xl">💡</div>
+              <div>
+                <h3 className="font-semibold text-yellow-800 mb-2">Ablauf der Studie</h3>
+                <ol className="list-decimal list-inside space-y-1 text-yellow-700 text-sm">
+                  <li>Szenario-Briefing lesen</li>
+                  <li>Eine der beiden Varianten testen</li>
+                  <li>Die andere Variante testen</li>
+                  <li>Kurze Bewertung der Systeme</li>
+                  <li>Abschluss und Dankeschön</li>
+                </ol>
               </div>
             </div>
           </CardContent>
         </Card>
+
+        <div className="text-center mt-8">
+          <Button 
+            onClick={onProceed}
+            className="bg-purple-600 hover:bg-purple-700 text-white text-lg py-4 px-8"
+          >
+            Weiter zum Szenario →
+          </Button>
+        </div>
       </div>
     </div>
   )
 }
 
-function ComparisonStep({ onComplete }: { onComplete: (comparison: ComparisonData) => void }) {
-  const [responses, setResponses] = useState<Record<string, string>>({})
-
-  const isComplete = () => {
-    const required = ['speed', 'understandability', 'pleasantness', 'helpfulness', 'future_preference', 'overall_rating']
-    return required.every(key => responses[key])
-  }
-
-  const handleComplete = () => {
-    onComplete({
-      responses,
-      completedAt: new Date()
-    })
-  }
+function ScenarioStep({ scenarioAcknowledged, onAcknowledge }: { 
+  scenarioAcknowledged: boolean, 
+  onAcknowledge: () => void 
+}) {
+  const [showScenario, setShowScenario] = useState(true)
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 py-8">
       <div className="max-w-4xl mx-auto px-4">
-        
-        {/* Header */}
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Vergleich der Varianten</h1>
-          <p className="text-gray-600">Welche Variante hat Ihnen besser gefallen?</p>
+          <h1 className="text-3xl font-bold text-gray-900 mb-4">
+            🏠 Szenario-Briefing
+          </h1>
+          <p className="text-lg text-gray-600">
+            Bitte lesen Sie das folgende Szenario aufmerksam durch
+          </p>
         </div>
 
-        <Card className="shadow-lg">
-          <CardHeader className="bg-gradient-to-r from-purple-600 to-pink-600 text-white">
-            <CardTitle className="text-2xl">⚖️ Direkter Vergleich</CardTitle>
-            <p className="text-purple-100">
-              Vergleichen Sie das sichtbare Formular (A) mit dem Dialog-System (B)
-            </p>
-          </CardHeader>
-          <CardContent className="p-8">
-            <ComparisonQuestionnaire
-              responses={responses}
-              onChange={setResponses}
-            />
+        {/* Szenario-Anzeige */}
+        {showScenario && (
+          <Card className="shadow-xl mb-6">
+            <CardHeader className="bg-gradient-to-r from-orange-500 to-red-500 text-white">
+              <CardTitle className="text-2xl">🏢 Ihr Szenario</CardTitle>
+              <p className="text-orange-100">
+                Stellen Sie sich vor, Sie befinden sich in folgender Situation...
+              </p>
+            </CardHeader>
+            <CardContent className="p-8">
+              <div className="prose max-w-none">
+                <p className="text-lg leading-relaxed text-gray-800 mb-4">
+                  Sie sind Eigentümer:in eines <strong>älteren Einfamilienhauses aus den 1970er Jahren</strong> 
+                  und möchten eine <strong>energetische Sanierung</strong> durchführen lassen, um Heizkosten zu sparen 
+                  und den CO₂-Ausstoß zu reduzieren.
+                </p>
+                
+                <p className="text-lg leading-relaxed text-gray-800 mb-4">
+                  Um staatliche <strong>Fördergelder</strong> zu beantragen, benötigen Sie eine 
+                  professionelle <strong>Energieberatung</strong>. Der Berater hat Ihnen ein 
+                  Formular geschickt, das Sie vorab ausfüllen sollen.
+                </p>
 
-            <div className="flex justify-between items-center mt-8 pt-6 border-t border-gray-200">
-              <div className="text-sm text-gray-500">
-                Schritt 7 von 7 • Vergleich & Abschluss
+                <div className="bg-blue-50 p-6 rounded-lg border-l-4 border-blue-400 my-6">
+                  <h4 className="font-semibold text-blue-800 mb-2">📝 Ihre Aufgabe</h4>
+                  <p className="text-blue-700">
+                    Füllen Sie das <strong>Gebäude-Erfassungsformular</strong> mit den Informationen 
+                    zu Ihrem Haus aus. Sie können gerne realistische Daten verwenden oder sich 
+                    plausible Werte ausdenken.
+                  </p>
+                </div>
+
+                <div className="bg-green-50 p-6 rounded-lg border-l-4 border-green-400">
+                  <h4 className="font-semibold text-green-800 mb-2">💭 Denken Sie daran</h4>
+                  <ul className="text-green-700 space-y-1">
+                    <li>• Es geht um <strong>Ihr eigenes Haus</strong> (1970er Jahre)</li>
+                    <li>• Sie möchten eine <strong>energetische Sanierung</strong></li>
+                    <li>• Das Formular dient der <strong>Energieberatung</strong></li>
+                    <li>• <strong>Fördergelder</strong> sollen beantragt werden</li>
+                  </ul>
+                </div>
               </div>
-              <Button
-                onClick={handleComplete}
-                disabled={!isComplete()}
-                size="lg"
-                className="bg-gradient-to-r from-green-600 to-teal-600 hover:from-green-700 hover:to-teal-700 px-12 py-4 text-lg font-semibold"
-              >
-                🎉 Studie abschließen
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Buttons */}
+        <div className="flex justify-center space-x-4">
+          {scenarioAcknowledged && (
+            <Button
+              onClick={() => setShowScenario(!showScenario)}
+              variant="outline"
+              className="border-blue-300 text-blue-600 hover:bg-blue-50"
+            >
+              {showScenario ? "Szenario minimieren" : "Szenario erneut anzeigen"}
+            </Button>
+          )}
+          
+          {!scenarioAcknowledged ? (
+            <Button 
+              onClick={onAcknowledge}
+              className="bg-green-600 hover:bg-green-700 text-white text-lg py-3 px-8"
+            >
+              Verstanden, weiter zu den Varianten →
+            </Button>
+          ) : showScenario ? (
+            <Button 
+              onClick={() => setShowScenario(false)}
+              className="bg-blue-600 hover:bg-blue-700 text-white text-lg py-3 px-8"
+            >
+              Weiter zu den Varianten →
+            </Button>
+          ) : null}
+        </div>
       </div>
     </div>
   )
 }
 
-function CompletionStep({ studyData, timingData }: { studyData: StudyData, timingData: any }) {
-  const saveStudyData = () => {
-    const finalData = {
-      ...studyData,
-      timingData,
-      completedAt: new Date()
-    }
-    
-    // Save to localStorage
-    localStorage.setItem(`study_${studyData.participantId}`, JSON.stringify(finalData))
-    
-    // Download as JSON
-    const blob = new Blob([JSON.stringify(finalData, null, 2)], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `FormularIQ_Study_${studyData.participantId}.json`
-    a.click()
-    URL.revokeObjectURL(url)
-  }
-
-  const totalMinutes = timingData.totalDuration ? Math.round(timingData.totalDuration / 1000 / 60) : 0
-
+function VariantSelectionStep({ studyData }: { studyData: StudyData }) {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 py-8">
-      <div className="max-w-4xl mx-auto px-4">
-        <Card className="shadow-xl">
-          <CardHeader className="bg-gradient-to-r from-green-600 to-teal-600 text-white text-center py-12">
-            <CardTitle className="text-4xl mb-4">
-              🎉 Herzlichen Dank!
-            </CardTitle>
-            <p className="text-xl text-green-100">
-              Sie haben die FormularIQ Studie erfolgreich abgeschlossen!
-            </p>
-          </CardHeader>
-          <CardContent className="text-center space-y-8 p-12">
-            
-            <p className="text-xl text-gray-700 leading-relaxed">
-              Ihre Teilnahme hilft uns dabei, bessere und benutzerfreundlichere 
-              Formular-Interfaces zu entwickeln. Vielen Dank für Ihre Zeit und Ihr wertvolles Feedback!
-            </p>
-            
-            {/* Results Summary */}
-            <div className="bg-green-50 border border-green-200 rounded-xl p-8">
-              <h3 className="text-2xl font-semibold text-green-900 mb-6">📊 Ihre Studien-Zusammenfassung</h3>
-              <div className="grid md:grid-cols-2 gap-6 text-left">
-                <div className="bg-white rounded-lg p-4 border border-green-200">
-                  <h4 className="font-semibold text-green-800 mb-2">🆔 Teilnehmer-Daten</h4>
-                  <p className="text-sm text-gray-700 font-mono">{studyData.participantId}</p>
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 py-8">
+      <div className="max-w-6xl mx-auto px-4">
+        <div className="text-center mb-8">
+          <h1 className="text-3xl font-bold text-gray-900 mb-4">
+            🚀 Varianten-Test
+          </h1>
+          <p className="text-lg text-gray-600 mb-2">
+            Wählen Sie eine der beiden Varianten zum Starten
+          </p>
+          <p className="text-sm text-gray-500">
+            Sie können beide Varianten in beliebiger Reihenfolge testen
+          </p>
+        </div>
+
+        <div className="grid md:grid-cols-2 gap-8">
+          {/* Variante A */}
+          <Card className="shadow-xl border-2 border-blue-200 hover:shadow-2xl transition-all group">
+            <CardHeader className="bg-gradient-to-r from-blue-500 to-blue-600 text-white">
+              <div className="flex items-center space-x-3">
+                <div className="w-12 h-12 bg-white bg-opacity-20 rounded-xl flex items-center justify-center">
+                  <span className="text-white font-bold text-xl">A</span>
                 </div>
-                <div className="bg-white rounded-lg p-4 border border-green-200">
-                  <h4 className="font-semibold text-green-800 mb-2">⏱️ Gesamtdauer</h4>
-                  <p className="text-sm text-gray-700">{totalMinutes} Minuten</p>
-                </div>
-                <div className="bg-white rounded-lg p-4 border border-green-200">
-                  <h4 className="font-semibold text-green-800 mb-2">🔄 Test-Reihenfolge</h4>
-                  <p className="text-sm text-gray-700">{studyData.randomization}</p>
-                </div>
-                <div className="bg-white rounded-lg p-4 border border-green-200">
-                  <h4 className="font-semibold text-green-800 mb-2">✅ Status</h4>
-                  <p className="text-sm text-green-700 font-semibold">Vollständig abgeschlossen</p>
+                <div>
+                  <CardTitle className="text-2xl">Sichtbares Formular</CardTitle>
+                  <p className="text-blue-100">Klassische Ansicht mit KI-Chat</p>
                 </div>
               </div>
-            </div>
+            </CardHeader>
+            <CardContent className="p-8">
+              <div className="space-y-6">
+                <div className="text-center">
+                  <p className="text-gray-600 mb-6">
+                    Alle Formularfelder sind sichtbar. Ein KI-Assistent hilft bei Fragen.
+                  </p>
+                </div>
 
-            {/* Actions */}
-            <div className="space-y-4">
-              <Button 
-                onClick={saveStudyData} 
-                size="lg"
-                className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 px-8 py-4 text-lg font-semibold"
-              >
-                📥 Studiendaten herunterladen
-              </Button>
-              
-              <p className="text-sm text-gray-500">
-                Optional: Laden Sie Ihre anonymisierten Studiendaten als JSON-Datei herunter.
+                <Link 
+                  href="/form-a"
+                  className="block w-full bg-blue-600 text-white py-4 px-6 rounded-xl hover:bg-blue-700 transition-colors text-lg font-medium text-center group-hover:bg-blue-700"
+                >
+                  <svg className="w-5 h-5 mr-2 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                  </svg>
+                  Variante A starten
+                </Link>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Variante B */}
+          <Card className="shadow-xl border-2 border-green-200 hover:shadow-2xl transition-all group">
+            <CardHeader className="bg-gradient-to-r from-green-500 to-green-600 text-white">
+              <div className="flex items-center space-x-3">
+                <div className="w-12 h-12 bg-white bg-opacity-20 rounded-xl flex items-center justify-center">
+                  <span className="text-white font-bold text-xl">B</span>
+                </div>
+                <div>
+                  <CardTitle className="text-2xl">Dialog-System</CardTitle>
+                  <p className="text-green-100">Konversationeller Ansatz</p>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="p-8">
+              <div className="space-y-6">
+                <div className="text-center">
+                  <p className="text-gray-600 mb-6">
+                    Die KI führt Sie durch einen strukturierten Dialog mit gezielten Fragen.
+                  </p>
+                </div>
+
+                <Link
+                  href="/form-b"
+                  className="block w-full bg-green-600 text-white py-4 px-6 rounded-xl hover:bg-green-700 transition-colors text-lg font-medium text-center group-hover:bg-green-700"
+                >
+                  <svg className="w-5 h-5 mr-2 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                  </svg>
+                  Variante B starten
+                </Link>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="mt-8 text-center">
+          <Card className="bg-yellow-50 border-yellow-200 shadow-lg">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-center space-x-3 mb-4">
+                <div className="text-yellow-600 text-2xl">💡</div>
+                <h3 className="font-semibold text-yellow-800">Hinweis</h3>
+              </div>
+              <p className="text-yellow-700 text-sm">
+                Nach Abschluss einer Variante kehren Sie automatisch hierher zurück, 
+                um die andere Variante zu testen. Am Ende folgt eine kurze Bewertung beider Systeme.
               </p>
-            </div>
-
-            {/* Thank you message */}
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
-              <h4 className="text-lg font-semibold text-blue-900 mb-2">
-                🙏 Danke für Ihre Unterstützung
-              </h4>
-              <p className="text-blue-700 text-sm">
-                Diese Studie ist Teil eines Studienprojekts an der HAW Hamburg. 
-                Ihre Daten werden ausschließlich für wissenschaftliche Zwecke verwendet 
-                und helfen dabei, die Zukunft der digitalen Formular-Interaktion zu gestalten.
-              </p>
-            </div>
-
-            {/* Navigation */}
-            <div className="pt-6 border-t border-gray-200">
-              <Button
-                onClick={() => window.location.href = '/'}
-                variant="outline"
-                size="lg"
-              >
-                🏠 Zur Startseite
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
   )
-}
-
-// Helper function
-function getBrowserName(): string {
-  const userAgent = navigator.userAgent
-  if (userAgent.includes('Chrome') && !userAgent.includes('Edg')) return 'Chrome'
-  if (userAgent.includes('Firefox')) return 'Firefox'
-  if (userAgent.includes('Safari') && !userAgent.includes('Chrome')) return 'Safari'
-  if (userAgent.includes('Edg')) return 'Edge'
-  return 'Unbekannt'
 }
