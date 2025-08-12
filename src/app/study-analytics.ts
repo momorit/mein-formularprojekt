@@ -1,0 +1,1 @@
+export const useStudyAnalytics = () => ({ trackHelpRequest: () => {}, trackFieldFocus: () => {}, trackFieldComplete: () => {}, trackError: () => {}, finishAndGetMetrics: () => ({ timer: {}, fieldsCompleted: 0, totalFields: 0, helpRequests: 0, errors: 0, completionRate: 0 }), exportData: () => null, metrics: null }); export const StudyTimerDisplay = () => null;
