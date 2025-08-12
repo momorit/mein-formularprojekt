@@ -855,8 +855,14 @@ export default function StudyPage() {
         return
       }
 
+      // FIX: Explizite Typisierung für comparisonData
       const comparisonData = {
-        ...comparison,
+        speed: comparison.speed as 'A' | 'B' | 'equal',
+        understandability: comparison.understandability as 'A' | 'B' | 'equal',
+        pleasantness: comparison.pleasantness as 'A' | 'B' | 'equal',
+        helpfulness: comparison.helpfulness as 'A' | 'B' | 'equal',
+        future_preference: comparison.future_preference as 'A_strong' | 'A_slight' | 'neutral' | 'B_slight' | 'B_strong',
+        comments: comparison.comments || '',
         completedAt: new Date()
       }
       
