@@ -1,4 +1,4 @@
-// src/app/study-analytics.ts - KOMPLETT NEUE FEHLERFREIE VERSIONdd
+// src/app/study-analytics.ts - MINIMAL SAFE VERSION
 import { useState, useEffect, useRef } from 'react'
 
 export interface StudyTimer {
@@ -10,7 +10,7 @@ export interface StudyTimer {
 
 export interface StudyEvent {
   timestamp: Date
-  type: 'start' | 'help_request' | 'field_focus' | 'field_complete' | 'error' | 'completion'
+  type: string
   data?: any
 }
 
@@ -25,10 +25,10 @@ export interface VariantMetrics {
 
 export class StudyAnalytics {
   private timer: StudyTimer
-  private variant: 'A' | 'B'
-  private questionSet: 'SET-A' | 'SET-B'
+  private variant: string
+  private questionSet: string
 
-  constructor(variant: 'A' | 'B', questionSet: 'SET-A' | 'SET-B') {
+  constructor(variant: string, questionSet: string) {
     this.variant = variant
     this.questionSet = questionSet
     this.timer = {
@@ -39,12 +39,12 @@ export class StudyAnalytics {
     }
   }
 
-  startTimer(): void {
+  startTimer() {
     this.timer.startTime = new Date()
-    this.addEvent('start', { variant: this.variant, questionSet: this.questionSet })
+    this.addEvent('start', { variant: this.variant })
   }
 
-  stopTimer(): number {
+  stopTimer() {
     if (!this.timer.startTime) return 0
     
     this.timer.endTime = new Date()
@@ -54,7 +54,7 @@ export class StudyAnalytics {
     return this.timer.duration
   }
 
-  addEvent(type: StudyEvent['type'], data?: any): void {
+  addEvent(type: string, data?: any) {
     this.timer.events.push({
       timestamp: new Date(),
       type,
@@ -62,23 +62,23 @@ export class StudyAnalytics {
     })
   }
 
-  trackHelpRequest(fieldName?: string): void {
+  trackHelpRequest(fieldName?: string) {
     this.addEvent('help_request', { field: fieldName })
   }
 
-  trackFieldFocus(fieldName: string): void {
+  trackFieldFocus(fieldName: string) {
     this.addEvent('field_focus', { field: fieldName })
   }
 
-  trackFieldComplete(fieldName: string, value: string): void {
+  trackFieldComplete(fieldName: string, value: string) {
     this.addEvent('field_complete', { field: fieldName, value })
   }
 
-  trackError(errorType: string, fieldName?: string): void {
+  trackError(errorType: string, fieldName?: string) {
     this.addEvent('error', { errorType, field: fieldName })
   }
 
-  getMetrics(fieldsData: any): VariantMetrics {
+  getMetrics(fieldsData: any) {
     const helpRequests = this.timer.events.filter(e => e.type === 'help_request').length
     const errors = this.timer.events.filter(e => e.type === 'error').length
     const fieldsCompleted = Object.values(fieldsData).filter(v => v && String(v).trim()).length
@@ -89,7 +89,7 @@ export class StudyAnalytics {
       completionRate = Math.round((fieldsCompleted / totalFields) * 100)
     }
 
-    return {
+    const result: VariantMetrics = {
       timer: this.timer,
       fieldsCompleted,
       totalFields,
@@ -97,9 +97,11 @@ export class StudyAnalytics {
       errors,
       completionRate
     }
+
+    return result
   }
 
-  exportData(): any {
+  exportData() {
     return {
       variant: this.variant,
       questionSet: this.questionSet,
@@ -115,7 +117,7 @@ export class StudyAnalytics {
   }
 }
 
-export function useStudyAnalytics(variant: 'A' | 'B', questionSet: 'SET-A' | 'SET-B') {
+export function useStudyAnalytics(variant: string, questionSet: string) {
   const analyticsRef = useRef<StudyAnalytics | null>(null)
   const [metrics, setMetrics] = useState<VariantMetrics | null>(null)
 
@@ -154,9 +156,17 @@ export function useStudyAnalytics(variant: 'A' | 'B', questionSet: 'SET-A' | 'SE
     }
   }
 
-  const finishAndGetMetrics = (fieldsData: any): VariantMetrics => {
+  const finishAndGetMetrics = (fieldsData: any) => {
     if (!analyticsRef.current) {
-      throw new Error('Analytics not initialized')
+      const emptyResult: VariantMetrics = {
+        timer: { startTime: null, endTime: null, duration: 0, events: [] },
+        fieldsCompleted: 0,
+        totalFields: 0,
+        helpRequests: 0,
+        errors: 0,
+        completionRate: 0
+      }
+      return emptyResult
     }
 
     analyticsRef.current.stopTimer()
@@ -183,31 +193,35 @@ export function useStudyAnalytics(variant: 'A' | 'B', questionSet: 'SET-A' | 'SE
   }
 }
 
-export function StudyTimerDisplay({ analytics, variant }: { analytics: any; variant: 'A' | 'B' }) {
+export function StudyTimerDisplay(props: { analytics: any; variant: string }) {
   const [elapsed, setElapsed] = useState(0)
 
   useEffect(() => {
     const interval = setInterval(() => {
-      if (analytics?.analyticsRef?.current?.timer?.startTime) {
-        const now = new Date().getTime()
-        const start = analytics.analyticsRef.current.timer.startTime.getTime()
-        setElapsed(now - start)
+      if (props.analytics && props.analytics.analyticsRef && props.analytics.analyticsRef.current) {
+        const current = props.analytics.analyticsRef.current
+        if (current.timer && current.timer.startTime) {
+          const now = new Date().getTime()
+          const start = current.timer.startTime.getTime()
+          setElapsed(now - start)
+        }
       }
     }, 1000)
 
     return () => clearInterval(interval)
-  }, [analytics])
+  }, [props.analytics])
 
-  const formatTime = (ms: number): string => {
+  const formatTime = (ms: number) => {
     const seconds = Math.floor(ms / 1000)
     const minutes = Math.floor(seconds / 60)
     const remainingSeconds = seconds % 60
-    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`
+    const paddedSeconds = String(remainingSeconds).padStart(2, '0')
+    return minutes + ':' + paddedSeconds
   }
 
   return (
     <div className="bg-gray-50 rounded-lg p-3 text-center">
-      <div className="text-sm text-gray-600">Variante {variant}</div>
+      <div className="text-sm text-gray-600">Variante {props.variant}</div>
       <div className="text-lg font-mono font-bold text-gray-900">
         ⏱️ {formatTime(elapsed)}
       </div>
