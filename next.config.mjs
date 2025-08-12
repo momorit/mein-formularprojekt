@@ -1,18 +1,48 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // ESLint komplett deaktivieren
-  eslint: {
-    ignoreDuringBuilds: true,
+  // === OUTPUT & BUILD ===
+  output: 'standalone',
+  poweredByHeader: false,
+  trailingSlash: false,
+
+  // === API ROUTES & BACKEND INTEGRATION ===
+  async rewrites() {
+    const backendUrl = process.env.BACKEND_URL || 'http://127.0.0.1:8000'
+    
+    return [
+      {
+        source: '/backend/:path*',
+        destination: `${backendUrl}/:path*`
+      }
+    ]
   },
-  // TypeScript komplett deaktivieren
-  typescript: {
-    ignoreBuildErrors: true,
+
+  // === CORS HEADERS ===
+  async headers() {
+    return [
+      {
+        source: '/api/:path*',
+        headers: [
+          { key: 'Access-Control-Allow-Origin', value: '*' },
+          { key: 'Access-Control-Allow-Methods', value: 'GET,POST,PUT,DELETE,OPTIONS' },
+          { key: 'Access-Control-Allow-Headers', value: 'Content-Type, Authorization' },
+        ],
+      },
+    ]
   },
-  // Experimentell
-  swcMinify: false,
+
+  // === PERFORMANCE ===
   experimental: {
-    forceSwcTransforms: false,
-  }
+    optimizePackageImports: ['lucide-react'],
+  },
+
+  // === TYPESCRIPT & ESLINT ===
+  typescript: {
+    ignoreBuildErrors: false,
+  },
+  eslint: {
+    ignoreDuringBuilds: false,
+  },
 }
 
 export default nextConfig

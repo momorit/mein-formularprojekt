@@ -277,7 +277,10 @@ function StudyNavigation({
           <div className="flex items-center justify-center space-x-2">
             {steps[currentIndex] && (
               <>
-                <steps[currentIndex].icon className="w-5 h-5 text-blue-600" />
+                {(() => {
+                  const IconComponent = steps[currentIndex].icon
+                  return <IconComponent className="w-5 h-5 text-blue-600" />
+                })()}
                 <span className="font-medium text-gray-900">
                   {steps[currentIndex].title}
                 </span>
