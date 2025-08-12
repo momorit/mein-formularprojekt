@@ -1,10 +1,10 @@
-// src/app/study-analytics.ts - VOLLSTÄNDIG KORRIGIERTE VERSION
+// src/app/study-analytics.ts - MINIMAL WORKING VERSION (NO ERRORS!)
 
 import { useState, useEffect, useRef } from 'react'
 
 export interface StudyTimer {
   startTime: Date | null
-  endTime: Date | null
+  endTime: Date | null  
   duration: number
   events: StudyEvent[]
 }
@@ -84,6 +84,7 @@ export class StudyAnalytics {
     const errors = this.timer.events.filter(e => e.type === 'error').length
     const fieldsCompleted = Object.values(fieldsData).filter(v => v && String(v).trim()).length
     const totalFields = Object.keys(fieldsData).length
+    const completionRate = totalFields > 0 ? Math.round((fieldsCompleted / totalFields) * 100) : 0
 
     return {
       timer: this.timer,
@@ -91,7 +92,7 @@ export class StudyAnalytics {
       totalFields,
       helpRequests,
       errors,
-      completionRate: totalFields > 0 ? (fieldsCompleted / totalFields) * 100 : 0
+      completionRate
     }
   }
 
@@ -111,7 +112,6 @@ export class StudyAnalytics {
   }
 }
 
-// React Hook für Study Analytics
 export function useStudyAnalytics(variant: 'A' | 'B', questionSet: 'SET-A' | 'SET-B') {
   const analyticsRef = useRef<StudyAnalytics | null>(null)
   const [metrics, setMetrics] = useState<VariantMetrics | null>(null)
@@ -169,7 +169,6 @@ export function useStudyAnalytics(variant: 'A' | 'B', questionSet: 'SET-A' | 'SE
   }
 }
 
-// Timer Display Component
 export function StudyTimerDisplay({ analytics, variant }: { analytics: any, variant: 'A' | 'B' }) {
   const [elapsed, setElapsed] = useState(0)
 
