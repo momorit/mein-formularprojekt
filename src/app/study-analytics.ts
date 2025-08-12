@@ -1,4 +1,4 @@
-// src/app/study-analytics.ts - FIXED VERSION (TypeScript Error behoben)
+// src/app/study-analytics.ts - MINIMAL WORKING VERSION
 
 import { useState, useEffect, useRef } from 'react'
 
@@ -11,7 +11,7 @@ export interface StudyTimer {
 
 export interface StudyEvent {
   timestamp: Date
-  type: 'start' | 'help_request' | 'field_focus' | 'field_complete' | 'error' | 'completion'  // ✅ 'start' hinzugefügt
+  type: 'start' | 'help_request' | 'field_focus' | 'field_complete' | 'error' | 'completion'
   data?: any
 }
 
@@ -42,7 +42,7 @@ export class StudyAnalytics {
 
   startTimer(): void {
     this.timer.startTime = new Date()
-    this.addEvent('start', { variant: this.variant, questionSet: this.questionSet })  // ✅ Jetzt erlaubt
+    this.addEvent('start', { variant: this.variant, questionSet: this.questionSet })
   }
 
   stopTimer(): number {
@@ -166,160 +166,6 @@ export function useStudyAnalytics(variant: 'A' | 'B', questionSet: 'SET-A' | 'SE
     finishAndGetMetrics,
     exportData,
     metrics
-  }
-}
-
-// Question Sets Definition
-export const QUESTION_SETS = {
-  'SET-A': {
-    easy: [
-      {
-        id: 'wohnungsbezeichnung',
-        label: 'WOHNUNGSBEZEICHNUNG',
-        question: 'Wie lautet die Bezeichnung der zu sanierenden Wohnung?',
-        type: 'text',
-        help: 'Z.B. "Hochparterre rechts", "1. OG links", "Erdgeschoss Mitte"',
-        difficulty: 'easy'
-      },
-      {
-        id: 'himmelsrichtung',
-        label: 'HIMMELSRICHTUNG',
-        question: 'In welche Himmelsrichtung zeigt die Hauptfassade?',
-        type: 'select',
-        options: ['Nord', 'Nordost', 'Ost', 'Südost', 'Süd', 'Südwest', 'West', 'Nordwest'],
-        difficulty: 'easy'
-      }
-    ],
-    medium: [
-      {
-        id: 'energietraeger',
-        label: 'ENERGIETRÄGER',
-        question: 'Welcher Energieträger wird aktuell für die Heizung verwendet?',
-        type: 'select',
-        options: ['Gas', 'Öl', 'Fernwärme', 'Strom', 'Wärmepumpe', 'Holz/Pellets', 'Solar'],
-        difficulty: 'medium',
-        help: 'Der hauptsächlich genutzte Energieträger für Raumheizung und Warmwasser.'
-      },
-      {
-        id: 'fensterart',
-        label: 'FENSTERART',
-        question: 'Welche Art von Fenstern ist überwiegend verbaut?',
-        type: 'select',
-        options: [
-          'Einfachverglasung',
-          'Doppelverglasung (älter)',
-          'Wärmeschutzverglasung 2-fach',
-          'Wärmeschutzverglasung 3-fach',
-          'Gemischt (verschiedene Typen)'
-        ],
-        difficulty: 'medium'
-      }
-    ],
-    hard: [
-      {
-        id: 'daemmsystem',
-        label: 'DÄMMUNGSYSTEM',
-        question: 'Welches Fassadendämmungssystem kommt zum Einsatz?',
-        type: 'select',
-        options: [
-          'WDVS mit Putz',
-          'WDVS mit Riemchen/Klinker', 
-          'Hinterlüftete Vorhangfassade',
-          'Innendämmung',
-          'Kombination verschiedener Systeme'
-        ],
-        help: 'WDVS = Wärmedämmverbundsystem. Bei Unsicherheit wählen Sie die Kombination.',
-        difficulty: 'hard',
-        hasUncertainty: true
-      },
-      {
-        id: 'luftdichtheit',
-        label: 'LUFTDICHTHEIT',
-        question: 'Wie würden Sie die Luftdichtheit des Gebäudes einschätzen?',
-        type: 'select',
-        options: [
-          'Sehr gut (Blower-Door-Test n50 < 1,5)',
-          'Gut (wenig spürbare Zugluft)',
-          'Mittel (gelegentlich spürbare Zugluft)',
-          'Schlecht (deutlich spürbare Zugluft)',
-          'Sehr schlecht (starke Zugluft)'
-        ],
-        difficulty: 'hard',
-        help: 'Luftdichtheit beeinflusst den Energieverlust erheblich. Bei Unsicherheit: "Mittel" wählen.'
-      }
-    ]
-  },
-  'SET-B': {
-    easy: [
-      {
-        id: 'gebaeudeart',
-        label: 'GEBÄUDEART',
-        question: 'Um welche Art von Gebäude handelt es sich?',
-        type: 'select',
-        options: [
-          'Einfamilienhaus freistehend',
-          'Einfamilienhaus Doppelhaushälfte',
-          'Reihenhaus',
-          'Mehrfamilienhaus',
-          'Wohn- und Geschäftshaus'
-        ],
-        difficulty: 'easy'
-      },
-      {
-        id: 'baujahr',
-        label: 'BAUJAHR',
-        question: 'Aus welchem Jahr stammt das Gebäude?',
-        type: 'number',
-        help: 'Das ursprüngliche Baujahr (vor größeren Sanierungen)',
-        difficulty: 'easy'
-      }
-    ],
-    medium: [
-      {
-        id: 'wohnflaeche',
-        label: 'WOHNFLÄCHE',
-        question: 'Wie groß ist die Gesamtwohnfläche des Gebäudes?',
-        type: 'number',
-        unit: 'm²',
-        difficulty: 'medium',
-        help: 'Gesamte beheizte Wohnfläche aller Etagen.'
-      },
-      {
-        id: 'heizungsart',
-        label: 'HEIZUNGSART',
-        question: 'Welche Heizungsart ist aktuell installiert?',
-        type: 'select',
-        options: [
-          'Gas-Brennwertkessel',
-          'Gas-Niedertemperaturkessel',
-          'Öl-Brennwertkessel',
-          'Öl-Niedertemperaturkessel',
-          'Fernwärme',
-          'Wärmepumpe (Luft)',
-          'Wärmepumpe (Erdreich)',
-          'Nachtspeicherheizung',
-          'Kaminofen/Einzelöfen'
-        ],
-        difficulty: 'medium'
-      }
-    ],
-    hard: [
-      {
-        id: 'daemmzustand',
-        label: 'DÄMMZUSTAND',
-        question: 'Wie ist der aktuelle Dämmzustand des Gebäudes?',
-        type: 'select',
-        options: [
-          'Keine Dämmung vorhanden',
-          'Teilweise gedämmt (nur Dach oder Fassade)',
-          'Grunddämmung vorhanden (5-10 cm)',
-          'Gute Dämmung (10-20 cm)',
-          'Sehr gute Dämmung (>20 cm)'
-        ],
-        difficulty: 'hard',
-        help: 'Bezieht sich auf Außenwände, Dach und Kellerdecke zusammen.'
-      }
-    ]
   }
 }
 
