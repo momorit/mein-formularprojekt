@@ -1,10 +1,9 @@
-// src/app/study-analytics.ts - KOMPLETT KORREKTE VERSION
-
+// src/app/study-analytics.ts - KOMPLETT NEUE FEHLERFREIE VERSION
 import { useState, useEffect, useRef } from 'react'
 
 export interface StudyTimer {
   startTime: Date | null
-  endTime: Date | null  
+  endTime: Date | null
   duration: number
   events: StudyEvent[]
 }
@@ -85,8 +84,10 @@ export class StudyAnalytics {
     const fieldsCompleted = Object.values(fieldsData).filter(v => v && String(v).trim()).length
     const totalFields = Object.keys(fieldsData).length
     
-    // FIX: Vollständig ausgeschriebener ternärer Operator
-    const completionRate = totalFields > 0 ? Math.round((fieldsCompleted / totalFields) * 100) : 0
+    let completionRate = 0
+    if (totalFields > 0) {
+      completionRate = Math.round((fieldsCompleted / totalFields) * 100)
+    }
 
     return {
       timer: this.timer,
@@ -130,19 +131,27 @@ export function useStudyAnalytics(variant: 'A' | 'B', questionSet: 'SET-A' | 'SE
   }, [variant, questionSet])
 
   const trackHelpRequest = (fieldName?: string) => {
-    analyticsRef.current?.trackHelpRequest(fieldName)
+    if (analyticsRef.current) {
+      analyticsRef.current.trackHelpRequest(fieldName)
+    }
   }
 
   const trackFieldFocus = (fieldName: string) => {
-    analyticsRef.current?.trackFieldFocus(fieldName)
+    if (analyticsRef.current) {
+      analyticsRef.current.trackFieldFocus(fieldName)
+    }
   }
 
   const trackFieldComplete = (fieldName: string, value: string) => {
-    analyticsRef.current?.trackFieldComplete(fieldName, value)
+    if (analyticsRef.current) {
+      analyticsRef.current.trackFieldComplete(fieldName, value)
+    }
   }
 
   const trackError = (errorType: string, fieldName?: string) => {
-    analyticsRef.current?.trackError(errorType, fieldName)
+    if (analyticsRef.current) {
+      analyticsRef.current.trackError(errorType, fieldName)
+    }
   }
 
   const finishAndGetMetrics = (fieldsData: any): VariantMetrics => {
@@ -157,7 +166,10 @@ export function useStudyAnalytics(variant: 'A' | 'B', questionSet: 'SET-A' | 'SE
   }
 
   const exportData = () => {
-    return analyticsRef.current?.exportData()
+    if (analyticsRef.current) {
+      return analyticsRef.current.exportData()
+    }
+    return null
   }
 
   return {
@@ -171,7 +183,7 @@ export function useStudyAnalytics(variant: 'A' | 'B', questionSet: 'SET-A' | 'SE
   }
 }
 
-export function StudyTimerDisplay({ analytics, variant }: { analytics: any, variant: 'A' | 'B' }) {
+export function StudyTimerDisplay({ analytics, variant }: { analytics: any; variant: 'A' | 'B' }) {
   const [elapsed, setElapsed] = useState(0)
 
   useEffect(() => {
@@ -186,7 +198,7 @@ export function StudyTimerDisplay({ analytics, variant }: { analytics: any, vari
     return () => clearInterval(interval)
   }, [analytics])
 
-  const formatTime = (ms: number) => {
+  const formatTime = (ms: number): string => {
     const seconds = Math.floor(ms / 1000)
     const minutes = Math.floor(seconds / 60)
     const remainingSeconds = seconds % 60
