@@ -1,4 +1,4 @@
-// src/app/study-analytics.ts - KOMPLETT NEUE FEHLERFREIE VERSION
+// src/app/study-analytics.ts - KOMPLETT NEUE FEHLERFREIE VERSIONdd
 import { useState, useEffect, useRef } from 'react'
 
 export interface StudyTimer {
