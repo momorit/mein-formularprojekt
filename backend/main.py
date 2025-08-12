@@ -635,6 +635,207 @@ async def save_dialog(request: DialogSaveRequest):
         print(f"Fehler bei dialog/save: {e}")
         raise HTTPException(status_code=500, detail=f"Fehler beim Dialog-Speichern: {str(e)}")
 
+# backend/main.py - STUDY SAVE ENDPUNKT HINZUGEFÜGT
+
+# Füge diesen Endpunkt zu deiner bestehenden main.py hinzu:
+
+# === STUDY DATA MODEL ===
+class StudySaveRequest(BaseModel):
+    participantId: str
+    startTime: str
+    randomization: str
+    demographics: Optional[Dict[str, str]] = None
+    variantAData: Optional[Dict[str, Any]] = None
+    variantBData: Optional[Dict[str, Any]] = None
+    comparisonData: Optional[Dict[str, Any]] = None
+    totalDuration: Optional[int] = None
+
+@app.post("/api/study/save")
+async def save_complete_study(request: StudySaveRequest):
+    """Vollständige Studiendaten speichern"""
+    try:
+        # Umfassende Studiendaten strukturieren
+        complete_study_data = {
+            "study_type": "FormularIQ_Complete_Study",
+            "participant_id": request.participantId,
+            "timestamp": datetime.now().isoformat(),
+            "start_time": request.startTime,
+            "randomization": request.randomization,
+            "total_duration_ms": request.totalDuration,
+            "total_duration_minutes": round((request.totalDuration or 0) / 60000, 2),
+            
+            # Demografische Daten
+            "demographics": request.demographics,
+            
+            # Variante A Daten
+            "variant_a_data": request.variantAData,
+            
+            # Variante B Daten  
+            "variant_b_data": request.variantBData,
+            
+            # Vergleichsdaten
+            "comparison_data": request.comparisonData,
+            
+            # Metadaten für wissenschaftliche Auswertung
+            "metadata": {
+                "completed_demographics": bool(request.demographics),
+                "completed_variant_a": bool(request.variantAData),
+                "completed_variant_b": bool(request.variantBData),
+                "completed_comparison": bool(request.comparisonData),
+                "study_completion_rate": calculate_completion_rate(request),
+                "first_variant": request.randomization.split('-')[0] if request.randomization else None,
+                "second_variant": request.randomization.split('-')[1] if request.randomization else None
+            },
+            
+            # Wissenschaftliche Metadaten
+            "study_metadata": {
+                "project": "FormularIQ - LLM-gestützte Formularbearbeitung",
+                "institution": "HAW Hamburg",
+                "researcher": "Moritz Treu",
+                "study_version": "1.0.0",
+                "backend_version": "2.3.0",
+                "collection_date": datetime.now().date().isoformat(),
+                "data_type": "complete_user_study"
+            }
+        }
+        
+        # Dateiname mit Participant ID und Zeitstempel
+        filename = f"complete_study_{request.participantId}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        
+        # Versuche Google Drive Upload
+        storage_info = {"storage": "local"}
+        if drive_service and drive_folder_id:
+            try:
+                file_id, web_link = upload_to_google_drive(
+                    drive_service, 
+                    drive_folder_id, 
+                    complete_study_data, 
+                    filename
+                )
+                if file_id:
+                    storage_info = {
+                        "storage": "google_drive",
+                        "google_drive_id": file_id,
+                        "web_link": web_link,
+                        "folder": GOOGLE_DRIVE_FOLDER_NAME,
+                        "success": True
+                    }
+                    print(f"✅ Complete Study Data uploaded to Google Drive: {filename}")
+            except Exception as drive_error:
+                print(f"⚠️ Google Drive Upload Fehler: {drive_error}")
+                storage_info["drive_error"] = str(drive_error)
+        
+        # Lokales Backup (immer als Fallback)
+        try:
+            local_path = LOCAL_OUTPUT_DIR / filename
+            async with aiofiles.open(local_path, 'w', encoding='utf-8') as f:
+                await f.write(json.dumps(complete_study_data, ensure_ascii=False, indent=2))
+            storage_info["local_path"] = str(local_path)
+            storage_info["local_backup"] = True
+            print(f"✅ Local backup saved: {local_path}")
+        except Exception as local_error:
+            print(f"❌ Local Save Fehler: {local_error}")
+            storage_info["local_error"] = str(local_error)
+        
+        return {
+            "message": "Vollständige Studiendaten erfolgreich gespeichert",
+            "participant_id": request.participantId,
+            "filename": filename,
+            **storage_info
+        }
+        
+    except Exception as e:
+        print(f"❌ Fehler bei study/save: {e}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Fehler beim Speichern der Studiendaten: {str(e)}"
+        )
+
+def calculate_completion_rate(request: StudySaveRequest) -> float:
+    """Berechnet die Vollständigkeitsrate der Studie"""
+    completed_sections = 0
+    total_sections = 5  # demographics, variant_a, variant_b, comparison, total
+    
+    if request.demographics:
+        completed_sections += 1
+    if request.variantAData:
+        completed_sections += 1
+    if request.variantBData:
+        completed_sections += 1
+    if request.comparisonData:
+        completed_sections += 1
+    if request.totalDuration and request.totalDuration > 0:
+        completed_sections += 1
+    
+    return round((completed_sections / total_sections) * 100, 2)
+
+# Erweitere auch den Health Check für Study-Status
+@app.get("/health")
+async def health_check():
+    """System-Status mit Study-Save-Test"""
+    try:
+        test_study_data = {
+            "test": "health_check",
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        # Test Google Drive Write-Access
+        drive_write_test = False
+        if drive_service and drive_folder_id:
+            try:
+                # Kleiner Test-Upload
+                test_filename = f"health_test_{datetime.now().strftime('%H%M%S')}.json"
+                file_id, _ = upload_to_google_drive(
+                    drive_service, 
+                    drive_folder_id, 
+                    test_study_data, 
+                    test_filename
+                )
+                if file_id:
+                    # Test-Datei wieder löschen
+                    try:
+                        drive_service.files().delete(fileId=file_id).execute()
+                        drive_write_test = True
+                    except:
+                        pass
+            except:
+                pass
+        
+        # Test Dialog-Funktionalität
+        try:
+            test_response = call_llm_service("Test", "", dialog_mode=True)
+            dialog_status = "online" if len(test_response) > 10 else "limited"
+        except:
+            dialog_status = "offline"
+        
+        return {
+            "status": "healthy",
+            "services": {
+                "google_drive": "connected" if drive_service else "disconnected",
+                "google_drive_write": "ok" if drive_write_test else "limited",
+                "llm_dialog": dialog_status,
+                "llm_formular": "online",
+                "local_storage": "available",
+                "study_save": "ready"
+            },
+            "timestamp": datetime.now().isoformat(),
+            "version": "2.3.0",
+            "study_features": {
+                "complete_data_collection": True,
+                "demographics_support": True,
+                "questionnaire_support": True,
+                "randomization_support": True,
+                "cloud_backup": drive_write_test
+            }
+        }
+        
+    except Exception as e:
+        return {
+            "status": "degraded",
+            "error": str(e),
+            "timestamp": datetime.now().isoformat()
+        }
+
 # === SERVER START ===
 if __name__ == "__main__":
     print("🚀 FormularIQ Backend - DIALOG REPARIERT")
@@ -656,3 +857,4 @@ if __name__ == "__main__":
         reload=True,
         log_level="info"
     )
+
