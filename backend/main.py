@@ -1101,6 +1101,295 @@ print("   POST /api/study/save - Save complete study data")
 print("   GET /api/study/stats - Get study statistics")
 print("   GET /health - Extended health check")
 
+# backend/main.py - VOLLSTÄNDIG REPARIERTE VERSION mit Study-Save
+
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+import json
+import os
+from datetime import datetime
+from typing import Dict, Any, List, Optional
+import uvicorn
+import aiofiles
+import requests
+from pathlib import Path
+import base64
+
+# === GOOGLE DRIVE IMPORTS ===
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaIoBaseUpload
+import io
+
+app = FastAPI(
+    title="FormularIQ Backend - COMPLETE FIXED",
+    description="LLM-gestützte Formularbearbeitung - Vollständig repariert mit Study-Save",
+    version="2.4.0"
+)
+
+# === CORS MIDDLEWARE ===
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:3000", 
+        "http://127.0.0.1:3000",
+        "https://*.vercel.app",
+        "https://*.railway.app",
+        "https://*.netlify.app",
+        "*"
+    ],
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["*"],
+)
+
+# === CONFIGURATION ===
+GOOGLE_DRIVE_FOLDER_NAME = 'FormularIQ_Studiendata'
+LOCAL_OUTPUT_DIR = Path("LLM Output")
+LOCAL_OUTPUT_DIR.mkdir(exist_ok=True)
+
+# === GOOGLE DRIVE SETUP ===
+def get_google_drive_service():
+    try:
+        service_account_json = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON")
+        if service_account_json:
+            try:
+                credentials_info = json.loads(service_account_json)
+                credentials = service_account.Credentials.from_service_account_info(
+                    credentials_info, 
+                    scopes=['https://www.googleapis.com/auth/drive.file']
+                )
+                service = build('drive', 'v3', credentials=credentials)
+                service.files().list(pageSize=1).execute()
+                print("✅ Google Drive: Environment Variable erfolgreich")
+                return service
+            except Exception as env_error:
+                print(f"⚠️ Environment Variable fehlerhaft: {env_error}")
+        
+        service_account_file = Path("service-account-key.json")
+        if service_account_file.exists():
+            try:
+                credentials = service_account.Credentials.from_service_account_file(
+                    service_account_file, 
+                    scopes=['https://www.googleapis.com/auth/drive.file']
+                )
+                service = build('drive', 'v3', credentials=credentials)
+                service.files().list(pageSize=1).execute()
+                print("✅ Google Drive: Lokale Datei erfolgreich")
+                return service
+            except Exception as file_error:
+                print(f"⚠️ Lokale Datei fehlerhaft: {file_error}")
+        
+        print("❌ Keine gültigen Google Drive Credentials gefunden")
+        return None
+        
+    except Exception as e:
+        print(f"❌ Google Drive Setup fehlgeschlagen: {e}")
+        return None
+
+def create_or_get_drive_folder(service, folder_name):
+    if not service:
+        return None
+    
+    try:
+        results = service.files().list(
+            q=f"name='{folder_name}' and mimeType='application/vnd.google-apps.folder' and trashed=false",
+            fields="files(id, name)"
+        ).execute()
+        
+        if results.get('files'):
+            folder_id = results['files'][0]['id']
+            print(f"✅ Drive-Ordner gefunden: {folder_name}")
+            return folder_id
+        
+        file_metadata = {
+            'name': folder_name,
+            'mimeType': 'application/vnd.google-apps.folder'
+        }
+        folder = service.files().create(body=file_metadata, fields='id').execute()
+        folder_id = folder.get('id')
+        print(f"✅ Drive-Ordner erstellt: {folder_name}")
+        return folder_id
+        
+    except Exception as e:
+        print(f"❌ Drive-Ordner-Fehler: {e}")
+        return None
+
+def upload_to_google_drive(service, folder_id, data, filename):
+    if not service or not folder_id:
+        return None, None
+    
+    try:
+        json_content = json.dumps(data, ensure_ascii=False, indent=2, default=str)
+        
+        file_metadata = {
+            'name': filename,
+            'parents': [folder_id]
+        }
+        
+        media = MediaIoBaseUpload(
+            io.BytesIO(json_content.encode('utf-8')),
+            mimetype='application/json',
+            resumable=True
+        )
+        
+        file = service.files().create(
+            body=file_metadata,
+            media_body=media,
+            fields='id, name, webViewLink'
+        ).execute()
+        
+        file_id = file.get('id')
+        web_link = file.get('webViewLink')
+        print(f"✅ Upload erfolgreich: {filename}")
+        return file_id, web_link
+        
+    except Exception as e:
+        print(f"❌ Upload-Fehler: {e}")
+        return None, None
+
+# === LLM INTEGRATION ===
+def call_llm_service(prompt: str, context: str = "", dialog_mode: bool = False) -> str:
+    if dialog_mode:
+        system_message = """Du bist ein professioneller Gebäude-Energieberater und führst ein strukturiertes Interview durch."""
+    else:
+        system_message = """Du bist ein Experte für Gebäude-Energieberatung und hilfst beim Ausfüllen von Formularen."""
+    
+    full_prompt = f"{system_message}\n\nKontext: {context}\n\nAnfrage: {prompt}"
+    
+    # Groq API
+    groq_key = os.getenv("GROQ_API_KEY")
+    if groq_key and groq_key.startswith('gsk_'):
+        try:
+            import groq
+            client = groq.Groq(api_key=groq_key)
+            
+            response = client.chat.completions.create(
+                messages=[
+                    {"role": "system", "content": system_message},
+                    {"role": "user", "content": f"Kontext: {context}\n\nAnfrage: {prompt}"}
+                ],
+                model="llama3-70b-8192" if dialog_mode else "llama3-8b-8192",
+                temperature=0.8 if dialog_mode else 0.7,
+                max_tokens=1024 if dialog_mode else 2048
+            )
+            
+            result = response.choices[0].message.content
+            print(f"✅ LLM: Groq API erfolgreich ({'Dialog' if dialog_mode else 'Formular'} Modus)")
+            return result
+            
+        except Exception as groq_error:
+            print(f"⚠️ Groq API Fehler: {groq_error}")
+    
+    # Ollama
+    try:
+        response = requests.post(
+            "http://localhost:11434/api/generate",
+            json={
+                "model": "llama3",
+                "prompt": full_prompt,
+                "stream": False,
+                "options": {
+                    "temperature": 0.8 if dialog_mode else 0.7,
+                    "top_p": 0.9
+                }
+            },
+            timeout=45
+        )
+        
+        if response.status_code == 200:
+            result = response.json().get("response", "")
+            if result:
+                print(f"✅ LLM: Ollama erfolgreich ({'Dialog' if dialog_mode else 'Formular'} Modus)")
+                return result
+                
+    except Exception as ollama_error:
+        print(f"⚠️ Ollama Fehler: {ollama_error}")
+    
+    # Fallback
+    print(f"⚠️ LLM: Verwende Fallback-Antworten ({'Dialog' if dialog_mode else 'Formular'} Modus)")
+    
+    if dialog_mode:
+        if "?" in prompt or "hilfe" in prompt.lower():
+            return """Gerne helfe ich Ihnen! 
+
+Hier sind einige typische Beispiele:
+• Gebäudeart: Einfamilienhaus, Reihenhaus, Doppelhaushälfte
+• Baujahr: z.B. 1975 (wie in Ihrem Szenario)
+• Heizung: Gasheizung, Ölheizung, Wärmepumpe"""
+        else:
+            return f"""Verstanden: "{prompt[:50]}..."
+
+Das ist eine gute Angabe für die Energieberatung. Kann ich Ihnen noch bei Details helfen?"""
+    
+    else:
+        if "anweisungen" in prompt.lower() or "instructions" in prompt.lower():
+            return """Hier sind die wichtigsten Formularfelder für die Gebäude-Energieberatung:
+
+• GEBÄUDEART: Art des Gebäudes (z.B. Einfamilienhaus, Doppelhaus)
+• BAUJAHR: Baujahr des Gebäudes (wichtig für Energiestandards)  
+• WOHNFLÄCHE: Gesamtwohnfläche in m²
+• HEIZUNGSART: Aktuelles Heizsystem (Gas, Öl, Wärmepumpe, etc.)
+• DÄMMZUSTAND: Zustand der Wärmedämmung
+• FENSTERZUSTAND: Alter und Zustand der Fenster
+• RENOVIERUNGSWÜNSCHE: Geplante Sanierungsmaßnahmen
+• BUDGET: Verfügbares Budget für die Sanierung"""
+        else:
+            return """Für eine Gebäude-Energieberatung sind meist wichtig:
+- Gebäudeinformationen (Baujahr, Größe, Art)
+- Aktueller Energiezustand  
+- Gewünschte Sanierungsmaßnahmen"""
+
+# === PYDANTIC MODELS ===
+class ContextRequest(BaseModel):
+    context: str
+
+class ChatRequest(BaseModel):
+    message: str
+    context: Optional[str] = ""
+
+class SaveRequest(BaseModel):
+    instructions: Dict[str, Any]
+    values: Dict[str, str]
+    filename: str
+
+class DialogMessageRequest(BaseModel):
+    message: str
+    currentQuestion: Dict[str, str]
+    questionIndex: int
+    totalQuestions: int
+
+class DialogSaveRequest(BaseModel):
+    questions: List[Dict[str, str]]
+    answers: Dict[str, str] 
+    chatHistory: List[Dict[str, str]]
+    filename: str
+
+# === STUDY SAVE MODEL ===
+class StudySaveRequest(BaseModel):
+    participantId: str
+    startTime: str  # ISO string
+    randomization: str
+    demographics: Optional[Dict[str, str]] = None
+    variantAData: Optional[Dict[str, Any]] = None
+    variantBData: Optional[Dict[str, Any]] = None
+    comparisonData: Optional[Dict[str, Any]] = None
+    totalDuration: Optional[int] = None
+
+# === GLOBAL SERVICES ===
+drive_service = get_google_drive_service()
+drive_folder_id = create_or_get_drive_folder(drive_service, GOOGLE_DRIVE_FOLDER_NAME) if drive_service else None
+
+# === API ENDPOINTS ===
+
+@app.get("/health")
+async def health_check():
+    """System-Status mit Study-Save-Test"""
+    try:
+        # Test Google Drive Write-Access
+        drive_write_test
+
 # === SERVER START ===
 if __name__ == "__main__":
     print("🚀 FormularIQ Backend - DIALOG REPARIERT")
