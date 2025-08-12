@@ -1,6 +1,6 @@
 'use client'
 
-// src/app/study/page.tsx - VOLLSTÄNDIGE Study Page mit allen Schritten
+// src/app/study/page.tsx - VOLLSTÄNDIGE Study Page mit echten Varianten
 
 import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
@@ -21,9 +21,8 @@ import {
   Save,
   Download
 } from 'lucide-react'
-
-// API Client Import (falls verfügbar)
-// import { apiClient } from '@/lib/api-client'
+import VariantA from '@/components/VariantA'
+import VariantB from '@/components/VariantB'
 
 // Types
 type StudyStep = 'welcome' | 'demographics' | 'first-variant' | 'second-variant' | 'comparison' | 'completion'
@@ -39,27 +38,8 @@ interface StudyData {
     gender?: string
     profession?: string
   }
-  variantAData?: {
-    startTime: Date
-    endTime?: Date
-    formData?: Record<string, string>
-    interactions?: number
-    helpRequests?: number
-    errors?: number
-    susScore?: number
-    completed: boolean
-  }
-  variantBData?: {
-    startTime: Date
-    endTime?: Date
-    chatHistory?: Array<{ type: 'user' | 'bot', message: string, timestamp: Date }>
-    answers?: Record<string, string>
-    interactions?: number
-    helpRequests?: number
-    errors?: number
-    susScore?: number
-    completed: boolean
-  }
+  variantAData?: any
+  variantBData?: any
   comparisonData?: {
     speed: 'A' | 'B' | 'equal'
     understandability: 'A' | 'B' | 'equal'
@@ -389,40 +369,68 @@ export default function StudyPage() {
         totalDuration: new Date().getTime() - studyData.startTime.getTime()
       }
 
-      // Try to save to backend
-      try {
-        const response = await fetch('/api/study/save', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(completeStudyData)
-        })
+      console.log('💾 Saving complete study data...')
+      const response = await fetch('/api/study/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(completeStudyData)
+      })
 
-        if (response.ok) {
-          const result = await response.json()
-          console.log('✅ Study data saved successfully:', result)
-          alert('Studie erfolgreich gespeichert! Vielen Dank für Ihre Teilnahme.')
+      if (response.ok) {
+        const result = await response.json()
+        console.log('✅ Study data save result:', result)
+        
+        if (result.storage_type === 'cloud_backup') {
+          // Cloud save successful
+          alert('🎉 Studie erfolgreich gespeichert!\n\nVielen Dank für Ihre Teilnahme. Ihre Daten wurden sicher in der Cloud gespeichert.')
+        } else if (result.storage_type === 'local_backup' && result.download_data) {
+          // Local download fallback
+          const dataStr = JSON.stringify(result.download_data, null, 2)
+          const dataBlob = new Blob([dataStr], { type: 'application/json' })
+          const url = URL.createObjectURL(dataBlob)
+          const link = document.createElement('a')
+          link.href = url
+          link.download = result.filename
+          document.body.appendChild(link)
+          link.click()
+          document.body.removeChild(link)
+          URL.revokeObjectURL(url)
+          
+          alert('📁 Cloud-Speicherung nicht verfügbar!\n\nIhre Daten wurden automatisch heruntergeladen. Bitte senden Sie die JSON-Datei an den Studienleiter.\n\nVielen Dank für Ihre Teilnahme!')
         } else {
-          throw new Error('Backend save failed')
+          throw new Error('Unbekannter Speicher-Typ')
         }
-      } catch (error) {
-        console.warn('⚠️ Backend save failed, saving locally:', error)
-        
-        // Fallback: Local download
-        const dataStr = JSON.stringify(completeStudyData, null, 2)
-        const dataBlob = new Blob([dataStr], { type: 'application/json' })
-        const url = URL.createObjectURL(dataBlob)
-        const link = document.createElement('a')
-        link.href = url
-        link.download = `study_data_${completeStudyData.participantId}.json`
-        link.click()
-        URL.revokeObjectURL(url)
-        
-        alert('Daten wurden lokal gespeichert. Vielen Dank für Ihre Teilnahme!')
+      } else {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
       }
       
     } catch (error) {
       console.error('💥 Save failed:', error)
-      alert('Fehler beim Speichern. Bitte versuchen Sie es erneut.')
+      
+      // Emergency local save
+      try {
+        const emergencyData = {
+          ...studyData,
+          completedAt: new Date(),
+          totalDuration: new Date().getTime() - studyData.startTime.getTime(),
+          note: 'Emergency save due to network error'
+        }
+        
+        const dataStr = JSON.stringify(emergencyData, null, 2)
+        const dataBlob = new Blob([dataStr], { type: 'application/json' })
+        const url = URL.createObjectURL(dataBlob)
+        const link = document.createElement('a')
+        link.href = url
+        link.download = `emergency_study_${studyData.participantId}_${Date.now()}.json`
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+        URL.revokeObjectURL(url)
+        
+        alert('🚨 Notfall-Speicherung!\n\nDa die normale Speicherung fehlgeschlagen ist, wurden Ihre Daten als Notfall-Download gespeichert.\n\nBitte senden Sie diese Datei unbedingt an den Studienleiter!')
+      } catch (emergencyError) {
+        alert('❌ Kritischer Fehler!\n\nSpeichern fehlgeschlagen. Bitte kontaktieren Sie den Studienleiter und teilen Sie Ihre Teilnehmer-ID mit: ' + studyData.participantId)
+      }
     } finally {
       setIsLoading(false)
     }
