@@ -1,4 +1,4 @@
-// src/app/study/page.tsx - VOLLSTÄNDIGE LINEARE STUDIE (Wissenschaftlich korrekt)
+// src/app/study/page.tsx - VOLLSTÄNDIGE FUNKTIONIERENDE STUDIE
 
 'use client'
 
@@ -80,7 +80,7 @@ Füllen Sie das Gebäude-Erfassungsformular mit den Informationen zu Ihrem Haus 
   ]
 }
 
-// === QUESTIONNAIRE COMPONENTS ===
+// === LIKERT SCALE COMPONENT ===
 const LikertScale = ({ question, value, onChange, labels, required = false, questionNumber }: {
   question: string
   value: number
@@ -152,7 +152,7 @@ export default function StudyPage() {
   const goToPreviousStep = () => {
     if (stepHistory.length > 1) {
       const newHistory = [...stepHistory]
-      newHistory.pop() // Remove current step
+      newHistory.pop()
       const previousStep = newHistory[newHistory.length - 1]
       setStepHistory(newHistory)
       setCurrentStep(previousStep)
@@ -161,6 +161,11 @@ export default function StudyPage() {
 
   const getFirstVariant = () => studyData.randomization === 'A-B' ? 'A' : 'B'
   const getSecondVariant = () => studyData.randomization === 'A-B' ? 'B' : 'A'
+
+  // Debug logging
+  useEffect(() => {
+    console.log(`🔄 Study Step: ${currentStep}, Randomization: ${studyData.randomization}`)
+  }, [currentStep, studyData.randomization])
 
   // === STEP COMPONENTS ===
   const WelcomeStep = () => {
@@ -270,6 +275,7 @@ export default function StudyPage() {
 
     const handleNext = () => {
       setStudyData(prev => ({ ...prev, demographics }))
+      console.log('✅ Demographics completed:', demographics)
       goToNextStep('scenario')
     }
 
@@ -496,7 +502,10 @@ export default function StudyPage() {
                 </Button>
                 
                 <Button 
-                  onClick={() => goToNextStep('first-variant')}
+                  onClick={() => {
+                    console.log('🚀 Starting first variant:', getFirstVariant())
+                    goToNextStep('first-variant')
+                  }}
                   className="bg-green-600 hover:bg-green-700 text-white text-lg py-3 px-8"
                 >
                   Verstanden, zu den Tests →
@@ -517,7 +526,13 @@ export default function StudyPage() {
     useEffect(() => {
       setCurrentVariant(variant)
       setVariantStartTime(new Date())
-    }, [variant])
+      console.log(`🔄 Starting variant ${variant} (${isFirst ? 'first' : 'second'})`)
+    }, [variant, isFirst])
+
+    const handleVariantComplete = () => {
+      console.log(`✅ Variant ${variant} completed, going to questionnaire`)
+      goToNextStep(isFirst ? 'first-questionnaire' : 'second-questionnaire')
+    }
 
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 py-8">
@@ -595,25 +610,23 @@ export default function StudyPage() {
 
                 <Button 
                   onClick={() => {
-                    // Redirect to variant page
                     const targetUrl = variant === 'A' ? '/form-a' : '/form-b'
-                    window.location.href = targetUrl
+                    window.open(targetUrl, '_blank')
                   }}
-                  className={`w-full text-white py-4 px-6 text-lg font-medium ${
+                  className={`w-full text-white py-4 px-6 text-lg font-medium mb-4 ${
                     variantColor === 'blue' 
                       ? 'bg-blue-600 hover:bg-blue-700' 
                       : 'bg-green-600 hover:bg-green-700'
                   }`}
                 >
-                  Variante {variant} jetzt testen →
+                  Variante {variant} in neuem Tab öffnen →
                 </Button>
 
                 <Button 
-                  onClick={() => goToNextStep(isFirst ? 'first-questionnaire' : 'second-questionnaire')}
-                  variant="outline"
-                  className="w-full mt-4"
+                  onClick={handleVariantComplete}
+                  className="w-full bg-green-600 hover:bg-green-700 text-white py-3 px-6"
                 >
-                  Ich habe die Variante abgeschlossen →
+                  ✅ Ich habe Variante {variant} abgeschlossen
                 </Button>
               </div>
             </CardContent>
@@ -699,12 +712,15 @@ export default function StudyPage() {
         timeSpent
       }
 
+      console.log(`✅ Questionnaire ${variant} completed:`, questionnaireData)
+
       if (isFirst) {
         if (variant === 'A') {
           setStudyData(prev => ({ ...prev, variantAData: questionnaireData }))
         } else {
           setStudyData(prev => ({ ...prev, variantBData: questionnaireData }))
         }
+        console.log('🔄 Going to second variant')
         goToNextStep('second-variant')
       } else {
         if (variant === 'A') {
@@ -712,6 +728,7 @@ export default function StudyPage() {
         } else {
           setStudyData(prev => ({ ...prev, variantBData: questionnaireData }))
         }
+        console.log('🔄 Going to comparison')
         goToNextStep('comparison')
       }
     }
@@ -863,9 +880,11 @@ export default function StudyPage() {
       }
 
       setStudyData(finalStudyData)
+      console.log('✅ Complete study data:', finalStudyData)
 
       // Save to backend/Google Cloud
       try {
+        console.log('💾 Saving to backend...')
         const saveResponse = await fetch('/api/study/save', {
           method: 'POST',
           headers: {
@@ -875,12 +894,13 @@ export default function StudyPage() {
         })
 
         if (saveResponse.ok) {
-          console.log('Study data saved successfully')
+          const result = await saveResponse.json()
+          console.log('✅ Study data saved successfully:', result)
         } else {
-          console.error('Failed to save study data')
+          console.error('❌ Failed to save study data:', saveResponse.statusText)
         }
       } catch (error) {
-        console.error('Error saving study data:', error)
+        console.error('❌ Error saving study data:', error)
       }
 
       goToNextStep('complete')
@@ -1063,6 +1083,6 @@ export default function StudyPage() {
     case 'complete':
       return <CompleteStep />
     default:
-      return <div>Unbekannter Schritt</div>
+      return <div>Unbekannter Schritt: {currentStep}</div>
   }
 }

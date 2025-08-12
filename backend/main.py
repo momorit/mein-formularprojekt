@@ -836,6 +836,271 @@ async def health_check():
             "timestamp": datetime.now().isoformat()
         }
 
+# backend/main.py - STUDY SAVE ENDPUNKT (Füge das zu deiner bestehenden main.py hinzu)
+
+# === IMPORTS HINZUFÜGEN (falls nicht vorhanden) ===
+from typing import Dict, Any, List, Optional
+from datetime import datetime
+import json
+
+# === PYDANTIC MODEL HINZUFÜGEN ===
+class StudySaveRequest(BaseModel):
+    participantId: str
+    startTime: str  # ISO string from frontend
+    randomization: str
+    demographics: Optional[Dict[str, str]] = None
+    variantAData: Optional[Dict[str, Any]] = None
+    variantBData: Optional[Dict[str, Any]] = None
+    comparisonData: Optional[Dict[str, Any]] = None
+    totalDuration: Optional[int] = None
+
+# === STUDY SAVE ENDPUNKT ===
+@app.post("/api/study/save")
+async def save_complete_study(request: StudySaveRequest):
+    """Vollständige Studiendaten speichern - Google Cloud + Lokales Backup"""
+    try:
+        print(f"📊 Saving complete study data for participant: {request.participantId}")
+        
+        # Umfassende Studiendaten strukturieren
+        complete_study_data = {
+            "study_type": "FormularIQ_Complete_User_Study",
+            "participant_id": request.participantId,
+            "collection_timestamp": datetime.now().isoformat(),
+            "study_start_time": request.startTime,
+            "randomization_order": request.randomization,
+            "total_duration_ms": request.totalDuration,
+            "total_duration_minutes": round((request.totalDuration or 0) / 60000, 2),
+            
+            # === DEMOGRAPHICS ===
+            "demographics": request.demographics,
+            
+            # === VARIANT A DATA ===
+            "variant_a_results": request.variantAData,
+            
+            # === VARIANT B DATA ===
+            "variant_b_results": request.variantBData,
+            
+            # === COMPARISON DATA ===
+            "variant_comparison": request.comparisonData,
+            
+            # === STUDY COMPLETION METADATA ===
+            "completion_metadata": {
+                "demographics_completed": bool(request.demographics),
+                "variant_a_completed": bool(request.variantAData),
+                "variant_b_completed": bool(request.variantBData),
+                "comparison_completed": bool(request.comparisonData),
+                "study_completion_rate": calculate_study_completion_rate(request),
+                "first_variant_tested": request.randomization.split('-')[0] if request.randomization else None,
+                "second_variant_tested": request.randomization.split('-')[1] if request.randomization else None
+            },
+            
+            # === SCIENTIFIC METADATA ===
+            "research_metadata": {
+                "project_title": "FormularIQ - LLM-gestützte Formularbearbeitung",
+                "institution": "HAW Hamburg",
+                "department": "Fakultät Technik und Informatik",
+                "researcher": "Moritz Treu",
+                "study_type": "Within-Subject Design Usability Study",
+                "data_collection_method": "Online User Study",
+                "study_version": "1.0.0",
+                "backend_version": "2.3.0",
+                "collection_date": datetime.now().date().isoformat(),
+                "data_classification": "Scientific Research Data - Anonymized"
+            },
+            
+            # === TECHNICAL METADATA ===
+            "technical_metadata": {
+                "frontend_platform": "Next.js",
+                "backend_platform": "FastAPI",
+                "llm_provider": "Groq/Ollama",
+                "storage_primary": "Google Drive",
+                "storage_backup": "Local JSON"
+            }
+        }
+        
+        # Dateiname mit Participant ID und Zeitstempel
+        timestamp_str = datetime.now().strftime('%Y%m%d_%H%M%S')
+        filename = f"complete_study_{request.participantId}_{timestamp_str}.json"
+        
+        storage_results = {"storage": "local", "success": False}
+        
+        # === GOOGLE DRIVE UPLOAD (Primary Storage) ===
+        if drive_service and drive_folder_id:
+            try:
+                print("☁️ Uploading to Google Drive...")
+                file_id, web_link = upload_to_google_drive(
+                    drive_service, 
+                    drive_folder_id, 
+                    complete_study_data, 
+                    filename
+                )
+                if file_id:
+                    storage_results = {
+                        "storage": "google_drive",
+                        "success": True,
+                        "google_drive_id": file_id,
+                        "web_link": web_link,
+                        "folder": GOOGLE_DRIVE_FOLDER_NAME
+                    }
+                    print(f"✅ Google Drive Upload erfolgreich: {filename}")
+                else:
+                    print("❌ Google Drive Upload fehlgeschlagen")
+                    storage_results["drive_error"] = "Upload returned no file ID"
+            except Exception as drive_error:
+                print(f"❌ Google Drive Fehler: {drive_error}")
+                storage_results["drive_error"] = str(drive_error)
+        else:
+            print("⚠️ Google Drive Service nicht verfügbar")
+            storage_results["drive_error"] = "Service not available"
+        
+        # === LOCAL BACKUP (Always as Fallback) ===
+        try:
+            local_path = LOCAL_OUTPUT_DIR / filename
+            async with aiofiles.open(local_path, 'w', encoding='utf-8') as f:
+                await f.write(json.dumps(complete_study_data, ensure_ascii=False, indent=2))
+            storage_results["local_backup"] = True
+            storage_results["local_path"] = str(local_path)
+            print(f"✅ Lokales Backup gespeichert: {local_path}")
+        except Exception as local_error:
+            print(f"❌ Lokales Backup fehlgeschlagen: {local_error}")
+            storage_results["local_error"] = str(local_error)
+        
+        # === RESPONSE ===
+        return {
+            "message": "Vollständige Studiendaten erfolgreich gespeichert",
+            "participant_id": request.participantId,
+            "filename": filename,
+            "study_duration_minutes": round((request.totalDuration or 0) / 60000, 2),
+            "completion_rate": calculate_study_completion_rate(request),
+            **storage_results
+        }
+        
+    except Exception as e:
+        print(f"❌ KRITISCHER FEHLER bei study/save: {e}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Fehler beim Speichern der Studiendaten: {str(e)}"
+        )
+
+def calculate_study_completion_rate(request: StudySaveRequest) -> float:
+    """Berechnet die Vollständigkeitsrate der Studie (0-100%)"""
+    completed_sections = 0
+    total_sections = 5  # demographics, variant_a, variant_b, comparison, duration
+    
+    if request.demographics:
+        completed_sections += 1
+    if request.variantAData:
+        completed_sections += 1
+    if request.variantBData:
+        completed_sections += 1
+    if request.comparisonData:
+        completed_sections += 1
+    if request.totalDuration and request.totalDuration > 0:
+        completed_sections += 1
+    
+    return round((completed_sections / total_sections) * 100, 2)
+
+# === HEALTH CHECK ERWEITERT ===
+# Ersetze deine bestehende health_check Funktion mit dieser:
+@app.get("/health")
+async def health_check():
+    """Umfassendes System-Health-Check mit Study-Support"""
+    try:
+        # Test Google Drive Write-Access
+        drive_write_test = False
+        if drive_service and drive_folder_id:
+            try:
+                test_data = {"health_check": True, "timestamp": datetime.now().isoformat()}
+                test_filename = f"health_test_{datetime.now().strftime('%H%M%S')}.json"
+                file_id, _ = upload_to_google_drive(
+                    drive_service, 
+                    drive_folder_id, 
+                    test_data, 
+                    test_filename
+                )
+                if file_id:
+                    # Test-Datei wieder löschen
+                    try:
+                        drive_service.files().delete(fileId=file_id).execute()
+                        drive_write_test = True
+                    except:
+                        pass  # Löschen nicht kritisch
+            except:
+                pass  # Test-Upload nicht kritisch
+        
+        # Test LLM-Funktionalität
+        try:
+            test_response = call_llm_service("Health check test", "", dialog_mode=True)
+            dialog_status = "online" if len(test_response) > 10 else "limited"
+        except:
+            dialog_status = "offline"
+        
+        return {
+            "status": "healthy",
+            "timestamp": datetime.now().isoformat(),
+            "version": "2.3.0",
+            
+            # === CORE SERVICES ===
+            "services": {
+                "google_drive_read": "connected" if drive_service else "disconnected",
+                "google_drive_write": "ok" if drive_write_test else "limited",
+                "llm_dialog": dialog_status,
+                "llm_formular": "online",
+                "local_storage": "available"
+            },
+            
+            # === STUDY FEATURES ===
+            "study_features": {
+                "complete_data_collection": True,
+                "demographics_collection": True,
+                "sus_questionnaires": True,
+                "variant_comparison": True,
+                "randomization_support": True,
+                "cloud_backup": drive_write_test,
+                "local_backup": True
+            },
+            
+            # === API ENDPOINTS STATUS ===
+            "endpoints": {
+                "study_save": "/api/study/save",
+                "form_a_support": "/api/generate-instructions, /api/chat, /api/save",
+                "form_b_support": "/api/dialog/start, /api/dialog/message, /api/dialog/save",
+                "health_monitoring": "/health"
+            }
+        }
+        
+    except Exception as e:
+        return {
+            "status": "degraded",
+            "error": str(e),
+            "timestamp": datetime.now().isoformat(),
+            "message": "Einige Services sind eingeschränkt verfügbar"
+        }
+
+# === STUDY STATISTICS ENDPUNKT (Optional - für Admin-Übersicht) ===
+@app.get("/api/study/stats")
+async def get_study_statistics():
+    """Einfache Statistiken über gesammelte Studiendaten"""
+    try:
+        # Zähle lokale Dateien
+        local_study_files = list(LOCAL_OUTPUT_DIR.glob("complete_study_*.json"))
+        local_count = len(local_study_files)
+        
+        return {
+            "local_study_files": local_count,
+            "storage_directory": str(LOCAL_OUTPUT_DIR),
+            "google_drive_folder": GOOGLE_DRIVE_FOLDER_NAME,
+            "last_update": datetime.now().isoformat()
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+print("✅ Study save endpoints added to backend")
+print("📊 Available endpoints:")
+print("   POST /api/study/save - Save complete study data")
+print("   GET /api/study/stats - Get study statistics")
+print("   GET /health - Extended health check")
+
 # === SERVER START ===
 if __name__ == "__main__":
     print("🚀 FormularIQ Backend - DIALOG REPARIERT")
