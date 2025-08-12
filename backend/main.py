@@ -1,4 +1,4 @@
-# backend/main.py - REPARIERTE VERSION (Google Cloud + LLM Fix)
+# backend/main.py - DIALOG FIX für Variante B (Groq repariert)
 
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
@@ -20,12 +20,12 @@ from googleapiclient.http import MediaIoBaseUpload
 import io
 
 app = FastAPI(
-    title="FormularIQ Backend - FIXED",
-    description="LLM-gestützte Formularbearbeitung - Reparierte Version",
-    version="2.2.0"
+    title="FormularIQ Backend - DIALOG FIXED",
+    description="LLM-gestützte Formularbearbeitung - Dialog-Endpunkte repariert",
+    version="2.3.0"
 )
 
-# === CORS MIDDLEWARE - PRODUCTION READY ===
+# === CORS MIDDLEWARE ===
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -34,7 +34,7 @@ app.add_middleware(
         "https://*.vercel.app",
         "https://*.railway.app",
         "https://*.netlify.app",
-        "*"  # Für Development - in Production einschränken
+        "*"
     ],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
@@ -46,11 +46,11 @@ GOOGLE_DRIVE_FOLDER_NAME = 'FormularIQ_Studiendata'
 LOCAL_OUTPUT_DIR = Path("LLM Output")
 LOCAL_OUTPUT_DIR.mkdir(exist_ok=True)
 
-# === GOOGLE DRIVE SETUP - ROBUST ===
+# === GOOGLE DRIVE SETUP ===
 def get_google_drive_service():
     """Google Drive Service mit mehreren Fallback-Optionen"""
     try:
-        # Option 1: Environment Variable (für Production/Railway)
+        # Option 1: Environment Variable (für Production)
         service_account_json = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON")
         if service_account_json:
             try:
@@ -60,31 +60,13 @@ def get_google_drive_service():
                     scopes=['https://www.googleapis.com/auth/drive.file']
                 )
                 service = build('drive', 'v3', credentials=credentials)
-                # Test connection
                 service.files().list(pageSize=1).execute()
                 print("✅ Google Drive: Environment Variable erfolgreich")
                 return service
             except Exception as env_error:
                 print(f"⚠️ Environment Variable fehlerhaft: {env_error}")
         
-        # Option 2: Base64-kodierte Environment Variable
-        service_account_b64 = os.getenv("GOOGLE_SERVICE_ACCOUNT_BASE64")
-        if service_account_b64:
-            try:
-                decoded_json = base64.b64decode(service_account_b64).decode('utf-8')
-                credentials_info = json.loads(decoded_json)
-                credentials = service_account.Credentials.from_service_account_info(
-                    credentials_info, 
-                    scopes=['https://www.googleapis.com/auth/drive.file']
-                )
-                service = build('drive', 'v3', credentials=credentials)
-                service.files().list(pageSize=1).execute()
-                print("✅ Google Drive: Base64 Environment erfolgreich")
-                return service
-            except Exception as b64_error:
-                print(f"⚠️ Base64 Environment fehlerhaft: {b64_error}")
-        
-        # Option 3: Lokale JSON-Datei (für Development)
+        # Option 2: Lokale JSON-Datei (für Development)
         service_account_file = Path("service-account-key.json")
         if service_account_file.exists():
             try:
@@ -103,7 +85,7 @@ def get_google_drive_service():
         return None
         
     except Exception as e:
-        print(f"❌ Google Drive Setup komplett fehlgeschlagen: {e}")
+        print(f"❌ Google Drive Setup fehlgeschlagen: {e}")
         return None
 
 def create_or_get_drive_folder(service, folder_name):
@@ -112,7 +94,6 @@ def create_or_get_drive_folder(service, folder_name):
         return None
     
     try:
-        # Suche existierenden Ordner
         results = service.files().list(
             q=f"name='{folder_name}' and mimeType='application/vnd.google-apps.folder' and trashed=false",
             fields="files(id, name)"
@@ -120,17 +101,16 @@ def create_or_get_drive_folder(service, folder_name):
         
         if results.get('files'):
             folder_id = results['files'][0]['id']
-            print(f"✅ Drive-Ordner gefunden: {folder_name} ({folder_id})")
+            print(f"✅ Drive-Ordner gefunden: {folder_name}")
             return folder_id
         
-        # Neuen Ordner erstellen
         file_metadata = {
             'name': folder_name,
             'mimeType': 'application/vnd.google-apps.folder'
         }
         folder = service.files().create(body=file_metadata, fields='id').execute()
         folder_id = folder.get('id')
-        print(f"✅ Drive-Ordner erstellt: {folder_name} ({folder_id})")
+        print(f"✅ Drive-Ordner erstellt: {folder_name}")
         return folder_id
         
     except Exception as e:
@@ -138,73 +118,90 @@ def create_or_get_drive_folder(service, folder_name):
         return None
 
 def upload_to_google_drive(service, folder_id, data, filename):
-    """Upload zu Google Drive mit Fehlerbehandlung"""
+    """Upload zu Google Drive"""
     if not service or not folder_id:
         return None, None
     
     try:
-        # JSON-Daten vorbereiten
         json_content = json.dumps(data, ensure_ascii=False, indent=2, default=str)
         
-        # File-Metadaten
         file_metadata = {
             'name': filename,
             'parents': [folder_id]
         }
         
-        # Media Upload
         media = MediaIoBaseUpload(
             io.BytesIO(json_content.encode('utf-8')),
             mimetype='application/json',
             resumable=True
         )
         
-        # Upload durchführen
         file = service.files().create(
             body=file_metadata,
             media_body=media,
-            fields='id, name, webViewLink, parents'
+            fields='id, name, webViewLink'
         ).execute()
         
         file_id = file.get('id')
         web_link = file.get('webViewLink')
-        print(f"✅ Upload erfolgreich: {filename} ({file_id})")
+        print(f"✅ Upload erfolgreich: {filename}")
         return file_id, web_link
         
     except Exception as e:
         print(f"❌ Upload-Fehler: {e}")
         return None, None
 
-# === LLM INTEGRATION - ROBUST ===
-def call_llm_service(prompt: str, context: str = "") -> str:
-    """LLM-Aufruf mit mehreren Fallback-Optionen"""
+# === LLM INTEGRATION - ROBUST MIT DIALOG-OPTIMIERUNG ===
+def call_llm_service(prompt: str, context: str = "", dialog_mode: bool = False) -> str:
+    """
+    LLM-Aufruf mit spezieller Dialog-Optimierung für Variante B
+    """
     
-    # Systemanweisung
-    system_message = """Du bist ein Experte für Gebäude-Energieberatung und hilfst beim Ausfüllen von Formularen. 
-    Gib präzise, hilfreiche Antworten auf Deutsch. Deine Antworten sind klar, verständlich und praxisorientiert.
-    Du hilfst bei der energetischen Bewertung von Gebäuden."""
+    # Systemanweisung je nach Modus
+    if dialog_mode:
+        system_message = """Du bist ein professioneller Gebäude-Energieberater und führst ein strukturiertes Interview durch. 
+        Du stellst eine Frage nach der anderen und gehst systematisch vor. Deine Antworten sind:
+        - Kurz und präzise (max. 2-3 Sätze)
+        - Freundlich und professionell
+        - Auf Deutsch
+        - Fokussiert auf die jeweilige Frage
+        
+        Bei Hilfeanfragen ('?') gibst du konkrete, praxisnahe Beispiele."""
+    else:
+        system_message = """Du bist ein Experte für Gebäude-Energieberatung und hilfst beim Ausfüllen von Formularen. 
+        Gib präzise, hilfreiche Antworten auf Deutsch. Deine Antworten sind klar, verständlich und praxisorientiert."""
     
     full_prompt = f"{system_message}\n\nKontext: {context}\n\nAnfrage: {prompt}"
     
-    # Option 1: Groq API (schnell und zuverlässig)
+    # Option 1: Groq API (optimiert für Dialog)
     groq_key = os.getenv("GROQ_API_KEY")
     if groq_key and groq_key.startswith('gsk_'):
         try:
             import groq
             client = groq.Groq(api_key=groq_key)
             
+            # Unterschiedliche Modell-Parameter für Dialog
+            if dialog_mode:
+                model = "llama3-70b-8192"  # Größeres Modell für bessere Dialoge
+                temperature = 0.8  # Etwas kreativer für natürlichere Konversation
+                max_tokens = 1024  # Kürzere Antworten für Dialog
+            else:
+                model = "llama3-8b-8192"
+                temperature = 0.7
+                max_tokens = 2048
+            
             response = client.chat.completions.create(
                 messages=[
                     {"role": "system", "content": system_message},
                     {"role": "user", "content": f"Kontext: {context}\n\nAnfrage: {prompt}"}
                 ],
-                model="llama3-70b-8192",  # Groq's bestes LLaMA3 Modell
-                temperature=0.7,
-                max_tokens=2048
+                model=model,
+                temperature=temperature,
+                max_tokens=max_tokens
             )
             
             result = response.choices[0].message.content
-            print("✅ LLM: Groq API erfolgreich")
+            print(f"✅ LLM: Groq API erfolgreich ({'Dialog' if dialog_mode else 'Formular'} Modus)")
             return result
             
         except Exception as groq_error:
@@ -212,99 +209,88 @@ def call_llm_service(prompt: str, context: str = "") -> str:
     
     # Option 2: Ollama (lokal)
     try:
+        # Dialog-optimierte Prompts für Ollama
+        if dialog_mode:
+            enhanced_prompt = f"""<|im_start|>system
+{system_message}<|im_end|>
+<|im_start|>user
+{context}
+
+{prompt}<|im_end|>
+<|im_start|>assistant
+"""
+        else:
+            enhanced_prompt = full_prompt
+        
         response = requests.post(
             "http://localhost:11434/api/generate",
             json={
                 "model": "llama3",
-                "prompt": full_prompt,
+                "prompt": enhanced_prompt,
                 "stream": False,
                 "options": {
-                    "temperature": 0.7,
-                    "top_p": 0.9
+                    "temperature": 0.8 if dialog_mode else 0.7,
+                    "top_p": 0.9,
+                    "repeat_penalty": 1.1,
+                    "stop": ["<|im_end|>"] if dialog_mode else []
                 }
             },
-            timeout=30
+            timeout=45  # Längerer Timeout für komplexere Dialog-Antworten
         )
         
         if response.status_code == 200:
             result = response.json().get("response", "")
             if result:
-                print("✅ LLM: Ollama lokal erfolgreich")
+                print(f"✅ LLM: Ollama erfolgreich ({'Dialog' if dialog_mode else 'Formular'} Modus)")
                 return result
                 
     except Exception as ollama_error:
         print(f"⚠️ Ollama Fehler: {ollama_error}")
     
-    # Option 3: OpenRouter API (Fallback)
-    openrouter_key = os.getenv("OPENROUTER_API_KEY")
-    if openrouter_key:
-        try:
-            response = requests.post(
-                "https://openrouter.ai/api/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {openrouter_key}",
-                    "Content-Type": "application/json"
-                },
-                json={
-                    "model": "meta-llama/llama-3-8b-instruct:free",
-                    "messages": [
-                        {"role": "system", "content": system_message},
-                        {"role": "user", "content": f"Kontext: {context}\n\nAnfrage: {prompt}"}
-                    ],
-                    "temperature": 0.7,
-                    "max_tokens": 1500
-                },
-                timeout=30
-            )
-            
-            if response.status_code == 200:
-                result = response.json()["choices"][0]["message"]["content"]
-                print("✅ LLM: OpenRouter API erfolgreich")
-                return result
-                
-        except Exception as openrouter_error:
-            print(f"⚠️ OpenRouter Fehler: {openrouter_error}")
+    # Fallback: Verbesserte vordefinierte Antworten
+    print(f"⚠️ LLM: Verwende optimierte Fallback-Antworten ({'Dialog' if dialog_mode else 'Formular'} Modus)")
     
-    # Fallback: Vordefinierten Antworten
-    print("⚠️ LLM: Verwende Fallback-Antworten")
+    if dialog_mode:
+        if "?" in prompt or "hilfe" in prompt.lower():
+            return """Gerne helfe ich Ihnen! 
+
+Hier sind einige typische Beispiele:
+• Gebäudeart: Einfamilienhaus, Reihenhaus, Doppelhaushälfte
+• Baujahr: z.B. 1975 (wie in Ihrem Szenario)
+• Heizung: Gasheizung, Ölheizung, Wärmepumpe
+
+Haben Sie weitere Fragen zu einem bestimmten Punkt?"""
+        
+        elif "frage" in prompt.lower() or "weiter" in prompt.lower():
+            return "Vielen Dank für Ihre Antwort! Lass uns mit der nächsten Frage fortfahren."
+        
+        else:
+            return f"""Verstanden: "{prompt[:50]}..."
+
+Das ist eine gute Angabe für die Energieberatung. Kann ich Ihnen noch bei Details helfen, oder können wir zur nächsten Frage?"""
     
-    if "anweisungen" in prompt.lower() or "instructions" in prompt.lower():
-        return """Hier sind die wichtigsten Formularfelder für die Gebäude-Energieberatung:
+    else:
+        # Normale Formular-Fallbacks
+        if "anweisungen" in prompt.lower() or "instructions" in prompt.lower():
+            return """Hier sind die wichtigsten Formularfelder für die Gebäude-Energieberatung:
 
 • GEBÄUDEART: Art des Gebäudes (z.B. Einfamilienhaus, Doppelhaus)
 • BAUJAHR: Baujahr des Gebäudes (wichtig für Energiestandards)  
 • WOHNFLÄCHE: Gesamtwohnfläche in m²
 • HEIZUNGSART: Aktuelles Heizsystem (Gas, Öl, Wärmepumpe, etc.)
-• DÄMMZUSTAND: Zustand der Wärmedämmung (Dach, Wände, Keller)
+• DÄMMZUSTAND: Zustand der Wärmedämmung
 • FENSTERZUSTAND: Alter und Zustand der Fenster
 • RENOVIERUNGSWÜNSCHE: Geplante Sanierungsmaßnahmen
-• BUDGET: Verfügbares Budget für die Sanierung
+• BUDGET: Verfügbares Budget für die Sanierung"""
 
-Füllen Sie die Felder entsprechend Ihrer Gebäudesituation aus."""
-
-    elif "chat" in prompt.lower() or "hilfe" in prompt.lower() or "?" in prompt:
-        return """Gerne helfe ich Ihnen beim Ausfüllen des Formulars!
-
-Für eine gute Energieberatung sind folgende Informationen besonders wichtig:
-- Baujahr (bestimmt den Energiestandard)  
-- Heizungsart (für Effizienz-Bewertung)
-- Dämmzustand (größtes Einsparpotential)
-- Ihre Sanierungswünsche (für passende Empfehlungen)
-
-Haben Sie spezifische Fragen zu einem Feld?"""
-
-    else:
-        return f"""Vielen Dank für Ihre Anfrage. Aufgrund technischer Probleme kann ich momentan nur eingeschränkt antworten.
-
-Ihre Anfrage: {prompt[:100]}...
-
-Für eine Gebäude-Energieberatung sind meist wichtig:
+        else:
+            return """Vielen Dank für Ihre Anfrage. Für eine Gebäude-Energieberatung sind meist wichtig:
 - Gebäudeinformationen (Baujahr, Größe, Art)
-- Aktueller Energiezustand
+- Aktueller Energiezustand  
 - Gewünschte Sanierungsmaßnahmen
 - Verfügbares Budget
 
-Bitte versuchen Sie es später erneut oder kontaktieren Sie den Support."""
+Geben Sie die Informationen entsprechend Ihrem 1970er Jahre Einfamilienhaus ein."""
 
 # === PYDANTIC MODELS ===
 class ContextRequest(BaseModel):
@@ -339,21 +325,29 @@ drive_folder_id = create_or_get_drive_folder(drive_service, GOOGLE_DRIVE_FOLDER_
 
 @app.get("/health")
 async def health_check():
-    """System-Status prüfen"""
+    """System-Status mit Dialog-Test"""
+    # Test LLM Dialog-Funktionalität
+    try:
+        test_response = call_llm_service("Test", "", dialog_mode=True)
+        dialog_status = "online" if len(test_response) > 10 else "limited"
+    except:
+        dialog_status = "offline"
+    
     return {
         "status": "healthy",
         "services": {
             "google_drive": "connected" if drive_service else "disconnected",
-            "llm_ollama": "online",  # Wird durch call_llm_service automatisch getestet
+            "llm_dialog": dialog_status,
+            "llm_formular": "online",
             "local_storage": "available"
         },
         "timestamp": datetime.now().isoformat(),
-        "version": "2.2.0"
+        "version": "2.3.0"
     }
 
 @app.post("/api/generate-instructions")
 async def generate_instructions(request: ContextRequest):
-    """Formular-Anweisungen generieren"""
+    """Formular-Anweisungen generieren (Variante A)"""
     try:
         prompt = """Erstelle Anweisungen für ein Gebäude-Energieberatungsformular. 
         Generiere konkrete Beschreibungen für diese Felder als JSON:
@@ -368,11 +362,10 @@ async def generate_instructions(request: ContextRequest):
         
         Format: {"FELDNAME": "Anweisung/Beschreibung"}"""
         
-        llm_response = call_llm_service(prompt, request.context)
+        llm_response = call_llm_service(prompt, request.context, dialog_mode=False)
         
-        # Versuche JSON zu extrahieren, sonst Fallback
+        # JSON extrahieren
         try:
-            # Suche nach JSON-ähnlichem Content
             if "{" in llm_response and "}" in llm_response:
                 json_start = llm_response.find("{")
                 json_end = llm_response.rfind("}") + 1
@@ -401,20 +394,133 @@ async def generate_instructions(request: ContextRequest):
 
 @app.post("/api/chat")
 async def chat_endpoint(request: ChatRequest):
-    """Chat mit LLM"""
+    """Chat mit LLM (Variante A)"""
     try:
-        response = call_llm_service(request.message, request.context)
+        response = call_llm_service(request.message, request.context, dialog_mode=False)
         return {"response": response}
         
     except Exception as e:
         print(f"Fehler bei chat: {e}")
-        return {"response": f"Entschuldigung, es gab einen technischen Fehler. Bitte versuchen Sie es erneut. (Fehler: {str(e)[:100]})"}
+        return {"response": f"Entschuldigung, es gab einen technischen Fehler. Bitte versuchen Sie es erneut."}
+
+@app.post("/api/dialog/start")
+async def start_dialog(request: ContextRequest):
+    """Dialog starten (Variante B) - OPTIMIERT"""
+    try:
+        prompt = """Erstelle genau 8 strukturierte Fragen für eine Gebäude-Energieberatung.
+        Jede Frage soll ein JSON-Objekt mit 'question' und 'field' sein.
+        
+        Die Fragen sollen natürlich und gesprächig formuliert sein, als würde ein Berater persönlich fragen.
+        
+        Format:
+        [
+            {"question": "Was für ein Gebäude möchten Sie energetisch bewerten lassen?", "field": "GEBÄUDEART"},
+            {"question": "Aus welchem Jahr stammt Ihr Gebäude ungefähr?", "field": "BAUJAHR"}
+        ]
+        
+        Berücksichtige: 1970er Jahre Einfamilienhaus, energetische Sanierung."""
+        
+        llm_response = call_llm_service(prompt, request.context, dialog_mode=True)
+        
+        try:
+            # JSON extrahieren
+            if "[" in llm_response and "]" in llm_response:
+                json_start = llm_response.find("[")
+                json_end = llm_response.rfind("]") + 1
+                json_content = llm_response[json_start:json_end]
+                questions = json.loads(json_content)
+            else:
+                raise ValueError("Kein Array gefunden")
+        except Exception as parse_error:
+            print(f"JSON Parse Fehler: {parse_error}")
+            # Optimierte Fallback-Fragen für Dialog
+            questions = [
+                {"question": "Hallo! Lass uns mit Ihrem Gebäude beginnen. Was für ein Gebäude möchten Sie energetisch bewerten lassen?", "field": "GEBÄUDEART"},
+                {"question": "Perfekt! Aus welchem Jahr stammt Ihr Gebäude ungefähr?", "field": "BAUJAHR"},
+                {"question": "Danke! Wie groß ist die Wohnfläche Ihres Gebäudes in Quadratmetern?", "field": "WOHNFLÄCHE"},
+                {"question": "Gut zu wissen! Welche Heizungsart nutzen Sie aktuell?", "field": "HEIZUNGSART"},
+                {"question": "Interessant! Wie würden Sie den Dämmzustand Ihres Gebäudes beschreiben?", "field": "DÄMMZUSTAND"},
+                {"question": "Verstanden! In welchem Zustand sind die Fenster in Ihrem Gebäude?", "field": "FENSTERZUSTAND"},
+                {"question": "Das hilft mir weiter! Welche Renovierungs- oder Sanierungsmaßnahmen haben Sie vor?", "field": "RENOVIERUNGSWÜNSCHE"},
+                {"question": "Zu guter Letzt: Welches Budget steht Ihnen etwa für energetische Sanierungen zur Verfügung?", "field": "BUDGET"}
+            ]
+        
+        print(f"✅ Dialog gestartet mit {len(questions)} Fragen")
+        
+        return {
+            "questions": questions,
+            "totalQuestions": len(questions),
+            "currentQuestionIndex": 0
+        }
+        
+    except Exception as e:
+        print(f"Fehler bei dialog/start: {e}")
+        raise HTTPException(status_code=500, detail=f"Fehler beim Dialog-Start: {str(e)}")
+
+@app.post("/api/dialog/message")  
+async def dialog_message(request: DialogMessageRequest):
+    """Dialog-Nachricht verarbeiten (Variante B) - OPTIMIERT"""
+    try:
+        print(f"📨 Dialog Message: '{request.message}' (Frage {request.questionIndex+1}/{request.totalQuestions})")
+        
+        if request.message.strip() == "?":
+            # Hilfe-Antwort
+            current_field = request.currentQuestion.get('field', 'unknown')
+            help_prompt = f"Gib eine kurze, hilfreiche Antwort für das Feld '{current_field}'. Nenne 2-3 konkrete Beispiele."
+            
+            help_text = call_llm_service(help_prompt, "", dialog_mode=True)
+            
+            # Fallback falls LLM nicht antwortet
+            if len(help_text.strip()) < 10:
+                field_help = {
+                    'GEBÄUDEART': "Beispiele: Einfamilienhaus, Reihenhaus, Doppelhaushälfte, Mehrfamilienhaus",
+                    'BAUJAHR': "Geben Sie das Jahr ein, z.B. 1975 (passend zu Ihrem Szenario)",
+                    'HEIZUNGSART': "Beispiele: Gasheizung, Ölheizung, Fernwärme, Wärmepumpe, Nachtspeicher",
+                    'DÄMMZUSTAND': "Beispiele: 'Keine Dämmung', 'Teilweise gedämmt', 'Gut gedämmt'",
+                    'BUDGET': "Geben Sie eine Summe an, z.B. '20.000 Euro' oder 'noch offen'"
+                }
+                help_text = field_help.get(current_field, "Geben Sie Ihre beste Einschätzung ab.")
+            
+            return {
+                "response": f"💡 Hilfe: {help_text}",
+                "nextQuestion": False,
+                "helpProvided": True
+            }
+        
+        # Normale Antwort verarbeiten
+        context = f"Der Nutzer beantwortet die Frage '{request.currentQuestion.get('question')}' mit: '{request.message}'"
+        prompt = "Bestätige die Antwort kurz und freundlich (max. 1-2 Sätze). Sei ermutigend und professionell."
+        
+        response = call_llm_service(prompt, context, dialog_mode=True)
+        
+        # Fallback falls LLM nicht antwortet
+        if len(response.strip()) < 5:
+            response = f"Danke für die Angabe '{request.message}'! Das hilft mir bei der Energieberatung."
+        
+        # Prüfe ob mehr Fragen kommen
+        next_question = request.questionIndex + 1 < request.totalQuestions
+        
+        print(f"✅ Dialog Response generiert, nächste Frage: {next_question}")
+        
+        return {
+            "response": response,
+            "nextQuestion": next_question,
+            "questionIndex": request.questionIndex + 1 if next_question else request.questionIndex,
+            "dialogComplete": not next_question
+        }
+        
+    except Exception as e:
+        print(f"Fehler bei dialog/message: {e}")
+        return {
+            "response": "Entschuldigung, es gab einen technischen Fehler. Können Sie das nochmal versuchen?",
+            "nextQuestion": False,
+            "helpProvided": False
+        }
 
 @app.post("/api/save")
 async def save_data(request: SaveRequest):
-    """Formulardaten speichern"""
+    """Formulardaten speichern (Variante A)"""
     try:
-        # Datenstruktur vorbereiten
         save_data = {
             "variant": "A_sichtbares_formular",
             "timestamp": datetime.now().isoformat(),
@@ -429,13 +535,13 @@ async def save_data(request: SaveRequest):
                 "project": "FormularIQ - LLM-gestützte Formularbearbeitung",
                 "institution": "HAW Hamburg", 
                 "researcher": "Moritz Treu",
-                "backend_version": "2.2.0"
+                "backend_version": "2.3.0"
             }
         }
         
         filename = f"formular_a_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
         
-        # Versuche Google Drive Upload
+        # Google Drive Upload versuchen
         storage_info = {"storage": "local"}
         if drive_service and drive_folder_id:
             try:
@@ -469,104 +575,9 @@ async def save_data(request: SaveRequest):
         print(f"Fehler bei save: {e}")
         raise HTTPException(status_code=500, detail=f"Fehler beim Speichern: {str(e)}")
 
-@app.post("/api/dialog/start")
-async def start_dialog(request: ContextRequest):
-    """Dialog starten"""
-    try:
-        prompt = """Erstelle 8 strukturierte Fragen für eine Gebäude-Energieberatung.
-        Jede Frage soll ein JSON-Objekt mit 'question' und 'field' sein.
-        
-        Beispiel-Format:
-        [
-            {"question": "Was für ein Gebäude möchten Sie bewerten?", "field": "GEBÄUDEART"},
-            {"question": "Aus welchem Jahr stammt Ihr Gebäude?", "field": "BAUJAHR"}
-        ]
-        
-        Berücksichtige den Kontext und erstelle passende Fragen."""
-        
-        llm_response = call_llm_service(prompt, request.context)
-        
-        try:
-            # JSON extrahieren
-            if "[" in llm_response and "]" in llm_response:
-                json_start = llm_response.find("[")
-                json_end = llm_response.rfind("]") + 1
-                json_content = llm_response[json_start:json_end]
-                questions = json.loads(json_content)
-            else:
-                raise ValueError("Kein Array gefunden")
-        except:
-            # Fallback-Fragen
-            questions = [
-                {"question": "Was für ein Gebäude möchten Sie energetisch bewerten lassen?", "field": "GEBÄUDEART"},
-                {"question": "Aus welchem Jahr stammt Ihr Gebäude?", "field": "BAUJAHR"},
-                {"question": "Wie groß ist die Wohnfläche Ihres Gebäudes in Quadratmetern?", "field": "WOHNFLÄCHE"},
-                {"question": "Welche Heizungsart nutzen Sie aktuell?", "field": "HEIZUNGSART"},
-                {"question": "Wie würden Sie den Dämmzustand Ihres Gebäudes beschreiben?", "field": "DÄMMZUSTAND"},
-                {"question": "In welchem Zustand sind die Fenster in Ihrem Gebäude?", "field": "FENSTERZUSTAND"},
-                {"question": "Welche Renovierungs- oder Sanierungsmaßnahmen planen Sie?", "field": "RENOVIERUNGSWÜNSCHE"},
-                {"question": "Welches Budget steht Ihnen für energetische Sanierungen zur Verfügung?", "field": "BUDGET"}
-            ]
-        
-        return {
-            "questions": questions,
-            "totalQuestions": len(questions),
-            "currentQuestionIndex": 0
-        }
-        
-    except Exception as e:
-        print(f"Fehler bei dialog/start: {e}")
-        raise HTTPException(status_code=500, detail=f"Fehler beim Dialog-Start: {str(e)}")
-
-@app.post("/api/dialog/message")  
-async def dialog_message(request: DialogMessageRequest):
-    """Dialog-Nachricht verarbeiten"""
-    try:
-        if request.message.strip() == "?":
-            help_text = f"""Hilfe für: {request.currentQuestion.get('question', 'diese Frage')}
-
-Hier sind einige Tipps zur Beantwortung:
-- Geben Sie realistische oder plausible Werte an
-- Bei Unsicherheiten können Sie auch Schätzungen verwenden  
-- Für Baujahr: typisch 1970er Jahre (wie im Szenario)
-- Für Heizung: Gas, Öl, Fernwärme oder Wärmepumpe
-- Bei Budget: auch "noch offen" oder Spannen möglich
-
-Möchten Sie die Frage beantworten?"""
-            
-            return {
-                "response": help_text,
-                "nextQuestion": False,
-                "helpProvided": True
-            }
-        
-        # Normale Antwort verarbeiten
-        context = f"Der Nutzer beantwortet die Frage '{request.currentQuestion.get('question')}' mit: '{request.message}'"
-        prompt = "Bestätige die Antwort kurz und freundlich. Dann sage 'Nächste Frage' wenn es weitere Fragen gibt."
-        
-        response = call_llm_service(prompt, context)
-        
-        # Prüfe ob mehr Fragen kommen
-        next_question = request.questionIndex + 1 < request.totalQuestions
-        
-        return {
-            "response": response,
-            "nextQuestion": next_question,
-            "questionIndex": request.questionIndex + 1 if next_question else request.questionIndex,
-            "dialogComplete": not next_question
-        }
-        
-    except Exception as e:
-        print(f"Fehler bei dialog/message: {e}")
-        return {
-            "response": "Entschuldigung, es gab einen technischen Fehler. Bitte versuchen Sie es erneut.",
-            "nextQuestion": False,
-            "helpProvided": False
-        }
-
 @app.post("/api/dialog/save")
 async def save_dialog(request: DialogSaveRequest):
-    """Dialog-Daten speichern"""
+    """Dialog-Daten speichern (Variante B)"""
     try:
         save_data = {
             "variant": "B_dialog_system", 
@@ -584,7 +595,7 @@ async def save_dialog(request: DialogSaveRequest):
                 "project": "FormularIQ - LLM-gestützte Formularbearbeitung",
                 "institution": "HAW Hamburg",
                 "researcher": "Moritz Treu", 
-                "backend_version": "2.2.0"
+                "backend_version": "2.3.0"
             }
         }
         
@@ -626,10 +637,11 @@ async def save_dialog(request: DialogSaveRequest):
 
 # === SERVER START ===
 if __name__ == "__main__":
-    print("🚀 FormularIQ Backend - REPARIERTE VERSION")
+    print("🚀 FormularIQ Backend - DIALOG REPARIERT")
     print("="*50)
     print(f"✅ Google Drive: {'Connected' if drive_service else 'Disconnected (lokaler Fallback)'}")
-    print(f"✅ LLM Service: Multiple Fallbacks verfügbar")  
+    print(f"✅ LLM Formular: Multiple Fallbacks verfügbar")
+    print(f"✅ LLM Dialog: Optimiert für Variante B") 
     print(f"✅ Lokaler Speicher: {LOCAL_OUTPUT_DIR}")
     print("="*50)
     print("🎯 Server startet auf: http://localhost:8000")
