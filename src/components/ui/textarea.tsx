@@ -1,11 +1,8 @@
 import * as React from "react"
 import { cn } from "@/lib/utils"
 
-// Fix: Spezifisches Interface statt leerem
 export interface TextareaProps
-  extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {
-  // Hier können zusätzliche Props definiert werden
-}
+  extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {}
 
 const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
   ({ className, ...props }, ref) => {
