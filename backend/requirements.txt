@@ -1,11 +1,13 @@
+# backend/requirements.txt - Railway optimiert
 fastapi==0.104.1
-uvicorn==0.24.0
+uvicorn[standard]==0.24.0
 pydantic==2.5.0
 aiofiles==23.2.1
 requests==2.31.0
 python-multipart==0.0.6
-python-dotenv==1.0.0
+
+# Optional: Groq (nur wenn API Key vorhanden)
 groq==0.4.1
-google-api-python-client==2.108.0
-google-auth-httplib2==0.1.1
-google-auth-oauthlib==1.1.0
+
+# Essentials für Railway
+python-dotenv==1.0.0
