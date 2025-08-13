@@ -1389,7 +1389,9 @@ async def health_check():
     try:
         # Test Google Drive Write-Access
         drive_write_test
-
+    finally:
+        pass 
+    
 # === SERVER START ===
 if __name__ == "__main__":
     print("🚀 FormularIQ Backend - DIALOG REPARIERT")
