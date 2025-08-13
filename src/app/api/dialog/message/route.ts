@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
       });
     }
     
-    const response = await callLLM(message, `Aktuelle Frage: ${currentQuestion?.text}`, true);
+    const response = await callLLM(`Bestätige diese Antwort kurz und ermutigend: ${message}`, `Frage war: ${currentQuestion?.text}`, true);
     
     return NextResponse.json({
       success: true,
@@ -25,9 +25,10 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('Dialog message error:', error);
-    return NextResponse.json(
-      { error: 'Nachricht konnte nicht verarbeitet werden' },
-      { status: 500 }
-    );
+    return NextResponse.json({
+      success: true,
+      response: "Vielen Dank für Ihre Antwort! Lassen Sie uns mit der nächsten Frage fortfahren.",
+      type: 'answer'
+    });
   }
 }

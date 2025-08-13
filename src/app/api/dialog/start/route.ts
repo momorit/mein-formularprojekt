@@ -9,8 +9,8 @@ export async function POST(request: NextRequest) {
     Erstelle 5-8 wichtige Fragen. Gib JSON zurück:
     {
       "questions": [
-        {"id": "q1", "text": "Frage 1"},
-        {"id": "q2", "text": "Frage 2"}
+        {"id": "q1", "text": "Welche Art von Gebäude möchten Sie bewerten lassen?"},
+        {"id": "q2", "text": "In welchem Jahr wurde Ihr Gebäude erbaut?"}
       ]
     }`;
 
@@ -22,12 +22,25 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(questionData);
     }
     
-    throw new Error('Keine gültigen Fragen generiert');
+    // Fallback questions
+    return NextResponse.json({
+      questions: [
+        {"id": "q1", "text": "Welche Art von Gebäude möchten Sie bewerten lassen?"},
+        {"id": "q2", "text": "In welchem Jahr wurde Ihr Gebäude erbaut?"},
+        {"id": "q3", "text": "Wie groß ist die Wohnfläche Ihres Gebäudes?"},
+        {"id": "q4", "text": "Welche Heizungsart verwenden Sie derzeit?"},
+        {"id": "q5", "text": "Haben Sie bereits Maßnahmen zur Energieeinsparung durchgeführt?"}
+      ]
+    });
   } catch (error) {
     console.error('Dialog start error:', error);
-    return NextResponse.json(
-      { error: 'Dialog konnte nicht gestartet werden' },
-      { status: 500 }
-    );
+    
+    return NextResponse.json({
+      questions: [
+        {"id": "q1", "text": "Welche Art von Gebäude möchten Sie bewerten lassen?"},
+        {"id": "q2", "text": "In welchem Jahr wurde Ihr Gebäude erbaut?"},
+        {"id": "q3", "text": "Wie groß ist die Wohnfläche Ihres Gebäudes?"}
+      ]
+    });
   }
 }

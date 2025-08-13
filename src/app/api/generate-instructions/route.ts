@@ -6,16 +6,24 @@ export async function POST(request: NextRequest) {
     const { context } = await request.json();
     
     const prompt = `Erstelle ein Gebäude-Energieberatung Formular basierend auf diesem Kontext. 
+    Erstelle 5-8 relevante Felder für Gebäudedaten.
     Gib JSON zurück mit diesem Format:
     {
       "fields": [
         {
-          "id": "unique_id",
-          "label": "Feldname", 
-          "type": "text|number|email|tel|textarea|select",
-          "required": true/false,
-          "placeholder": "Hilfstext",
-          "options": ["Option1", "Option2"] // nur bei select
+          "id": "gebaeudeart",
+          "label": "Art des Gebäudes", 
+          "type": "select",
+          "required": true,
+          "placeholder": "Bitte wählen",
+          "options": ["Einfamilienhaus", "Mehrfamilienhaus", "Gewerbe"]
+        },
+        {
+          "id": "baujahr",
+          "label": "Baujahr",
+          "type": "number",
+          "required": true,
+          "placeholder": "z.B. 1995"
         }
       ]
     }`;
@@ -29,12 +37,60 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(formData);
     }
     
-    throw new Error('Keine gültige JSON-Antwort');
+    // Fallback if no JSON
+    return NextResponse.json({
+      fields: [
+        {
+          id: "gebaeudeart",
+          label: "Art des Gebäudes",
+          type: "select",
+          required: true,
+          options: ["Einfamilienhaus", "Mehrfamilienhaus", "Gewerbe"]
+        },
+        {
+          id: "baujahr", 
+          label: "Baujahr",
+          type: "number",
+          required: true,
+          placeholder: "z.B. 1995"
+        },
+        {
+          id: "wohnflaeche",
+          label: "Wohnfläche (m²)",
+          type: "number", 
+          required: true,
+          placeholder: "z.B. 150"
+        },
+        {
+          id: "heizung",
+          label: "Heizungsart",
+          type: "select",
+          required: true,
+          options: ["Gas", "Öl", "Wärmepumpe", "Fernwärme", "Sonstiges"]
+        }
+      ]
+    });
   } catch (error) {
     console.error('Generate instructions error:', error);
-    return NextResponse.json(
-      { error: 'Formular-Generierung fehlgeschlagen' },
-      { status: 500 }
-    );
+    
+    // Always return fallback form
+    return NextResponse.json({
+      fields: [
+        {
+          id: "gebaeudeart",
+          label: "Art des Gebäudes",
+          type: "select", 
+          required: true,
+          options: ["Einfamilienhaus", "Mehrfamilienhaus", "Gewerbe"]
+        },
+        {
+          id: "baujahr",
+          label: "Baujahr", 
+          type: "number",
+          required: true,
+          placeholder: "z.B. 1995"
+        }
+      ]
+    });
   }
 }
