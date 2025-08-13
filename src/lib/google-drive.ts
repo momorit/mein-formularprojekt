@@ -1,4 +1,4 @@
-// src/lib/google-drive.ts
+// src/lib/google-drive.ts - Google Drive Integration
 import { google } from 'googleapis';
 
 function getGoogleAuth() {

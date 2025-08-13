@@ -3,33 +3,32 @@ import { saveToGoogleDrive } from '@/lib/google-drive';
 
 export async function POST(request: NextRequest) {
   try {
-    const studyData = await request.json();
+    const data = await request.json();
     
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const filename = `study_${studyData.participantId}_${timestamp}.json`;
+    const filename = `dialog_${timestamp}.json`;
     
     try {
-      const fileId = await saveToGoogleDrive(studyData, filename);
+      const fileId = await saveToGoogleDrive(data, filename);
       
       return NextResponse.json({
         success: true,
         filename,
         fileId,
-        message: 'Studiendaten erfolgreich gespeichert!',
         storage: 'google_drive'
       });
     } catch (driveError) {
       return NextResponse.json({
         success: false,
         error: 'Google Drive nicht verfügbar',
-        downloadData: studyData,
-        filename: `local_backup_${Date.now()}.json`
+        downloadData: data,
+        filename: `local_${filename}`
       }, { status: 500 });
     }
   } catch (error) {
-    console.error('Study save error:', error);
+    console.error('Dialog save error:', error);
     return NextResponse.json(
-      { error: 'Studiendaten konnten nicht gespeichert werden' },
+      { error: 'Dialog-Speichern fehlgeschlagen' },
       { status: 500 }
     );
   }

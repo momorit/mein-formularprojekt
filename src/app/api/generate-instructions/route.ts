@@ -1,4 +1,3 @@
-// src/app/api/generate-instructions/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { callLLM } from '@/lib/llm';
 
@@ -6,7 +5,7 @@ export async function POST(request: NextRequest) {
   try {
     const { context } = await request.json();
     
-    const prompt = `Erstelle ein Formular basierend auf diesem Kontext. 
+    const prompt = `Erstelle ein Gebäude-Energieberatung Formular basierend auf diesem Kontext. 
     Gib JSON zurück mit diesem Format:
     {
       "fields": [
@@ -32,6 +31,7 @@ export async function POST(request: NextRequest) {
     
     throw new Error('Keine gültige JSON-Antwort');
   } catch (error) {
+    console.error('Generate instructions error:', error);
     return NextResponse.json(
       { error: 'Formular-Generierung fehlgeschlagen' },
       { status: 500 }
