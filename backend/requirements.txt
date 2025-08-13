@@ -1,39 +1,9 @@
-# backend/requirements.txt - VOLLSTÄNDIGE DEPENDENCIES (GEFIXT)
-
-# === CORE FRAMEWORK ===
 fastapi==0.104.1
-uvicorn[standard]==0.24.0
-pydantic==2.5.0
+uvicorn==0.24.0
 python-multipart==0.0.6
-
-# === HTTP CLIENT ===
-httpx==0.25.2
-requests==2.31.0
-
-# === FILE HANDLING ===
-aiofiles==23.2.1
-python-dotenv==1.0.0
-
-# === GOOGLE DRIVE API ===
-google-auth==2.23.4
-google-auth-oauthlib==1.1.0  
-google-auth-httplib2==0.1.1
-google-api-python-client==2.108.0
-
-# === OPTIONAL LLM PROVIDERS ===
-groq==0.4.1  # Für schnelle LLM-Antworten
-ollama==0.1.7  # Für lokale LLM-Integration
-
-# === PDF PROCESSING (falls benötigt) ===
-PyPDF2==3.0.1
 pdfplumber==0.10.3
-
-# === SECURITY & AUTH ===
-python-jose[cryptography]==3.3.0
-
-# === UTILITIES ===
-pathlib2==2.3.7
-
-# === DEVELOPMENT (optional) ===
-pytest==7.4.3
-pytest-asyncio==0.21.1
+ollama==0.1.7
+python-jose==3.3.0
+pydantic==2.5.0
+groq>=0.4.1
+python-dotenv>=1.0.0
