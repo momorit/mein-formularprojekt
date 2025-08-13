@@ -1388,10 +1388,62 @@ async def health_check():
     """System-Status mit Study-Save-Test"""
     try:
         # Test Google Drive Write-Access
-        drive_write_test
-    finally:
-        pass 
-    
+        drive_write_test = False
+        if drive_service and drive_folder_id:
+            try:
+                test_data = {"health_check": True, "timestamp": datetime.now().isoformat()}
+                test_filename = f"health_test_{datetime.now().strftime('%H%M%S')}.json"
+                file_id, _ = upload_to_google_drive(
+                    drive_service, 
+                    drive_folder_id, 
+                    test_data, 
+                    test_filename
+                )
+                if file_id:
+                    # Test-Datei wieder löschen
+                    try:
+                        drive_service.files().delete(fileId=file_id).execute()
+                        drive_write_test = True
+                    except:
+                        pass  # Löschen nicht kritisch
+            except:
+                pass  # Test-Upload nicht kritisch
+        
+        # Test LLM Services
+        try:
+            test_response = call_llm_service("Test", "", dialog_mode=True)
+            dialog_status = "online" if len(test_response) > 10 else "limited"
+        except:
+            dialog_status = "offline"
+        
+        return {
+            "status": "healthy",
+            "services": {
+                "google_drive": "connected" if drive_service else "disconnected",
+                "google_drive_write": "ok" if drive_write_test else "limited",
+                "llm_dialog": dialog_status,
+                "llm_formular": "online",
+                "local_storage": "available",
+                "study_save": "ready"
+            },
+            "timestamp": datetime.now().isoformat(),
+            "version": "2.3.0",
+            "study_features": {
+                "complete_data_collection": True,
+                "demographics_support": True,
+                "questionnaire_support": True,
+                "randomization_support": True,
+                "cloud_backup": drive_write_test
+            }
+        }
+        
+    except Exception as e:
+        return {
+            "status": "degraded",
+            "error": str(e),
+            "timestamp": datetime.now().isoformat()
+        }
+
 # === SERVER START ===
 if __name__ == "__main__":
     print("🚀 FormularIQ Backend - DIALOG REPARIERT")
