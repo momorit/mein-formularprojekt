@@ -425,81 +425,19 @@ async def log_requests(request: Request, call_next):
 
 # === API ENDPOINTS ===
 
+# Ersetze TEMPORÄR deine Root-Route mit dieser ultra-einfachen Version:
+
 @app.get("/")
 async def root():
-    """Einfache Root-Route ohne komplexe Tests"""
-    try:
-        return {
-            "message": "FormularIQ Backend - Complete Edition",
-            "status": "healthy",
-            "version": "3.2.0",
-            "timestamp": datetime.now().isoformat(),
-            "environment": "production" if IS_PRODUCTION else "development",
-            "basic_services": {
-                "groq_api_key_available": bool(os.getenv("GROQ_API_KEY")),
-                "drive_service_initialized": bool(drive_service),
-                "local_storage_dir": str(LOCAL_OUTPUT_DIR),
-                "dialog_sessions_count": len(dialog_sessions) if 'dialog_sessions' in globals() else 0
-            },
-            "endpoints": [
-                "/health", "/api/chat", "/api/generate-instructions", 
-                "/api/save", "/api/dialog/start", "/api/dialog/message", 
-                "/api/dialog/save", "/api/study/save"
-            ]
-        }
-    except Exception as e:
-        # Fallback response if anything fails
-        return {
-            "message": "FormularIQ Backend - Minimal Mode",
-            "status": "degraded",
-            "error": str(e),
-            "timestamp": datetime.now().isoformat(),
-            "version": "3.2.0"
-        }
+    """Ultra-minimale Root-Route - kein Risiko für 502-Fehler"""
+    return {"message": "FormularIQ Backend läuft!", "status": "ok"}
 
 @app.get("/health")
-async def health_check_simple():
-    """Vereinfachte Health-Check ohne File-Operations"""
-    try:
-        # Nur grundlegende Checks ohne File I/O
-        services = {}
-        
-        # Groq Check (nur ENV variable)
-        services["groq_api"] = bool(os.getenv("GROQ_API_KEY"))
-        
-        # Drive Service Check (nur Initialization)
-        services["google_drive"] = bool(drive_service)
-        
-        # Local Directory Check (nur Existenz)
-        services["local_storage"] = LOCAL_OUTPUT_DIR.exists() if hasattr(LOCAL_OUTPUT_DIR, 'exists') else True
-        
-        # Dialog Sessions (safe check)
-        try:
-            services["dialog_sessions"] = len(dialog_sessions)
-        except:
-            services["dialog_sessions"] = 0
-        
-        return {
-            "status": "healthy",
-            "timestamp": datetime.now().isoformat(),
-            "version": "3.2.0",
-            "environment": "production" if IS_PRODUCTION else "development",
-            "services": services,
-            "system": {
-                "port": PORT,
-                "host": HOST,
-                "railway": IS_PRODUCTION
-            }
-        }
-        
-    except Exception as e:
-        logger.error(f"💔 Health check failed: {e}")
-        return {
-            "status": "error",
-            "error": str(e),
-            "timestamp": datetime.now().isoformat(),
-            "version": "3.2.0"
-        }
+async def health():
+    """Ultra-minimale Health-Check"""
+    return {"status": "healthy"}
+
+# Kommentiere ALLE anderen komplexen Operationen in der Root-Route aus!
 
 @app.post("/api/generate-instructions")
 async def generate_instructions(request: ContextRequest):
