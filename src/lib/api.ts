@@ -1,37 +1,3 @@
-// src/lib/api.ts - Komplette API-Client Implementation
-const API_BASE = process.env.NODE_ENV === 'production' ? '' : 'http://localhost:8000';
-
-interface APIResponse<T = any> {
-  success: boolean;
-  data?: T;
-  error?: string;
-}
-
-// === SYSTEM STATUS ===
-export async function checkSystemStatus() {
-  try {
-    const response = await fetch('/api/health', {
-      method: 'GET',
-      headers: { 'Accept': 'application/json' },
-    });
-    
-    if (!response.ok) {
-      throw new Error(`Health check failed: ${response.status}`);
-    }
-    
-    return await response.json();
-  } catch (error) {
-    console.error('Health check error:', error);
-    return {
-      status: 'error',
-      services: {
-        groq: false,
-        google: false
-      }
-    };
-  }
-}
-
 // === VARIANTE A (FORMULAR) ===
 export async function generateInstructions(context: string) {
   try {
@@ -71,8 +37,21 @@ export async function getChatHelp(message: string, context?: string) {
   }
 }
 
-export async function saveFormData(data: any) {
+// ✅ KORRIGIERTE VERSION - 2 Parameter akzeptieren
+export async function saveFormData(instructions: any, values: any) {
   try {
+    const data = {
+      instructions,
+      values,
+      timestamp: new Date().toISOString(),
+      variant: 'A',
+      metadata: {
+        completion_rate: calculateCompletionRate(instructions, values),
+        total_fields: instructions?.fields?.length || 0,
+        filled_fields: Object.keys(values || {}).length
+      }
+    };
+
     const response = await fetch('/api/save', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -90,7 +69,16 @@ export async function saveFormData(data: any) {
   }
 }
 
-// === VARIANTE B (DIALOG) ===
+// Helper function für Completion Rate
+function calculateCompletionRate(instructions: any, values: any): number {
+  const totalFields = instructions?.fields?.length || 0;
+  const filledFields = Object.keys(values || {}).length;
+  
+  if (totalFields === 0) return 0;
+  return Math.round((filledFields / totalFields) * 100);
+}
+
+// === VARIANTE B (DIALOG) - Rest bleibt gleich ===
 export async function startDialog(context?: string) {
   try {
     const response = await fetch('/api/dialog/start', {
@@ -150,6 +138,31 @@ export async function saveDialogData(data: any) {
   } catch (error) {
     console.error('Save dialog data error:', error);
     throw new Error('Dialog-Speichern fehlgeschlagen');
+  }
+}
+
+// === SYSTEM STATUS ===
+export async function checkSystemStatus() {
+  try {
+    const response = await fetch('/api/health', {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' },
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Health check failed: ${response.status}`);
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error('Health check error:', error);
+    return {
+      status: 'error',
+      services: {
+        groq: false,
+        google: false
+      }
+    };
   }
 }
 
