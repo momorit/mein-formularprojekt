@@ -151,7 +151,7 @@ def upload_to_google_drive(service, folder_id, data, filename):
         print(f"❌ Upload-Fehler: {e}")
         return None, None
 
-# === LLM INTEGRATION - ROBUST MIT DIALOG-OPTIMIERUNG ===
+# === LLM INTEGRATION - ROBUST MIT DIALOG-OPTIMIERUNG ===scsccs
 def call_llm_service(prompt: str, context: str = "", dialog_mode: bool = False) -> str:
     """
     LLM-Aufruf mit spezieller Dialog-Optimierung für Variante B
