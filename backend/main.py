@@ -427,117 +427,75 @@ async def log_requests(request: Request, call_next):
 
 @app.get("/")
 async def root():
-    """Root endpoint with comprehensive system information"""
-    return {
-        "message": "FormularIQ Backend - Complete Edition",
-        "status": "healthy",
-        "version": "3.2.0",
-        "timestamp": datetime.now().isoformat(),
-        "environment": "production" if IS_PRODUCTION else "development",
-        "services": {
-            "groq_llm": GROQ_AVAILABLE and bool(os.getenv("GROQ_API_KEY")),
-            "google_drive": bool(drive_service),
-            "local_storage": True,
-            "dialog_sessions": len(dialog_sessions)
-        },
-        "features": [
-            "🤖 Groq LLM Integration",
-            "☁️ Google Drive Cloud Storage", 
-            "💬 Intelligent Chat System",
-            "🎭 Dialog-based Form Filling",
-            "📊 Complete Study Data Collection",
-            "🔄 Robust Fallback Systems"
-        ],
-        "endpoints": {
-            "health": "/health",
-            "chat": "/api/chat",
-            "instructions": "/api/generate-instructions",
-            "save": "/api/save",
-            "dialog_start": "/api/dialog/start",
-            "dialog_message": "/api/dialog/message",
-            "dialog_save": "/api/dialog/save",
-            "study_save": "/api/study/save"
+    """Einfache Root-Route ohne komplexe Tests"""
+    try:
+        return {
+            "message": "FormularIQ Backend - Complete Edition",
+            "status": "healthy",
+            "version": "3.2.0",
+            "timestamp": datetime.now().isoformat(),
+            "environment": "production" if IS_PRODUCTION else "development",
+            "basic_services": {
+                "groq_api_key_available": bool(os.getenv("GROQ_API_KEY")),
+                "drive_service_initialized": bool(drive_service),
+                "local_storage_dir": str(LOCAL_OUTPUT_DIR),
+                "dialog_sessions_count": len(dialog_sessions) if 'dialog_sessions' in globals() else 0
+            },
+            "endpoints": [
+                "/health", "/api/chat", "/api/generate-instructions", 
+                "/api/save", "/api/dialog/start", "/api/dialog/message", 
+                "/api/dialog/save", "/api/study/save"
+            ]
         }
-    }
+    except Exception as e:
+        # Fallback response if anything fails
+        return {
+            "message": "FormularIQ Backend - Minimal Mode",
+            "status": "degraded",
+            "error": str(e),
+            "timestamp": datetime.now().isoformat(),
+            "version": "3.2.0"
+        }
 
 @app.get("/health")
-async def health_check():
-    """Comprehensive health check with service testing"""
+async def health_check_simple():
+    """Vereinfachte Health-Check ohne File-Operations"""
     try:
-        # Test Google Drive if available
-        drive_status = "disconnected"
-        if drive_service and drive_folder_id:
-            try:
-                test_data = {"health_check": True, "timestamp": datetime.now().isoformat()}
-                test_filename = f"health_test_{datetime.now().strftime('%H%M%S')}.json"
-                file_id, _ = upload_to_google_drive(drive_service, drive_folder_id, test_data, test_filename)
-                if file_id:
-                    # Clean up test file
-                    try:
-                        drive_service.files().delete(fileId=file_id).execute()
-                        drive_status = "connected_and_writable"
-                    except:
-                        drive_status = "connected_read_only"
-            except:
-                drive_status = "connected_limited"
+        # Nur grundlegende Checks ohne File I/O
+        services = {}
         
-        # Test LLM service
-        llm_status = "offline"
-        try:
-            test_response = call_llm_service("Test", "", dialog_mode=True)
-            if "Groq LLM response successful" in str(test_response):
-                llm_status = "groq_online"
-            elif len(test_response) > 10:
-                llm_status = "fallback_online"
-            else:
-                llm_status = "limited"
-        except:
-            llm_status = "offline"
+        # Groq Check (nur ENV variable)
+        services["groq_api"] = bool(os.getenv("GROQ_API_KEY"))
         
-        # Test local storage
-        storage_status = "available"
+        # Drive Service Check (nur Initialization)
+        services["google_drive"] = bool(drive_service)
+        
+        # Local Directory Check (nur Existenz)
+        services["local_storage"] = LOCAL_OUTPUT_DIR.exists() if hasattr(LOCAL_OUTPUT_DIR, 'exists') else True
+        
+        # Dialog Sessions (safe check)
         try:
-            test_file = LOCAL_OUTPUT_DIR / "health_test.json"
-            test_data = {"test": True, "timestamp": datetime.now().isoformat()}
-            async with aiofiles.open(test_file, 'w') as f:
-                await f.write(json.dumps(test_data))
-            test_file.unlink()
+            services["dialog_sessions"] = len(dialog_sessions)
         except:
-            storage_status = "limited"
+            services["dialog_sessions"] = 0
         
         return {
             "status": "healthy",
             "timestamp": datetime.now().isoformat(),
             "version": "3.2.0",
             "environment": "production" if IS_PRODUCTION else "development",
-            "services": {
-                "google_drive": drive_status,
-                "llm_service": llm_status,
-                "local_storage": storage_status,
-                "dialog_sessions": len(dialog_sessions)
-            },
+            "services": services,
             "system": {
                 "port": PORT,
                 "host": HOST,
-                "railway": IS_PRODUCTION,
-                "output_directory": str(LOCAL_OUTPUT_DIR),
-                "cors_origins": len(ALLOWED_ORIGINS)
-            },
-            "capabilities": {
-                "groq_llm": GROQ_AVAILABLE and bool(os.getenv("GROQ_API_KEY")),
-                "google_drive_libraries": GOOGLE_DRIVE_AVAILABLE,
-                "cloud_backup": drive_status.startswith("connected"),
-                "local_backup": storage_status == "available",
-                "intelligent_chat": True,
-                "dialog_system": True,
-                "study_data_collection": True
+                "railway": IS_PRODUCTION
             }
         }
         
     except Exception as e:
         logger.error(f"💔 Health check failed: {e}")
         return {
-            "status": "degraded",
+            "status": "error",
             "error": str(e),
             "timestamp": datetime.now().isoformat(),
             "version": "3.2.0"
