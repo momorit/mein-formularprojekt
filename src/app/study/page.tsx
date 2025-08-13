@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation'
 
 export default function StudyPage() {
   const router = useRouter()
+  
+  // ALLE useState HOOKS AM ANFANG (vor allen if-statements)
   const [step, setStep] = useState<'start' | 'demographics' | 'variant1' | 'survey1' | 'variant2' | 'survey2' | 'complete'>('start')
   const [participantId] = useState(() => {
     const timestamp = Date.now().toString(36)
@@ -16,6 +18,19 @@ export default function StudyPage() {
     age: '',
     education: '',
     experience: ''
+  })
+  const [survey1Ratings, setSurvey1Ratings] = useState({
+    usability: '',
+    satisfaction: '',
+    efficiency: '',
+    comments: ''
+  })
+  const [survey2Ratings, setSurvey2Ratings] = useState({
+    usability: '',
+    satisfaction: '',
+    efficiency: '',
+    comparison: '',
+    comments: ''
   })
 
   const getFirstVariant = () => randomization === 'A-B' ? 'A' : 'B'
@@ -265,12 +280,6 @@ export default function StudyPage() {
   // Survey 1
   if (step === 'survey1') {
     const variant = getFirstVariant()
-    const [ratings, setRatings] = useState({
-      usability: '',
-      satisfaction: '',
-      efficiency: '',
-      comments: ''
-    })
 
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-8">
@@ -294,8 +303,8 @@ export default function StudyPage() {
                   </label>
                   <select 
                     required
-                    value={ratings.usability}
-                    onChange={(e) => setRatings(prev => ({ ...prev, usability: e.target.value }))}
+                    value={survey1Ratings.usability}
+                    onChange={(e) => setSurvey1Ratings(prev => ({ ...prev, usability: e.target.value }))}
                     className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="">Bitte bewerten</option>
@@ -313,8 +322,8 @@ export default function StudyPage() {
                   </label>
                   <select 
                     required
-                    value={ratings.satisfaction}
-                    onChange={(e) => setRatings(prev => ({ ...prev, satisfaction: e.target.value }))}
+                    value={survey1Ratings.satisfaction}
+                    onChange={(e) => setSurvey1Ratings(prev => ({ ...prev, satisfaction: e.target.value }))}
                     className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="">Bitte bewerten</option>
@@ -332,8 +341,8 @@ export default function StudyPage() {
                   </label>
                   <select 
                     required
-                    value={ratings.efficiency}
-                    onChange={(e) => setRatings(prev => ({ ...prev, efficiency: e.target.value }))}
+                    value={survey1Ratings.efficiency}
+                    onChange={(e) => setSurvey1Ratings(prev => ({ ...prev, efficiency: e.target.value }))}
                     className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="">Bitte bewerten</option>
@@ -350,8 +359,8 @@ export default function StudyPage() {
                     Weitere Kommentare (optional)
                   </label>
                   <textarea 
-                    value={ratings.comments}
-                    onChange={(e) => setRatings(prev => ({ ...prev, comments: e.target.value }))}
+                    value={survey1Ratings.comments}
+                    onChange={(e) => setSurvey1Ratings(prev => ({ ...prev, comments: e.target.value }))}
                     rows={3}
                     className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="Was hat Ihnen gefallen oder nicht gefallen?"
@@ -430,13 +439,6 @@ export default function StudyPage() {
   // Survey 2
   if (step === 'survey2') {
     const variant = getSecondVariant()
-    const [ratings, setRatings] = useState({
-      usability: '',
-      satisfaction: '',
-      efficiency: '',
-      comparison: '',
-      comments: ''
-    })
 
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-8">
@@ -460,8 +462,8 @@ export default function StudyPage() {
                   </label>
                   <select 
                     required
-                    value={ratings.usability}
-                    onChange={(e) => setRatings(prev => ({ ...prev, usability: e.target.value }))}
+                    value={survey2Ratings.usability}
+                    onChange={(e) => setSurvey2Ratings(prev => ({ ...prev, usability: e.target.value }))}
                     className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="">Bitte bewerten</option>
@@ -479,8 +481,8 @@ export default function StudyPage() {
                   </label>
                   <select 
                     required
-                    value={ratings.comparison}
-                    onChange={(e) => setRatings(prev => ({ ...prev, comparison: e.target.value }))}
+                    value={survey2Ratings.comparison}
+                    onChange={(e) => setSurvey2Ratings(prev => ({ ...prev, comparison: e.target.value }))}
                     className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="">Bitte wählen</option>
@@ -495,8 +497,8 @@ export default function StudyPage() {
                     Abschließende Kommentare (optional)
                   </label>
                   <textarea 
-                    value={ratings.comments}
-                    onChange={(e) => setRatings(prev => ({ ...prev, comments: e.target.value }))}
+                    value={survey2Ratings.comments}
+                    onChange={(e) => setSurvey2Ratings(prev => ({ ...prev, comments: e.target.value }))}
                     rows={4}
                     className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="Welche Variante war besser und warum?"
