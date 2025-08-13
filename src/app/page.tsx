@@ -2,13 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 
 export default function HomePage() {
-  const [currentStep, setCurrentStep] = useState(1)
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
       <div className="container mx-auto px-4 py-8">
@@ -57,22 +52,22 @@ export default function HomePage() {
           <div className="grid md:grid-cols-2 gap-8 mb-12">
             
             {/* Variante A Card */}
-            <Card className="relative overflow-hidden border-2 hover:border-blue-500 transition-colors">
+            <div className="relative overflow-hidden border-2 bg-white rounded-lg shadow-lg hover:border-blue-500 transition-colors">
               <div className="absolute top-4 right-4">
-                <Badge variant="secondary">Variante A</Badge>
+                <span className="bg-gray-100 text-gray-800 text-xs font-medium px-2.5 py-0.5 rounded">
+                  Variante A
+                </span>
               </div>
               
-              <CardHeader>
-                <CardTitle className="text-2xl text-blue-600">
+              <div className="p-6">
+                <h3 className="text-2xl font-bold text-blue-600 mb-2">
                   📋 Sichtbares Formular
-                </CardTitle>
-                <CardDescription className="text-lg">
+                </h3>
+                <p className="text-lg text-gray-600 mb-4">
                   Klassisches Formular mit KI-Chat-Unterstützung
-                </CardDescription>
-              </CardHeader>
-              
-              <CardContent className="space-y-4">
-                <div className="space-y-3">
+                </p>
+                
+                <div className="space-y-3 mb-6">
                   <div className="flex items-center space-x-3">
                     <div className="w-2 h-2 bg-green-500 rounded-full"></div>
                     <span>Alle Felder auf einen Blick</span>
@@ -87,39 +82,37 @@ export default function HomePage() {
                   </div>
                 </div>
                 
-                <div className="bg-blue-50 p-4 rounded-lg">
+                <div className="bg-blue-50 p-4 rounded-lg mb-6">
                   <p className="text-sm text-blue-800">
                     <strong>Geschätzte Dauer:</strong> 5-10 Minuten
                   </p>
                 </div>
-              </CardContent>
-              
-              <CardFooter>
+                
                 <Link href="/form-a" className="w-full">
-                  <Button className="w-full bg-blue-600 hover:bg-blue-700">
+                  <button className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-lg transition-colors">
                     Variante A starten
-                  </Button>
+                  </button>
                 </Link>
-              </CardFooter>
-            </Card>
+              </div>
+            </div>
 
             {/* Variante B Card */}
-            <Card className="relative overflow-hidden border-2 hover:border-green-500 transition-colors">
+            <div className="relative overflow-hidden border-2 bg-white rounded-lg shadow-lg hover:border-green-500 transition-colors">
               <div className="absolute top-4 right-4">
-                <Badge variant="secondary">Variante B</Badge>
+                <span className="bg-gray-100 text-gray-800 text-xs font-medium px-2.5 py-0.5 rounded">
+                  Variante B
+                </span>
               </div>
               
-              <CardHeader>
-                <CardTitle className="text-2xl text-green-600">
+              <div className="p-6">
+                <h3 className="text-2xl font-bold text-green-600 mb-2">
                   💬 Dialog-System
-                </CardTitle>
-                <CardDescription className="text-lg">
+                </h3>
+                <p className="text-lg text-gray-600 mb-4">
                   Interaktives Gespräch mit KI-Assistent
-                </CardDescription>
-              </CardHeader>
-              
-              <CardContent className="space-y-4">
-                <div className="space-y-3">
+                </p>
+                
+                <div className="space-y-3 mb-6">
                   <div className="flex items-center space-x-3">
                     <div className="w-2 h-2 bg-green-500 rounded-full"></div>
                     <span>Schritt-für-Schritt Dialog</span>
@@ -134,51 +127,46 @@ export default function HomePage() {
                   </div>
                 </div>
                 
-                <div className="bg-green-50 p-4 rounded-lg">
+                <div className="bg-green-50 p-4 rounded-lg mb-6">
                   <p className="text-sm text-green-800">
                     <strong>Geschätzte Dauer:</strong> 5-10 Minuten
                   </p>
                 </div>
-              </CardContent>
-              
-              <CardFooter>
+                
                 <Link href="/form-b" className="w-full">
-                  <Button className="w-full bg-green-600 hover:bg-green-700">
+                  <button className="w-full bg-green-600 hover:green-700 text-white font-medium py-3 px-4 rounded-lg transition-colors">
                     Variante B starten
-                  </Button>
+                  </button>
                 </Link>
-              </CardFooter>
-            </Card>
+              </div>
+            </div>
           </div>
 
           {/* Informationsbereich */}
-          <Card className="bg-gray-50">
-            <CardHeader>
-              <CardTitle className="text-xl">📋 Studieninformationen</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid md:grid-cols-2 gap-6">
-                <div>
-                  <h4 className="font-semibold text-gray-800 mb-2">Ablauf der Studie:</h4>
-                  <ol className="list-decimal list-inside space-y-1 text-sm text-gray-600">
-                    <li>Testen Sie beide Varianten (beliebige Reihenfolge)</li>
-                    <li>Füllen Sie jeweils ein Gebäude-Energieberatung Formular aus</li>
-                    <li>Ihre Daten werden automatisch anonymisiert gespeichert</li>
-                    <li>Optional: Kurzer Vergleich der beiden Ansätze</li>
-                  </ol>
-                </div>
-                <div>
-                  <h4 className="font-semibold text-gray-800 mb-2">Wichtige Hinweise:</h4>
-                  <ul className="list-disc list-inside space-y-1 text-sm text-gray-600">
-                    <li>Alle Daten werden anonymisiert behandelt</li>
-                    <li>Die Teilnahme ist freiwillig</li>
-                    <li>Sie können jederzeit abbrechen</li>
-                    <li>Bei Fragen nutzen Sie die Hilfe-Funktionen</li>
-                  </ul>
-                </div>
+          <div className="bg-gray-50 rounded-lg shadow-lg p-6">
+            <h3 className="text-xl font-bold text-gray-800 mb-4">📋 Studieninformationen</h3>
+            
+            <div className="grid md:grid-cols-2 gap-6">
+              <div>
+                <h4 className="font-semibold text-gray-800 mb-2">Ablauf der Studie:</h4>
+                <ol className="list-decimal list-inside space-y-1 text-sm text-gray-600">
+                  <li>Testen Sie beide Varianten (beliebige Reihenfolge)</li>
+                  <li>Füllen Sie jeweils ein Gebäude-Energieberatung Formular aus</li>
+                  <li>Ihre Daten werden automatisch anonymisiert gespeichert</li>
+                  <li>Optional: Kurzer Vergleich der beiden Ansätze</li>
+                </ol>
               </div>
-            </CardContent>
-          </Card>
+              <div>
+                <h4 className="font-semibold text-gray-800 mb-2">Wichtige Hinweise:</h4>
+                <ul className="list-disc list-inside space-y-1 text-sm text-gray-600">
+                  <li>Alle Daten werden anonymisiert behandelt</li>
+                  <li>Die Teilnahme ist freiwillig</li>
+                  <li>Sie können jederzeit abbrechen</li>
+                  <li>Bei Fragen nutzen Sie die Hilfe-Funktionen</li>
+                </ul>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
