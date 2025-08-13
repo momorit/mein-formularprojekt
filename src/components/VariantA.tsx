@@ -11,10 +11,11 @@ import { MessageCircle, Save, RefreshCw } from 'lucide-react'
 import { apiClient } from '@/lib/api-client'
 
 interface VariantAProps {
-  onDataCollected: (data: any) => void
+  onComplete: (data: any) => void
+  startTime: Date
 }
 
-export default function VariantA({ onDataCollected }: VariantAProps) {
+export default function VariantA({ onComplete, startTime }: VariantAProps) {
   const [context, setContext] = useState('')
   const [instructions, setInstructions] = useState<string[]>([])
   const [formValues, setFormValues] = useState<Record<string, string>>({})
@@ -112,7 +113,7 @@ export default function VariantA({ onDataCollected }: VariantAProps) {
       }
 
       await apiClient.saveFormData(instructions, formValues)
-      onDataCollected(data)
+      onComplete(data)
       
       alert('Daten erfolgreich gespeichert!')
     } catch (error) {

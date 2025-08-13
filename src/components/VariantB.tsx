@@ -11,10 +11,11 @@ import { MessageCircle, Save, Play } from 'lucide-react'
 import { apiClient } from '@/lib/api-client'
 
 interface VariantBProps {
-  onDataCollected: (data: any) => void
+  onComplete: (data: any) => void
+  startTime: Date
 }
 
-export default function VariantB({ onDataCollected }: VariantBProps) {
+export default function VariantB({ onComplete, startTime }: VariantBProps) {
   const [context, setContext] = useState('')
   const [sessionId, setSessionId] = useState('')
   const [questions, setQuestions] = useState<Array<{question: string, field: string}>>([])
@@ -174,7 +175,7 @@ export default function VariantB({ onDataCollected }: VariantBProps) {
       }
 
       await apiClient.saveDialogData(questions, answers, chatHistory)
-      onDataCollected(data)
+      onComplete(data)
       
       alert('Dialog-Daten erfolgreich gespeichert!')
     } catch (error) {
