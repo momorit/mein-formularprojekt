@@ -1,4 +1,4 @@
-// src/lib/api.ts - Komplette API-Client Implementation
+// src/lib/api.ts - Komplette API-Client Implementation mit allen Fixes
 const API_BASE = process.env.NODE_ENV === 'production' ? '' : 'http://localhost:8000';
 
 interface APIResponse<T = any> {
@@ -162,16 +162,20 @@ export async function sendDialogMessage(
   }
 }
 
-export async function saveDialogData(data: any) {
+// ✅ KORRIGIERTE VERSION - 3 Parameter akzeptieren
+export async function saveDialogData(questions: any, answers: any, chatHistory: any) {
   try {
     const dialogData = {
-      ...data,
+      questions,
+      answers, 
+      chatHistory,
       timestamp: new Date().toISOString(),
       variant: 'B',
       metadata: {
-        chat_interactions: data.chatHistory?.length || 0,
-        questions_answered: Object.keys(data.answers || {}).length,
-        completion_rate: calculateDialogCompletionRate(data)
+        chat_interactions: chatHistory?.length || 0,
+        questions_answered: Object.keys(answers || {}).length,
+        total_questions: questions?.length || 0,
+        completion_rate: calculateDialogCompletionRate({ questions, answers })
       }
     };
 
