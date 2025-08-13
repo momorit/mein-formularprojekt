@@ -30,19 +30,21 @@ app = FastAPI(
 )
 
 # === CORS MIDDLEWARE ===
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:3000", 
-        "http://127.0.0.1:3000",
-        "https://*.vercel.app",
-        "https://*.railway.app",
-        "https://*.netlify.app",
-        "*"
+        "http://localhost:3000",           # Development
+        "http://127.0.0.1:3000",          # Alternative Dev
+        "https://*.vercel.app",            # Alle Vercel-Apps
+        "https://*.netlify.app",           # Netlify (falls verwendet)
+        "https://mein-formularprojekt-db8b8pq9n-momorits-projects.vercel.app",  # Deine spezifische Vercel-URL
+        "*"                                # Fallback (für Development)
     ],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
+    expose_headers=["*"]
 )
 
 # === CONFIGURATION ===

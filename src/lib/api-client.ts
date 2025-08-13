@@ -1,11 +1,27 @@
-// src/lib/api-client.ts - Robuster API Client mit Fallback
+// src/lib/api-client.ts - PRODUCTION-READY VERSION
+const getBackendUrls = () => {
+  const urls: string[] = []
+  
+  // Production URL von Environment Variable
+  if (process.env.NEXT_PUBLIC_BACKEND_URL) {
+    urls.push(process.env.NEXT_PUBLIC_BACKEND_URL)
+  }
+  
+  // Development URLs (nur wenn nicht in Production)
+  if (process.env.NODE_ENV === 'development') {
+    urls.push('http://localhost:8000', 'http://127.0.0.1:8000')
+  }
+  
+  // Fallback URLs für Production
+  urls.push(
+    'https://mein-formularprojekt-production.up.railway.app',
+    'https://mein-formularprojekt-db8b8pq9n-momorits-projects.vercel.app'
+  )
+  
+  return urls
+}
 
-const BACKEND_URLS = [
-  process.env.NEXT_PUBLIC_BACKEND_URL,
-  process.env.BACKEND_URL,
-  'http://127.0.0.1:8000',
-  'https://web-production-xxxx.up.railway.app', // Ersetze mit deiner Railway URL
-].filter(Boolean) as string[]
+const BACKEND_URLS = getBackendUrls()
 
 let workingBackendUrl: string | null = null
 let backendHealthChecked = false
@@ -27,21 +43,31 @@ class APIClient {
       return workingBackendUrl
     }
 
-    console.log('🔍 Testing backend URLs:', BACKEND_URLS)
+    console.log(`🔍 Testing backend URLs (${process.env.NODE_ENV}):`, BACKEND_URLS)
     
     for (const url of BACKEND_URLS) {
       try {
         console.log(`🧪 Testing: ${url}`)
         
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 10000) // 10s timeout für Production
+        
         const response = await fetch(`${url}/health`, {
           method: 'GET',
-          headers: { 'Accept': 'application/json' },
+          headers: { 
+            'Accept': 'application/json',
+            'User-Agent': 'FormularIQ-Frontend'
+          },
           mode: 'cors',
-          credentials: 'omit'
+          credentials: 'omit',
+          signal: controller.signal
         })
 
+        clearTimeout(timeoutId)
+
         if (response.ok) {
-          console.log(`✅ Backend found: ${url}`)
+          const healthData = await response.json()
+          console.log(`✅ Backend found: ${url}`, healthData)
           workingBackendUrl = url
           backendHealthChecked = true
           return url
@@ -49,61 +75,81 @@ class APIClient {
         
         console.log(`❌ Backend failed (${response.status}): ${url}`)
       } catch (error) {
-        console.log(`💥 Backend error: ${url}`, error)
+        console.log(`💥 Backend error: ${url}`, error instanceof Error ? error.message : error)
       }
     }
 
-    throw new Error('Kein erreichbares Backend gefunden')
+    throw new Error(`❌ Kein erreichbares Backend gefunden. Getestet: ${BACKEND_URLS.join(', ')}`)
   }
 
   private async makeRequest(endpoint: string, options: RequestInit = {}) {
-    const baseUrl = await this.findWorkingBackend()
-    const url = `${baseUrl}${endpoint}`
-    
-    const defaultOptions: RequestInit = {
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      },
-      mode: 'cors',
-      credentials: 'omit'
-    }
-
-    const mergedOptions = {
-      ...defaultOptions,
-      ...options,
-      headers: {
-        ...defaultOptions.headers,
-        ...options.headers,
-      },
-    }
-
-    console.log(`📡 API Request: ${options.method || 'GET'} ${url}`)
-    
     try {
+      const baseUrl = await this.findWorkingBackend()
+      const url = `${baseUrl}${endpoint}`
+      
+      const defaultOptions: RequestInit = {
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'User-Agent': 'FormularIQ-Frontend'
+        },
+        mode: 'cors',
+        credentials: 'omit'
+      }
+
+      const mergedOptions = {
+        ...defaultOptions,
+        ...options,
+        headers: {
+          ...defaultOptions.headers,
+          ...options.headers,
+        },
+      }
+
+      console.log(`📡 API Request: ${options.method || 'GET'} ${url}`)
+      
       const response = await fetch(url, mergedOptions)
       
       if (!response.ok) {
-        const errorText = await response.text()
-        console.error(`❌ API Error (${response.status}):`, errorText)
+        let errorText = `HTTP ${response.status}`
+        try {
+          const errorBody = await response.text()
+          if (errorBody) {
+            errorText = `${errorText}: ${errorBody}`
+          }
+        } catch (e) {
+          // ignore parse errors
+        }
+        
+        console.error(`❌ API Error:`, { url, status: response.status, error: errorText })
         throw new Error(`Backend Fehler (${response.status}): ${errorText}`)
       }
       
       const data = await response.json()
-      console.log('✅ API Success:', { endpoint, status: response.status })
+      console.log(`✅ API Success: ${endpoint} (${response.status})`)
       
       return data
     } catch (error) {
-      console.error(`💥 Request failed: ${url}`, error)
+      console.error(`💥 Request failed for ${endpoint}:`, error)
       
-      // Bei CORS/Network Fehlern, nächstes Backend versuchen
-      if (error instanceof TypeError && error.message.includes('NetworkError')) {
+      // Bei Netzwerk-Fehlern Backend-Cache zurücksetzen
+      if (error instanceof TypeError || error.name === 'AbortError') {
         backendHealthChecked = false
         workingBackendUrl = null
-        throw new Error('Backend nicht erreichbar - bitte überprüfe die URL')
       }
       
-      throw error
+      // User-friendly error messages
+      if (error instanceof Error) {
+        if (error.message.includes('Failed to fetch') || error.name === 'AbortError') {
+          throw new Error('❌ Backend nicht erreichbar - überprüfe deine Internetverbindung')
+        }
+        if (error.message.includes('NetworkError')) {
+          throw new Error('❌ Netzwerk-Fehler - versuche es später erneut')
+        }
+        throw error
+      }
+      
+      throw new Error('❌ Unbekannter API-Fehler')
     }
   }
 
@@ -117,13 +163,13 @@ class APIClient {
 
   // === FORM METHODS (Variante A) ===
   async generateInstructions(context: string) {
-    return this.makeRequest('/api/instructions', {
+    return this.makeRequest('/api/generate-instructions', {
       method: 'POST',
       body: JSON.stringify({ context }),
     })
   }
 
-  async getChatHelp(message: string, context?: string) {
+  async getChatHelp(message: string, context: string = '') {
     return this.makeRequest('/api/chat', {
       method: 'POST',
       body: JSON.stringify({ message, context }),
@@ -167,9 +213,85 @@ class APIClient {
   async checkHealth() {
     try {
       const baseUrl = await this.findWorkingBackend()
-      return { status: 'healthy', url: baseUrl }
+      const healthData = await this.makeRequest('/health', { method: 'GET' })
+      return { 
+        status: 'healthy', 
+        url: baseUrl,
+        services: healthData.services || {},
+        version: healthData.version || 'unknown',
+        environment: healthData.environment || 'unknown'
+      }
     } catch (error) {
-      return { status: 'unhealthy', error: error instanceof Error ? error.message : 'Unknown error' }
+      return { 
+        status: 'unhealthy', 
+        error: error instanceof Error ? error.message : 'Unknown error',
+        tested_urls: BACKEND_URLS,
+        environment: process.env.NODE_ENV || 'unknown'
+      }
+    }
+  }
+
+  // === DEBUGGING METHODS ===
+  async testAllEndpoints() {
+    try {
+      const baseUrl = await this.findWorkingBackend()
+      
+      const tests = [
+        { name: 'Health Check', endpoint: '/health', method: 'GET' },
+        { name: 'Generate Instructions', endpoint: '/api/generate-instructions', method: 'POST', body: { context: 'test' } },
+        { name: 'Chat', endpoint: '/api/chat', method: 'POST', body: { message: 'test', context: '' } },
+        { name: 'Dialog Start', endpoint: '/api/dialog/start', method: 'POST', body: { context: 'test' } }
+      ]
+      
+      const results = []
+      
+      for (const test of tests) {
+        try {
+          console.log(`🧪 Testing endpoint: ${test.name}`)
+          await this.makeRequest(test.endpoint, {
+            method: test.method,
+            body: test.body ? JSON.stringify(test.body) : undefined
+          })
+          results.push({ ...test, status: '✅ success' })
+        } catch (error) {
+          results.push({ 
+            ...test, 
+            status: '❌ failed', 
+            error: error instanceof Error ? error.message : 'Unknown error'
+          })
+        }
+      }
+      
+      return { 
+        baseUrl, 
+        tests: results,
+        environment: process.env.NODE_ENV,
+        backend_urls_tested: BACKEND_URLS
+      }
+    } catch (error) {
+      return { 
+        error: error instanceof Error ? error.message : 'Backend not reachable',
+        tested_urls: BACKEND_URLS,
+        environment: process.env.NODE_ENV
+      }
+    }
+  }
+
+  // Reset backend cache (for debugging)
+  resetBackendCache() {
+    workingBackendUrl = null
+    backendHealthChecked = false
+    console.log('🔄 Backend cache reset')
+  }
+
+  // Get current configuration (for debugging)
+  getConfig() {
+    return {
+      backend_urls: BACKEND_URLS,
+      current_backend: workingBackendUrl,
+      health_checked: backendHealthChecked,
+      environment: process.env.NODE_ENV,
+      next_public_backend_url: process.env.NEXT_PUBLIC_BACKEND_URL
     }
   }
 }
@@ -177,10 +299,22 @@ class APIClient {
 // Export singleton instance
 export const apiClient = new APIClient()
 
-// Health check für debugging
-if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
+// Development debugging
+if (typeof window !== 'undefined') {
+  // Expose for debugging in both dev and production
+  ;(window as any).apiClient = apiClient
+  
+  // Auto-test on load with better logging
   apiClient.checkHealth().then(status => {
-    console.log('🏥 Backend Health:', status)
+    console.log('🏥 Backend Health Check:', status)
+    
+    if (status.status === 'unhealthy') {
+      console.error('🚨 Backend Problem detected!')
+      console.log('📊 Run window.apiClient.testAllEndpoints() for detailed diagnostics')
+      console.log('⚙️ Current config:', apiClient.getConfig())
+    } else {
+      console.log('✅ Backend connection successful:', status.url)
+    }
   })
 }
 
