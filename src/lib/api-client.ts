@@ -75,7 +75,7 @@ class APIClient {
         
         console.log(`❌ Backend failed (${response.status}): ${url}`)
       } catch (error) {
-        console.log(`💥 Backend error: ${url}`, error instanceof Error ? error.message : error)
+        console.log(`💥 Backend error: ${url}`, error instanceof Error ? error.message : String(error))
       }
     }
 
@@ -133,7 +133,7 @@ class APIClient {
       console.error(`💥 Request failed for ${endpoint}:`, error)
       
       // Bei Netzwerk-Fehlern Backend-Cache zurücksetzen
-      if (error instanceof TypeError || error.name === 'AbortError') {
+      if (error instanceof TypeError || (error instanceof Error && error.name === 'AbortError')) {
         backendHealthChecked = false
         workingBackendUrl = null
       }
