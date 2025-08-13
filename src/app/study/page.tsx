@@ -1,6 +1,6 @@
 'use client'
 
-// src/app/study/page.tsx - VOLLSTÄNDIGE Study Page mit echten Varianten
+// src/app/study/page.tsx - VOLLSTÄNDIGE Study Page - SYNTAX KORRIGIERT
 
 import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
@@ -207,12 +207,14 @@ function StudyNavigation({
   const getSecondVariant = () => studyData.randomization === 'A-B' ? 'B' : 'A'
 
   const steps = [
-    { id: 'welcome', title: 'Willkommen', icon: User },
-    { id: 'demographics', title: 'Demografische Daten', icon: User },
-    { id: 'first-variant', title: `Variante ${getFirstVariant()}`, icon: getFirstVariant() === 'A' ? FileText : MessageSquare },
-    { id: 'second-variant', title: `Variante ${getSecondVariant()}`, icon: getSecondVariant() === 'A' ? FileText : MessageSquare },
-    { id: 'comparison', title: 'Vergleich', icon: BarChart3 },
-    { id: 'completion', title: 'Abschluss', icon: Trophy }
+    { id: 'welcome', title: 'Start', icon: User, completed: currentStep !== 'welcome' },
+    { id: 'demographics', title: 'Daten', icon: User, completed: !!studyData.demographics },
+    { id: 'first-variant', title: `Var ${getFirstVariant()}`, icon: getFirstVariant() === 'A' ? FileText : MessageSquare, completed: !!(studyData.variantAData || studyData.variantBData) },
+    { id: 'first-sus', title: `SUS ${getFirstVariant()}`, icon: BarChart3, completed: !!(studyData.variantASUS || studyData.variantBSUS) },
+    { id: 'second-variant', title: `Var ${getSecondVariant()}`, icon: getSecondVariant() === 'A' ? FileText : MessageSquare, completed: !!(studyData.variantAData && studyData.variantBData) },
+    { id: 'second-sus', title: `SUS ${getSecondVariant()}`, icon: BarChart3, completed: !!(studyData.variantASUS && studyData.variantBSUS) },
+    { id: 'comparison', title: 'Vergleich', icon: BarChart3, completed: !!studyData.comparisonData },
+    { id: 'completion', title: 'Ende', icon: Trophy, completed: false }
   ]
 
   const currentIndex = steps.findIndex(step => step.id === currentStep)
@@ -223,7 +225,9 @@ function StudyNavigation({
       case 'welcome': return true
       case 'demographics': return !!studyData.demographics
       case 'first-variant': return !!(studyData.variantAData || studyData.variantBData)
+      case 'first-sus': return !!(studyData.variantASUS || studyData.variantBSUS)
       case 'second-variant': return !!(studyData.variantAData && studyData.variantBData)
+      case 'second-sus': return !!(studyData.variantASUS && studyData.variantBSUS)
       case 'comparison': return !!studyData.comparisonData
       default: return false
     }
@@ -241,15 +245,14 @@ function StudyNavigation({
 
   return (
     <div className="bg-white border-t border-gray-200 shadow-lg">
-      {/* Progress Bar */}
-      <div className="w-full bg-gray-200 h-2">
-        <div 
-          className="bg-blue-500 h-2 transition-all duration-300 ease-out"
-          style={{ width: `${progress}%` }}
-        />
-      </div>
+      <ProgressBar 
+        current={currentIndex + 1} 
+        total={steps.length} 
+        variant="blue"
+        className="px-4 pt-2"
+        showPercentage={false}
+      />
       
-      {/* Navigation */}
       <div className="flex items-center justify-between p-4">
         <button
           onClick={() => {
@@ -314,6 +317,17 @@ function StudyNavigation({
           </button>
         </div>
       </div>
+
+      <div className="px-4 pb-2">
+        <StepIndicator 
+          steps={steps.map(step => ({
+            id: step.id,
+            title: step.title,
+            completed: step.completed,
+            current: step.id === currentStep
+          }))}
+        />
+      </div>
     </div>
   )
 }
@@ -351,7 +365,6 @@ export default function StudyPage() {
     try {
       setBackendStatus('checking')
       
-      // Try to reach backend
       const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://mein-formularprojekt-production.up.railway.app'
       const response = await fetch(`${backendUrl}/health`, {
         method: 'GET',
@@ -394,10 +407,8 @@ export default function StudyPage() {
         console.log('✅ Study data save result:', result)
         
         if (result.storage_type === 'cloud_backup') {
-          // Cloud save successful
           alert('🎉 Studie erfolgreich gespeichert!\n\nVielen Dank für Ihre Teilnahme. Ihre Daten wurden sicher in der Cloud gespeichert.')
         } else if (result.storage_type === 'local_backup' && result.download_data) {
-          // Local download fallback
           const dataStr = JSON.stringify(result.download_data, null, 2)
           const dataBlob = new Blob([dataStr], { type: 'application/json' })
           const url = URL.createObjectURL(dataBlob)
@@ -420,7 +431,6 @@ export default function StudyPage() {
     } catch (error) {
       console.error('💥 Save failed:', error)
       
-      // Emergency local save
       try {
         const emergencyData = {
           ...studyData,
@@ -460,7 +470,6 @@ export default function StudyPage() {
           Vergleich von LLM-gestützten Formularlösungen
         </p>
         
-        {/* Backend Status */}
         <div className="mb-8 p-4 rounded-lg border">
           {backendStatus === 'checking' && (
             <div className="flex items-center justify-center space-x-2 text-blue-600">
@@ -586,7 +595,6 @@ export default function StudyPage() {
           </p>
           
           <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Age */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Alter *
@@ -603,7 +611,6 @@ export default function StudyPage() {
               {errors.age && <p className="text-red-500 text-sm mt-1">{errors.age}</p>}
             </div>
 
-            {/* Gender */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Geschlecht (optional)
@@ -620,7 +627,6 @@ export default function StudyPage() {
               </select>
             </div>
 
-            {/* Education */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Höchster Bildungsabschluss *
@@ -643,7 +649,6 @@ export default function StudyPage() {
               {errors.education && <p className="text-red-500 text-sm mt-1">{errors.education}</p>}
             </div>
 
-            {/* Profession */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Beruflicher Bereich (optional)
@@ -657,7 +662,6 @@ export default function StudyPage() {
               />
             </div>
 
-            {/* Tech Experience */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Wie schätzen Sie Ihre Erfahrung mit digitalen Technologien ein? *
@@ -702,25 +706,15 @@ export default function StudyPage() {
 
   const FirstVariantStep = () => {
     const variant = getFirstVariant()
-    const [isCompleted, setIsCompleted] = useState(false)
-    const [startTime] = useState(new Date())
+    const [variantStartTime] = useState(new Date())
 
-    const handleComplete = () => {
-      const variantData = {
-        startTime,
-        endTime: new Date(),
-        completed: true,
-        // Add more data as needed from actual form/dialog components
-      }
-
+    const handleVariantComplete = (variantData: any) => {
       if (variant === 'A') {
         setStudyData(prev => ({ ...prev, variantAData: variantData }))
       } else {
         setStudyData(prev => ({ ...prev, variantBData: variantData }))
       }
-      
-      setIsCompleted(true)
-      setCurrentStep('second-variant')
+      setCurrentStep('first-sus')
     }
 
     return (
@@ -731,7 +725,7 @@ export default function StudyPage() {
           onToggle={() => setScenarioExpanded(!scenarioExpanded)}
         />
         
-        <div className="bg-white rounded-lg shadow-sm border p-6">
+        <div className="mt-6">
           <div className="text-center mb-6">
             <h2 className="text-2xl font-bold mb-2">
               Variante {variant}: {variant === 'A' ? 'Sichtbares Formular' : 'Dialog-System'}
@@ -744,39 +738,11 @@ export default function StudyPage() {
             </p>
           </div>
 
-          {/* Timer */}
-          <div className="mb-6 text-center">
-            <div className="inline-flex items-center space-x-2 bg-blue-50 px-4 py-2 rounded-lg">
-              <Clock className="w-4 h-4 text-blue-600" />
-              <span className="text-blue-700 font-mono">
-                {Math.floor((Date.now() - startTime.getTime()) / 1000 / 60)}:
-                {String(Math.floor((Date.now() - startTime.getTime()) / 1000) % 60).padStart(2, '0')}
-              </span>
-            </div>
-          </div>
-
-          {/* Placeholder für echte Komponenten */}
-          <div className="bg-gray-50 border-2 border-dashed border-gray-300 rounded-lg p-8 text-center min-h-[400px] flex items-center justify-center">
-            <div>
-              <div className="text-6xl mb-4">
-                {variant === 'A' ? '📝' : '💬'}
-              </div>
-              <h3 className="text-xl font-semibold text-gray-700 mb-2">
-                {variant === 'A' ? 'Formular-Komponente' : 'Dialog-Komponente'}
-              </h3>
-              <p className="text-gray-500 mb-6">
-                Hier wird die echte {variant === 'A' ? 'Formular' : 'Dialog'}-Komponente eingebunden
-              </p>
-              
-              {/* Simulation Button */}
-              <button
-                onClick={handleComplete}
-                className="bg-green-500 text-white px-6 py-3 rounded-lg hover:bg-green-600 transition-colors"
-              >
-                ✅ Variante {variant} abschließen (Simulation)
-              </button>
-            </div>
-          </div>
+          {variant === 'A' ? (
+            <VariantA onComplete={handleVariantComplete} startTime={variantStartTime} />
+          ) : (
+            <VariantB onComplete={handleVariantComplete} startTime={variantStartTime} />
+          )}
         </div>
       </div>
     )
@@ -813,6 +779,59 @@ export default function StudyPage() {
     )
   }
 
+  const SecondVariantStep = () => {
+    const variant = getSecondVariant()
+    const [variantStartTime] = useState(new Date())
+
+    const handleVariantComplete = (variantData: any) => {
+      if (variant === 'A') {
+        setStudyData(prev => ({ ...prev, variantAData: variantData }))
+      } else {
+        setStudyData(prev => ({ ...prev, variantBData: variantData }))
+      }
+      setCurrentStep('second-sus')
+    }
+
+    return (
+      <div className="max-w-6xl mx-auto px-4 py-8">
+        <ScenarioDisplay 
+          variant={variant} 
+          isExpanded={scenarioExpanded}
+          onToggle={() => setScenarioExpanded(!scenarioExpanded)}
+        />
+        
+        <div className="mt-6">
+          <div className="text-center mb-6">
+            <h2 className="text-2xl font-bold mb-2">
+              Variante {variant}: {variant === 'A' ? 'Sichtbares Formular' : 'Dialog-System'}
+            </h2>
+            <p className="text-gray-600">
+              {variant === 'A' 
+                ? 'Füllen Sie dasselbe Formular mit der anderen Methode aus.'
+                : 'Beantworten Sie dieselben Fragen im Dialog-Format.'
+              }
+            </p>
+            
+            <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <h3 className="font-medium text-yellow-800 mb-2">📝 Kurze Pause</h3>
+              <p className="text-sm text-yellow-700">
+                Sie haben Variante {getFirstVariant()} abgeschlossen. 
+                Nehmen Sie sich einen Moment Zeit, bevor Sie mit Variante {variant} beginnen. 
+                Die Aufgabe ist dieselbe, nur die Bedienweise ist anders.
+              </p>
+            </div>
+          </div>
+
+          {variant === 'A' ? (
+            <VariantA onComplete={handleVariantComplete} startTime={variantStartTime} />
+          ) : (
+            <VariantB onComplete={handleVariantComplete} startTime={variantStartTime} />
+          )}
+        </div>
+      </div>
+    )
+  }
+
   const SecondSUSStep = () => {
     const variant = getSecondVariant()
     
@@ -840,70 +859,6 @@ export default function StudyPage() {
           variant={variant}
           onComplete={handleSUSComplete}
         />
-      </div>
-    )
-  }
-    const variant = getSecondVariant()
-    const [startTime] = useState(new Date())
-
-    const handleComplete = () => {
-      const variantData = {
-        startTime,
-        endTime: new Date(),
-        completed: true,
-      }
-
-      if (variant === 'A') {
-        setStudyData(prev => ({ ...prev, variantAData: variantData }))
-      } else {
-        setStudyData(prev => ({ ...prev, variantBData: variantData }))
-      }
-      
-      setCurrentStep('comparison')
-    }
-
-    return (
-      <div className="max-w-6xl mx-auto px-4 py-8">
-        <ScenarioDisplay 
-          variant={variant} 
-          isExpanded={scenarioExpanded}
-          onToggle={() => setScenarioExpanded(!scenarioExpanded)}
-        />
-        
-        <div className="bg-white rounded-lg shadow-sm border p-6">
-          <div className="text-center mb-6">
-            <h2 className="text-2xl font-bold mb-2">
-              Variante {variant}: {variant === 'A' ? 'Sichtbares Formular' : 'Dialog-System'}
-            </h2>
-            <p className="text-gray-600">
-              {variant === 'A' 
-                ? 'Füllen Sie dasselbe Formular mit der anderen Methode aus.'
-                : 'Beantworten Sie dieselben Fragen im Dialog-Format.'
-              }
-            </p>
-          </div>
-
-          <div className="bg-gray-50 border-2 border-dashed border-gray-300 rounded-lg p-8 text-center min-h-[400px] flex items-center justify-center">
-            <div>
-              <div className="text-6xl mb-4">
-                {variant === 'A' ? '📝' : '💬'}
-              </div>
-              <h3 className="text-xl font-semibold text-gray-700 mb-2">
-                {variant === 'A' ? 'Formular-Komponente' : 'Dialog-Komponente'}
-              </h3>
-              <p className="text-gray-500 mb-6">
-                Hier wird die echte {variant === 'A' ? 'Formular' : 'Dialog'}-Komponente eingebunden
-              </p>
-              
-              <button
-                onClick={handleComplete}
-                className="bg-green-500 text-white px-6 py-3 rounded-lg hover:bg-green-600 transition-colors"
-              >
-                ✅ Variante {variant} abschließen (Simulation)
-              </button>
-            </div>
-          </div>
-        </div>
       </div>
     )
   }
@@ -936,7 +891,6 @@ export default function StudyPage() {
         return
       }
 
-      // FIX: Explizite Typisierung für comparisonData
       const comparisonData = {
         speed: comparison.speed as 'A' | 'B' | 'equal',
         understandability: comparison.understandability as 'A' | 'B' | 'equal',
@@ -1042,7 +996,6 @@ export default function StudyPage() {
               error={errors.helpfulness}
             />
 
-            {/* Future Preference */}
             <div className="space-y-3">
               <h3 className="font-medium text-gray-900">
                 Welche Variante würden Sie in Zukunft bevorzugen?
@@ -1076,7 +1029,6 @@ export default function StudyPage() {
               )}
             </div>
 
-            {/* Comments */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Zusätzliche Kommentare (optional)
@@ -1169,7 +1121,6 @@ export default function StudyPage() {
               )}
             </button>
 
-            {/* Optional: Link zur Homepage */}
             <div className="pt-4 border-t">
               <Link 
                 href="/" 
@@ -1211,7 +1162,6 @@ export default function StudyPage() {
   return (
     <ErrorBoundary participantId={studyData.participantId}>
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50">
-        {/* Study Timer & Status Bar */}
         <div className="bg-white border-b shadow-sm">
           <div className="max-w-6xl mx-auto px-4 py-2 flex items-center justify-between">
             <div className="flex items-center space-x-4">
@@ -1228,14 +1178,12 @@ export default function StudyPage() {
           </div>
         </div>
 
-        {/* Main Content */}
         <LoadingOverlay isLoading={isLoading} text="Studie wird gespeichert...">
           <div className="container mx-auto min-h-screen pb-32">
             {renderCurrentStep()}
           </div>
         </LoadingOverlay>
         
-        {/* Fixed Navigation */}
         <div className="fixed bottom-0 left-0 right-0 z-50">
           <StudyNavigation 
             currentStep={currentStep}
