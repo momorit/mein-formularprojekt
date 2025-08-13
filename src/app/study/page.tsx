@@ -23,9 +23,20 @@ import {
 } from 'lucide-react'
 import VariantA from '@/components/VariantA'
 import VariantB from '@/components/VariantB'
+import SUSQuestionnaire from '@/components/SUSQuestionnaire'
+import ErrorBoundary from '@/components/ErrorBoundary'
+import { 
+  LoadingSpinner, 
+  ProgressBar, 
+  StudyTimer, 
+  ConnectionStatus, 
+  BackendStatus,
+  LoadingOverlay,
+  StepIndicator
+} from '@/components/LoadingStates'
 
 // Types
-type StudyStep = 'welcome' | 'demographics' | 'first-variant' | 'second-variant' | 'comparison' | 'completion'
+type StudyStep = 'welcome' | 'demographics' | 'first-variant' | 'first-sus' | 'second-variant' | 'second-sus' | 'comparison' | 'completion'
 
 interface StudyData {
   participantId: string
@@ -40,6 +51,8 @@ interface StudyData {
   }
   variantAData?: any
   variantBData?: any
+  variantASUS?: any
+  variantBSUS?: any
   comparisonData?: {
     speed: 'A' | 'B' | 'equal'
     understandability: 'A' | 'B' | 'equal'
@@ -769,7 +782,67 @@ export default function StudyPage() {
     )
   }
 
-  const SecondVariantStep = () => {
+  const FirstSUSStep = () => {
+    const variant = getFirstVariant()
+    
+    const handleSUSComplete = (susData: any) => {
+      if (variant === 'A') {
+        setStudyData(prev => ({ ...prev, variantASUS: susData }))
+      } else {
+        setStudyData(prev => ({ ...prev, variantBSUS: susData }))
+      }
+      setCurrentStep('second-variant')
+    }
+
+    return (
+      <div className="max-w-4xl mx-auto px-4 py-8">
+        <div className="text-center mb-6">
+          <h2 className="text-2xl font-bold mb-2">
+            Bewertung - Variante {variant}
+          </h2>
+          <p className="text-gray-600">
+            Bitte bewerten Sie Ihre Erfahrung mit Variante {variant} ({variant === 'A' ? 'Sichtbares Formular' : 'Dialog-System'}).
+          </p>
+        </div>
+
+        <SUSQuestionnaire 
+          variant={variant}
+          onComplete={handleSUSComplete}
+        />
+      </div>
+    )
+  }
+
+  const SecondSUSStep = () => {
+    const variant = getSecondVariant()
+    
+    const handleSUSComplete = (susData: any) => {
+      if (variant === 'A') {
+        setStudyData(prev => ({ ...prev, variantASUS: susData }))
+      } else {
+        setStudyData(prev => ({ ...prev, variantBSUS: susData }))
+      }
+      setCurrentStep('comparison')
+    }
+
+    return (
+      <div className="max-w-4xl mx-auto px-4 py-8">
+        <div className="text-center mb-6">
+          <h2 className="text-2xl font-bold mb-2">
+            Bewertung - Variante {variant}
+          </h2>
+          <p className="text-gray-600">
+            Bitte bewerten Sie nun auch Ihre Erfahrung mit Variante {variant} ({variant === 'A' ? 'Sichtbares Formular' : 'Dialog-System'}).
+          </p>
+        </div>
+
+        <SUSQuestionnaire 
+          variant={variant}
+          onComplete={handleSUSComplete}
+        />
+      </div>
+    )
+  }
     const variant = getSecondVariant()
     const [startTime] = useState(new Date())
 
@@ -1120,8 +1193,12 @@ export default function StudyPage() {
         return <DemographicsStep />
       case 'first-variant':
         return <FirstVariantStep />
+      case 'first-sus':
+        return <FirstSUSStep />
       case 'second-variant':
         return <SecondVariantStep />
+      case 'second-sus':
+        return <SecondSUSStep />
       case 'comparison':
         return <ComparisonStep />
       case 'completion':
@@ -1132,20 +1209,42 @@ export default function StudyPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50">
-      <div className="container mx-auto min-h-screen pb-20">
-        {renderCurrentStep()}
+    <ErrorBoundary participantId={studyData.participantId}>
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50">
+        {/* Study Timer & Status Bar */}
+        <div className="bg-white border-b shadow-sm">
+          <div className="max-w-6xl mx-auto px-4 py-2 flex items-center justify-between">
+            <div className="flex items-center space-x-4">
+              <StudyTimer startTime={studyData.startTime} />
+              <ConnectionStatus />
+              <BackendStatus status={backendStatus} url={process.env.NEXT_PUBLIC_BACKEND_URL} />
+            </div>
+            
+            <div className="flex items-center space-x-2 text-sm text-gray-600">
+              <span>ID: {studyData.participantId}</span>
+              <span>•</span>
+              <span>{studyData.randomization}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Main Content */}
+        <LoadingOverlay isLoading={isLoading} text="Studie wird gespeichert...">
+          <div className="container mx-auto min-h-screen pb-32">
+            {renderCurrentStep()}
+          </div>
+        </LoadingOverlay>
+        
+        {/* Fixed Navigation */}
+        <div className="fixed bottom-0 left-0 right-0 z-50">
+          <StudyNavigation 
+            currentStep={currentStep}
+            studyData={studyData}
+            onNavigate={setCurrentStep}
+            onSave={saveStudyData}
+          />
+        </div>
       </div>
-      
-      {/* Fixed Navigation */}
-      <div className="fixed bottom-0 left-0 right-0 z-50">
-        <StudyNavigation 
-          currentStep={currentStep}
-          studyData={studyData}
-          onNavigate={setCurrentStep}
-          onSave={saveStudyData}
-        />
-      </div>
-    </div>
+    </ErrorBoundary>
   )
 }
