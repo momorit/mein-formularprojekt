@@ -95,6 +95,6 @@ def main():
     except Exception as e:
         print(f"❌ Fehler beim Starten: {e}")
         sys.exit(1)
-
+#ö
 if __name__ == "__main__":
     main()
