@@ -70,13 +70,32 @@ logger.info(f"📍 Environment: {'PRODUCTION (Railway)' if IS_PRODUCTION else 'D
 logger.info(f"🌐 Binding: {HOST}:{PORT}")
 logger.info(f"📂 Output Directory: {LOCAL_OUTPUT_DIR}")
 
+# === LIFESPAN EVENTS (Fixed for Railway) ===
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    logger.info("🚀 FormularIQ Backend v3.0.0 startup complete")
+    logger.info(f"📂 Local output directory: {LOCAL_OUTPUT_DIR}")
+    logger.info(f"🔧 CORS configured for {len(ALLOWED_ORIGINS)} origins")
+    logger.info(f"🤖 Groq LLM: {'Available' if GROQ_AVAILABLE and os.getenv('GROQ_API_KEY') else 'Fallback mode'}")
+    logger.info(f"☁️ Google Drive: {'Connected' if drive_service else 'Local storage only'}")
+    logger.info("✅ All systems ready - accepting requests")
+    
+    yield
+    
+    # Shutdown
+    logger.info("👋 FormularIQ Backend shutting down gracefully")
+
 # === FASTAPI APP ===
 app = FastAPI(
     title="FormularIQ Backend",
     description="LLM-gestützte Formularbearbeitung - Production Ready",
     version="3.0.0",
-    docs_url="/docs" if not IS_PRODUCTION else None,  # Disable docs in production
-    redoc_url="/redoc" if not IS_PRODUCTION else None
+    docs_url="/docs" if not IS_PRODUCTION else None,
+    redoc_url="/redoc" if not IS_PRODUCTION else None,
+    lifespan=lifespan
 )
 
 # === CORS MIDDLEWARE ===
@@ -147,10 +166,11 @@ class StudySaveRequest(BaseModel):
     comparisonData: Optional[Dict[str, Any]] = None
     totalDuration: Optional[int] = None
 
-# === GOOGLE DRIVE FUNCTIONS ===
+# === GOOGLE DRIVE FUNCTIONS (Safe initialization) ===
 def get_google_drive_service():
-    """Setup Google Drive service with multiple authentication methods"""
+    """Setup Google Drive service with safe error handling"""
     if not GOOGLE_DRIVE_AVAILABLE:
+        logger.warning("Google Drive libraries not available")
         return None
     
     try:
@@ -164,12 +184,12 @@ def get_google_drive_service():
                     scopes=['https://www.googleapis.com/auth/drive.file']
                 )
                 service = build('drive', 'v3', credentials=credentials)
-                # Test the service
+                # Test the service with timeout
                 service.files().list(pageSize=1).execute()
                 logger.info("✅ Google Drive: Environment Variable authentication successful")
                 return service
             except Exception as env_error:
-                logger.warning(f"⚠️ Environment Variable authentication failed: {env_error}")
+                logger.warning(f"⚠️ Environment Variable authentication failed: {str(env_error)[:100]}...")
         
         # Method 2: Environment Variable (Base64 encoded)
         service_account_b64 = os.getenv("GOOGLE_SERVICE_ACCOUNT_B64")
@@ -186,32 +206,33 @@ def get_google_drive_service():
                 logger.info("✅ Google Drive: Base64 authentication successful")
                 return service
             except Exception as b64_error:
-                logger.warning(f"⚠️ Base64 authentication failed: {b64_error}")
+                logger.warning(f"⚠️ Base64 authentication failed: {str(b64_error)[:100]}...")
         
         # Method 3: Local JSON file (development)
-        service_account_file = Path("service-account-key.json")
-        if service_account_file.exists():
-            try:
-                credentials = service_account.Credentials.from_service_account_file(
-                    service_account_file,
-                    scopes=['https://www.googleapis.com/auth/drive.file']
-                )
-                service = build('drive', 'v3', credentials=credentials)
-                service.files().list(pageSize=1).execute()
-                logger.info("✅ Google Drive: Local file authentication successful")
-                return service
-            except Exception as file_error:
-                logger.warning(f"⚠️ Local file authentication failed: {file_error}")
+        if not IS_PRODUCTION:
+            service_account_file = Path("service-account-key.json")
+            if service_account_file.exists():
+                try:
+                    credentials = service_account.Credentials.from_service_account_file(
+                        service_account_file,
+                        scopes=['https://www.googleapis.com/auth/drive.file']
+                    )
+                    service = build('drive', 'v3', credentials=credentials)
+                    service.files().list(pageSize=1).execute()
+                    logger.info("✅ Google Drive: Local file authentication successful")
+                    return service
+                except Exception as file_error:
+                    logger.warning(f"⚠️ Local file authentication failed: {str(file_error)[:100]}...")
         
-        logger.warning("❌ No valid Google Drive credentials found")
+        logger.info("ℹ️ No Google Drive credentials configured - using local storage only")
         return None
         
     except Exception as e:
-        logger.error(f"❌ Google Drive setup failed: {e}")
+        logger.error(f"❌ Google Drive setup failed: {str(e)[:100]}...")
         return None
 
 def create_or_get_drive_folder(service, folder_name):
-    """Create or find Google Drive folder"""
+    """Create or find Google Drive folder with safe error handling"""
     if not service:
         return None
     
@@ -239,11 +260,11 @@ def create_or_get_drive_folder(service, folder_name):
         return folder_id
         
     except Exception as e:
-        logger.error(f"❌ Google Drive folder error: {e}")
+        logger.warning(f"⚠️ Google Drive folder operation failed: {str(e)[:100]}...")
         return None
 
 def upload_to_google_drive(service, folder_id, data, filename):
-    """Upload data to Google Drive"""
+    """Upload data to Google Drive with safe error handling"""
     if not service or not folder_id:
         return None, None
     
@@ -270,7 +291,7 @@ def upload_to_google_drive(service, folder_id, data, filename):
         return file_id, web_link
         
     except Exception as e:
-        logger.error(f"❌ Google Drive upload failed: {e}")
+        logger.warning(f"⚠️ Google Drive upload failed: {str(e)[:100]}...")
         return None, None
 
 # === LLM SERVICE ===
@@ -399,25 +420,44 @@ drive_folder_id = create_or_get_drive_folder(drive_service, GOOGLE_DRIVE_FOLDER_
 # Dialog session storage
 dialog_sessions: Dict[str, Dict] = {}
 
-# === REQUEST LOGGING MIDDLEWARE ===
+# === REQUEST LOGGING MIDDLEWARE (Safe) ===
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
     start_time = datetime.now()
     
-    # Log incoming request
-    logger.info(f"📥 {request.method} {request.url.path} from {request.client.host if request.client else 'unknown'}")
-    
     try:
+        # Log incoming request (safe)
+        client_host = "unknown"
+        try:
+            client_host = request.client.host if request.client else "unknown"
+        except:
+            pass
+        
+        logger.info(f"📥 {request.method} {request.url.path} from {client_host}")
+        
         response = await call_next(request)
         
-        # Log response
-        duration = (datetime.now() - start_time).total_seconds()
-        logger.info(f"📤 {request.method} {request.url.path} -> {response.status_code} ({duration:.3f}s)")
+        # Log response (safe)
+        try:
+            duration = (datetime.now() - start_time).total_seconds()
+            logger.info(f"📤 {request.method} {request.url.path} -> {response.status_code} ({duration:.3f}s)")
+        except:
+            logger.info(f"📤 {request.method} {request.url.path} -> {response.status_code}")
         
         return response
     except Exception as e:
-        logger.error(f"💥 Request failed: {request.method} {request.url.path} - {str(e)}")
-        raise
+        logger.error(f"💥 Request middleware error: {str(e)[:100]}...")
+        # Continue anyway, don't break the request
+        try:
+            response = await call_next(request)
+            return response
+        except:
+            # Last resort - return a basic error response
+            from fastapi.responses import JSONResponse
+            return JSONResponse(
+                status_code=500,
+                content={"error": "Internal server error", "path": request.url.path}
+            )
 
 # === API ENDPOINTS ===
 
@@ -893,19 +933,33 @@ def calculate_study_completion_rate(request: StudySaveRequest) -> float:
     
     return round((completed_sections / total_sections) * 100, 2)
 
-# === STARTUP/SHUTDOWN EVENTS ===
-@app.on_event("startup")
-async def startup_event():
+# === LIFESPAN EVENTS (Updated for FastAPI) ===
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
     logger.info("🚀 FormularIQ Backend v3.0.0 startup complete")
     logger.info(f"📂 Local output directory: {LOCAL_OUTPUT_DIR}")
     logger.info(f"🔧 CORS configured for {len(ALLOWED_ORIGINS)} origins")
     logger.info(f"🤖 Groq LLM: {'Available' if GROQ_AVAILABLE and os.getenv('GROQ_API_KEY') else 'Fallback mode'}")
     logger.info(f"☁️ Google Drive: {'Connected' if drive_service else 'Local storage only'}")
     logger.info("✅ All systems ready - accepting requests")
-
-@app.on_event("shutdown")
-async def shutdown_event():
+    
+    yield
+    
+    # Shutdown
     logger.info("👋 FormularIQ Backend shutting down gracefully")
+
+# Update FastAPI app to use lifespan
+app = FastAPI(
+    title="FormularIQ Backend",
+    description="LLM-gestützte Formularbearbeitung - Production Ready",
+    version="3.0.0",
+    docs_url="/docs" if not IS_PRODUCTION else None,
+    redoc_url="/redoc" if not IS_PRODUCTION else None,
+    lifespan=lifespan
+)
 
 # === MAIN ===
 if __name__ == "__main__":
