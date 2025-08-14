@@ -4,10 +4,29 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { Storage } from '@google-cloud/storage'
 
+interface TestResult {
+  test: string
+  status: 'SUCCESS' | 'FAIL' | 'INFO'
+  error?: string
+  details?: any
+}
+
+interface DebugInfo {
+  timestamp: string
+  environment_variables: {
+    project_id: boolean
+    bucket_name: boolean
+    credentials: boolean
+    project_id_value?: string
+    bucket_name_value?: string
+  }
+  tests: TestResult[]
+}
+
 export async function GET() {
   console.log('🔍 DEBUG: Testing Google Cloud Storage connection...')
   
-  const debugInfo = {
+  const debugInfo: DebugInfo = {
     timestamp: new Date().toISOString(),
     environment_variables: {
       project_id: !!process.env.GOOGLE_CLOUD_PROJECT_ID,
