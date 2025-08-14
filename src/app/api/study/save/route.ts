@@ -68,7 +68,13 @@ export async function POST(request: NextRequest) {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
     const fileName = `study_${requestBody.participantId}_${timestamp}.json`
     
-    let storageResult = { success: false, method: 'vercel_logs' as const, fileName, error: '' }
+    let storageResult: {
+      success: boolean
+      method: 'vercel_logs' | 'google_cloud'
+      fileName: string
+      fileId?: string
+      error?: string
+    } = { success: false, method: 'vercel_logs', fileName, error: '' }
     
     // Versuche Google Cloud Storage
     try {
