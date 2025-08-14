@@ -191,13 +191,13 @@ function analyzePreference(comparison: any): string {
   if (!comparison) return 'unknown'
   
   // Analysiere basierend auf speed, ease_of_use, user_control
-  const aPreferences = ['A', 'variant_a'].includes(comparison.speed) ? 1 : 0 +
-                       ['A', 'variant_a'].includes(comparison.ease_of_use) ? 1 : 0 +
-                       ['A', 'variant_a'].includes(comparison.user_control) ? 1 : 0
+  const aPreferences = (['A', 'variant_a'].includes(comparison.speed) ? 1 : 0) +
+                       (['A', 'variant_a'].includes(comparison.ease_of_use) ? 1 : 0) +
+                       (['A', 'variant_a'].includes(comparison.user_control) ? 1 : 0)
   
-  const bPreferences = ['B', 'variant_b'].includes(comparison.speed) ? 1 : 0 +
-                       ['B', 'variant_b'].includes(comparison.ease_of_use) ? 1 : 0 +
-                       ['B', 'variant_b'].includes(comparison.user_control) ? 1 : 0
+  const bPreferences = (['B', 'variant_b'].includes(comparison.speed) ? 1 : 0) +
+                       (['B', 'variant_b'].includes(comparison.ease_of_use) ? 1 : 0) +
+                       (['B', 'variant_b'].includes(comparison.user_control) ? 1 : 0)
   
   if (aPreferences > bPreferences) return 'variant_a_preferred'
   if (bPreferences > aPreferences) return 'variant_b_preferred'
