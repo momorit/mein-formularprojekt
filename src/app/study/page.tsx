@@ -5,6 +5,9 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { CheckCircle, Clock, Users, ArrowRight } from 'lucide-react'
+import SUSQuestionnaire from '@/components/SUSQuestionnaire'
+import { useTimingTracker } from '@/components/Questionnaire/TimingTracker'
 
 type StudyStep = 
   | 'intro' 
@@ -18,29 +21,74 @@ type StudyStep =
 
 interface Demographics {
   age: string
+  gender: string
   education: string
-  experience: string
-  tech_affinity: string
+  tech_experience: string
+  form_frequency: string
+  device_preference: string
 }
 
-interface VariantSurvey {
-  usability: string
-  efficiency: string
-  satisfaction: string
-  helpfulness: string
+interface TrustQuestionnaire {
+  system_reliability: number
+  data_security: number
+  error_handling: number
+  transparency: number
+  user_control: number
+}
+
+interface VariantData {
+  variant: 'A' | 'B'
+  susResults?: any
+  trustResults?: TrustQuestionnaire
+  completionTime: number
+  startTime: Date
+  endTime?: Date
   comments: string
 }
 
-interface FinalSurvey {
-  preference: string
-  speed_comparison: string
-  ease_comparison: string
-  overall_comments: string
+interface PreferenceComparison {
+  overall_preference: 'A' | 'B' | 'no_preference'
+  speed_winner: 'A' | 'B' | 'equal'
+  ease_winner: 'A' | 'B' | 'equal'
+  trust_winner: 'A' | 'B' | 'equal'
+  future_use: 'A' | 'B' | 'depends'
+  recommendation_score: number
+  final_comments: string
 }
+
+// Vertrauen-Fragebogen (5-Punkt-Likert)
+const TRUST_QUESTIONS = [
+  {
+    key: 'system_reliability',
+    question: 'Ich vertraue darauf, dass das System zuverlässig funktioniert',
+    labels: ['Stimme gar nicht zu', 'Stimme voll zu'] as [string, string]
+  },
+  {
+    key: 'data_security', 
+    question: 'Ich fühle mich sicher, dass meine Daten geschützt sind',
+    labels: ['Sehr unsicher', 'Sehr sicher'] as [string, string]
+  },
+  {
+    key: 'error_handling',
+    question: 'Das System geht angemessen mit Fehlern und Unklarheiten um',
+    labels: ['Sehr schlecht', 'Sehr gut'] as [string, string]
+  },
+  {
+    key: 'transparency',
+    question: 'Es ist klar ersichtlich, was das System mit meinen Eingaben macht',
+    labels: ['Gar nicht klar', 'Völlig klar'] as [string, string]
+  },
+  {
+    key: 'user_control',
+    question: 'Ich fühle mich im Kontrol über den Eingabeprozess',
+    labels: ['Keine Kontrolle', 'Volle Kontrolle'] as [string, string]
+  }
+]
 
 function StudyContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const { timingData, startVariant, endVariant, startQuestionnaire, endQuestionnaire, finishStudy } = useTimingTracker()
   
   // URL Parameter lesen
   const urlStep = searchParams.get('step')
@@ -56,16 +104,31 @@ function StudyContent() {
   
   // Form states
   const [demographics, setDemographics] = useState<Demographics>({
-    age: '', education: '', experience: '', tech_affinity: ''
+    age: '', gender: '', education: '', tech_experience: '', form_frequency: '', device_preference: ''
   })
-  const [variant1Survey, setVariant1Survey] = useState<VariantSurvey>({
-    usability: '', efficiency: '', satisfaction: '', helpfulness: '', comments: ''
+  
+  const [variantAData, setVariantAData] = useState<VariantData>({
+    variant: 'A',
+    completionTime: 0,
+    startTime: new Date(),
+    comments: ''
   })
-  const [variant2Survey, setVariant2Survey] = useState<VariantSurvey>({
-    usability: '', efficiency: '', satisfaction: '', helpfulness: '', comments: ''
+  
+  const [variantBData, setVariantBData] = useState<VariantData>({
+    variant: 'B', 
+    completionTime: 0,
+    startTime: new Date(),
+    comments: ''
   })
-  const [finalSurvey, setFinalSurvey] = useState<FinalSurvey>({
-    preference: '', speed_comparison: '', ease_comparison: '', overall_comments: ''
+  
+  const [preferenceComparison, setPreferenceComparison] = useState<PreferenceComparison>({
+    overall_preference: 'no_preference',
+    speed_winner: 'equal',
+    ease_winner: 'equal', 
+    trust_winner: 'equal',
+    future_use: 'depends',
+    recommendation_score: 0,
+    final_comments: ''
   })
 
   // URL Parameter in Step umwandeln
@@ -79,118 +142,204 @@ function StudyContent() {
   const getFirstVariant = () => randomization === 'A-B' ? 'A' : 'B'
   const getSecondVariant = () => randomization === 'A-B' ? 'B' : 'A'
 
-  // Helper function to update URL without causing re-render loop
   const updateStep = (newStep: StudyStep) => {
     setStep(newStep)
     const url = new URL(window.location.href)
     url.searchParams.set('step', newStep)
-    url.searchParams.set('participant', participantId)
-    window.history.replaceState({}, '', url.toString())
+    window.history.pushState({}, '', url.toString())
   }
 
-  // Einleitung
+  const saveCompleteStudy = async () => {
+    finishStudy()
+    
+    const completeData = {
+      participantId,
+      startTime: startTime.toISOString(),
+      randomization,
+      demographics,
+      variantAData,
+      variantBData,
+      preferenceComparison,
+      timingData: {
+        ...timingData,
+        studyEnd: new Date(),
+        totalDuration: Date.now() - startTime.getTime()
+      },
+      completedAt: new Date().toISOString(),
+      metadata: {
+        userAgent: navigator.userAgent,
+        screenResolution: `${screen.width}x${screen.height}`,
+        language: navigator.language
+      }
+    }
+
+    try {
+      const response = await fetch('/api/study/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(completeData)
+      })
+      
+      if (response.ok) {
+        const result = await response.json()
+        console.log('✅ Study data saved:', result)
+      } else {
+        console.error('❌ Save failed:', response.status)
+      }
+    } catch (error) {
+      console.error('❌ Save error:', error)
+    }
+  }
+
+  // TrustScale Component
+  const TrustScale = ({ trustResults, onChange }: { 
+    trustResults: TrustQuestionnaire, 
+    onChange: (results: TrustQuestionnaire) => void 
+  }) => (
+    <div className="space-y-6">
+      <div className="bg-orange-50 border border-orange-200 rounded-lg p-6 mb-6">
+        <h3 className="text-xl font-semibold text-orange-900 mb-2">
+          🔒 Vertrauen & Sicherheit
+        </h3>
+        <p className="text-sm text-orange-700">
+          Wie sehr vertrauen Sie dem System? Bewerten Sie auf einer Skala von 1-5.
+        </p>
+      </div>
+
+      {TRUST_QUESTIONS.map((item, index) => (
+        <div key={item.key} className="p-4 border border-gray-200 rounded-lg bg-white">
+          <label className="block text-sm font-medium text-gray-900 mb-4">
+            <span className="text-orange-600 font-semibold">{index + 1}. </span>
+            {item.question} <span className="text-red-500">*</span>
+          </label>
+          
+          <div className="flex items-center justify-between mb-3 text-xs text-gray-500">
+            <span className="max-w-[120px] text-left">{item.labels[0]}</span>
+            <span className="max-w-[120px] text-right">{item.labels[1]}</span>
+          </div>
+          
+          <div className="flex justify-center space-x-6">
+            {[1, 2, 3, 4, 5].map((num) => (
+              <label key={num} className="flex flex-col items-center cursor-pointer group">
+                <input
+                  type="radio"
+                  name={`trust-${item.key}`}
+                  value={num}
+                  checked={trustResults[item.key] === num}
+                  onChange={() => onChange({ ...trustResults, [item.key]: num })}
+                  className="w-5 h-5 text-orange-600 border-gray-300 focus:ring-orange-500"
+                  required
+                />
+                <span className="text-sm mt-2 text-gray-600 group-hover:text-orange-600 font-medium">{num}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+
+  // Intro Screen
   if (step === 'intro') {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-8">
         <div className="container mx-auto px-4 max-w-4xl">
           <div className="text-center mb-8">
-            <h1 className="text-4xl font-bold text-gray-800 mb-4">FormularIQ Studie</h1>
-            <p className="text-xl text-gray-600">LLM-gestützte Formularbearbeitung - Usability Vergleichsstudie</p>
+            <h1 className="text-4xl font-bold text-gray-800 mb-4">
+              FormularIQ Usability Study
+            </h1>
+            <p className="text-lg text-gray-600">
+              Vergleich von zwei Formular-Eingabemethoden
+            </p>
+            <Badge className="mt-2">Teilnehmer: {participantId}</Badge>
           </div>
 
-          <Card className="mb-8">
+          <Card className="mb-6">
             <CardHeader>
-              <CardTitle className="text-2xl text-center">Willkommen zur Studie</CardTitle>
+              <CardTitle className="flex items-center">
+                <Users className="mr-2" />
+                Studienablauf (ca. 15-20 Minuten)
+              </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="bg-blue-50 p-6 rounded-lg">
-                <h3 className="text-xl font-semibold text-blue-800 mb-3">🔬 Wissenschaftlicher Hintergrund</h3>
-                <p className="text-blue-900 mb-3">
-                  Diese Studie untersucht die Benutzerfreundlichkeit verschiedener Ansätze zur digitalen Formularbearbeitung 
-                  im Kontext von <strong>Gebäude-Energieberatungen</strong>. Als Teil einer Masterarbeit an der HAW Hamburg 
-                  vergleichen wir zwei innovative Interaktionsformen:
-                </p>
-                <div className="grid md:grid-cols-2 gap-4 mt-4">
-                  <div className="bg-white p-4 rounded border-l-4 border-green-500">
-                    <h4 className="font-semibold text-green-700">📋 Variante A: Sichtbares Formular</h4>
-                    <p className="text-sm text-green-600">Klassisches Webformular mit KI-Assistenzhilfe bei Bedarf</p>
-                  </div>
-                  <div className="bg-white p-4 rounded border-l-4 border-purple-500">
-                    <h4 className="font-semibold text-purple-700">💬 Variante B: Dialog-System</h4>
-                    <p className="text-sm text-purple-600">Konversationelle Datenerfassung durch KI-gesteuerten Dialog</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-green-50 p-6 rounded-lg">
-                <h3 className="text-xl font-semibold text-green-800 mb-3">📋 Ihr Testszenario</h3>
-                <p className="text-green-900">
-                  Sie sind Eigentümer:in eines Mehrfamilienhauses (Baujahr 1965) in ruhiger Lage und planen eine 
-                  energetische Modernisierung der Fassade mit Wärmedämmverbundsystem. Für die Beratung benötigen Sie 
-                  eine digitale Erfassung der Gebäudedaten zur Mieterhöhungsberechnung nach der geplanten Sanierung.
-                </p>
-              </div>
-
-              <div>
-                <h3 className="text-xl font-semibold text-gray-800 mb-3">🔄 Studienablauf (ca. 15-20 Minuten)</h3>
-                <div className="space-y-3">
-                  {[
-                    { num: 1, text: 'Demografische Angaben', time: '2 Min.' },
-                    { num: 2, text: `Erste Variante testen (${getFirstVariant()})`, time: '5-8 Min.' },
-                    { num: 3, text: 'Bewertung der ersten Variante', time: '2 Min.' },
-                    { num: 4, text: `Zweite Variante testen (${getSecondVariant()})`, time: '5-8 Min.' },
-                    { num: 5, text: 'Bewertung der zweiten Variante', time: '2 Min.' },
-                    { num: 6, text: 'Abschließender Vergleich', time: '2 Min.' }
-                  ].map((item) => (
-                    <div key={item.num} className="flex items-center space-x-3">
-                      <Badge variant="outline" className="w-8 h-8 rounded-full flex items-center justify-center">
-                        {item.num}
-                      </Badge>
-                      <span className="flex-1">{item.text}</span>
-                      <span className="text-sm text-gray-500">{item.time}</span>
+            <CardContent>
+              <div className="grid md:grid-cols-2 gap-6">
+                <div className="space-y-4">
+                  <div className="flex items-start space-x-3">
+                    <div className="w-6 h-6 bg-blue-500 text-white rounded-full flex items-center justify-center text-sm font-bold">1</div>
+                    <div>
+                      <h4 className="font-semibold">Demografische Daten</h4>
+                      <p className="text-sm text-gray-600">Kurze Angaben zu Ihrer Person (~2 Min)</p>
                     </div>
-                  ))}
+                  </div>
+                  <div className="flex items-start space-x-3">
+                    <div className="w-6 h-6 bg-blue-500 text-white rounded-full flex items-center justify-center text-sm font-bold">2</div>
+                    <div>
+                      <h4 className="font-semibold">Variante A testen</h4>
+                      <p className="text-sm text-gray-600">Formular ausfüllen + Bewertung (~5 Min)</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start space-x-3">
+                    <div className="w-6 h-6 bg-blue-500 text-white rounded-full flex items-center justify-center text-sm font-bold">3</div>
+                    <div>
+                      <h4 className="font-semibold">Variante B testen</h4>
+                      <p className="text-sm text-gray-600">Formular ausfüllen + Bewertung (~5 Min)</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="space-y-4">
+                  <div className="flex items-start space-x-3">
+                    <div className="w-6 h-6 bg-blue-500 text-white rounded-full flex items-center justify-center text-sm font-bold">4</div>
+                    <div>
+                      <h4 className="font-semibold">Vergleich</h4>
+                      <p className="text-sm text-gray-600">Beide Varianten vergleichen (~3 Min)</p>
+                    </div>
+                  </div>
+                  <div className="bg-green-50 p-4 rounded-lg">
+                    <h4 className="font-semibold text-green-800 mb-2">Was wird gemessen?</h4>
+                    <ul className="text-sm text-green-700 space-y-1">
+                      <li>• System Usability Scale (SUS)</li>
+                      <li>• Vertrauen & Sicherheit</li>
+                      <li>• Nutzerpräferenzen</li>
+                      <li>• Bearbeitungszeiten</li>
+                    </ul>
+                  </div>
                 </div>
               </div>
-
-              <div className="bg-yellow-50 p-4 rounded-lg">
-                <h4 className="font-semibold text-yellow-800 mb-2">📊 Wichtige Hinweise</h4>
-                <ul className="text-yellow-700 space-y-1 text-sm">
-                  <li>• Alle Daten werden vollständig anonymisiert behandelt</li>
-                  <li>• Die Teilnahme ist freiwillig und kann jederzeit abgebrochen werden</li>
-                  <li>• Ihre Teilnehmer-ID: <strong>{participantId}</strong></li>
-                  <li>• Randomisierung: <strong>{randomization}</strong> (für Forschungszwecke)</li>
-                </ul>
-              </div>
-
-              <Button 
-                onClick={() => updateStep('demographics')}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 text-lg"
-                size="lg"
-              >
-                Studie starten →
-              </Button>
             </CardContent>
           </Card>
+
+          <div className="text-center">
+            <Button 
+              onClick={() => {
+                startQuestionnaire('demographics')
+                updateStep('demographics')
+              }}
+              size="lg"
+              className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-4 text-lg"
+            >
+              Studie beginnen <ArrowRight className="ml-2" />
+            </Button>
+          </div>
         </div>
       </div>
     )
   }
 
-  // Demografische Angaben
+  // Demographics
   if (step === 'demographics') {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-8">
         <div className="container mx-auto px-4 max-w-2xl">
           <div className="text-center mb-6">
-            <h1 className="text-3xl font-bold text-gray-800 mb-2">Demografische Angaben</h1>
-            <p className="text-gray-600">Schritt 1 von 6</p>
+            <h1 className="text-3xl font-bold text-gray-800 mb-2">Demografische Daten</h1>
+            <p className="text-gray-600">Schritt 1 von 4</p>
           </div>
 
           <Card>
             <CardContent className="p-8">
               <form onSubmit={(e) => {
                 e.preventDefault()
+                endQuestionnaire('demographics')
                 updateStep('variant1_intro')
               }}>
                 <div className="space-y-6">
@@ -202,14 +351,31 @@ function StudyContent() {
                       required
                       value={demographics.age}
                       onChange={(e) => setDemographics(prev => ({ ...prev, age: e.target.value }))}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full border border-gray-300 rounded-md px-3 py-2"
                     >
                       <option value="">Bitte wählen</option>
-                      <option value="18-25">18-25 Jahre</option>
-                      <option value="26-35">26-35 Jahre</option>
-                      <option value="36-45">36-45 Jahre</option>
-                      <option value="46-55">46-55 Jahre</option>
-                      <option value="56+">56+ Jahre</option>
+                      <option value="18-24">18-24 Jahre</option>
+                      <option value="25-34">25-34 Jahre</option>
+                      <option value="35-44">35-44 Jahre</option>
+                      <option value="45-54">45-54 Jahre</option>
+                      <option value="55-64">55-64 Jahre</option>
+                      <option value="65+">65+ Jahre</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Geschlecht
+                    </label>
+                    <select 
+                      value={demographics.gender}
+                      onChange={(e) => setDemographics(prev => ({ ...prev, gender: e.target.value }))}
+                      className="w-full border border-gray-300 rounded-md px-3 py-2"
+                    >
+                      <option value="">Keine Angabe</option>
+                      <option value="weiblich">Weiblich</option>
+                      <option value="männlich">Männlich</option>
+                      <option value="divers">Divers</option>
                     </select>
                   </div>
 
@@ -221,54 +387,68 @@ function StudyContent() {
                       required
                       value={demographics.education}
                       onChange={(e) => setDemographics(prev => ({ ...prev, education: e.target.value }))}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full border border-gray-300 rounded-md px-3 py-2"
                     >
                       <option value="">Bitte wählen</option>
-                      <option value="Hauptschule">Hauptschule</option>
-                      <option value="Realschule">Realschule</option>
-                      <option value="Gymnasium">Gymnasium</option>
-                      <option value="Ausbildung">Ausbildung</option>
-                      <option value="Bachelor">Bachelor</option>
-                      <option value="Master">Master</option>
-                      <option value="Promotion">Promotion</option>
+                      <option value="hauptschule">Hauptschulabschluss</option>
+                      <option value="realschule">Realschulabschluss</option>
+                      <option value="abitur">Abitur/Fachabitur</option>
+                      <option value="ausbildung">Ausbildung</option>
+                      <option value="bachelor">Bachelor</option>
+                      <option value="master">Master/Diplom</option>
+                      <option value="promotion">Promotion</option>
                     </select>
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Erfahrung mit digitalen Formularen *
+                      Technische Erfahrung *
                     </label>
                     <select 
                       required
-                      value={demographics.experience}
-                      onChange={(e) => setDemographics(prev => ({ ...prev, experience: e.target.value }))}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      value={demographics.tech_experience}
+                      onChange={(e) => setDemographics(prev => ({ ...prev, tech_experience: e.target.value }))}
+                      className="w-full border border-gray-300 rounded-md px-3 py-2"
                     >
                       <option value="">Bitte wählen</option>
-                      <option value="Sehr wenig">Sehr wenig</option>
-                      <option value="Wenig">Wenig</option>
-                      <option value="Durchschnittlich">Durchschnittlich</option>
-                      <option value="Viel">Viel</option>
-                      <option value="Sehr viel">Sehr viel</option>
+                      <option value="niedrig">Niedrig - Ich nutze nur grundlegende Funktionen</option>
+                      <option value="mittel">Mittel - Ich kenne mich gut mit Computern/Smartphones aus</option>
+                      <option value="hoch">Hoch - Ich arbeite beruflich mit Technologie</option>
                     </select>
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Technik-Affinität *
+                      Wie oft füllen Sie Online-Formulare aus? *
                     </label>
                     <select 
                       required
-                      value={demographics.tech_affinity}
-                      onChange={(e) => setDemographics(prev => ({ ...prev, tech_affinity: e.target.value }))}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      value={demographics.form_frequency}
+                      onChange={(e) => setDemographics(prev => ({ ...prev, form_frequency: e.target.value }))}
+                      className="w-full border border-gray-300 rounded-md px-3 py-2"
                     >
                       <option value="">Bitte wählen</option>
-                      <option value="Sehr niedrig">Sehr niedrig</option>
-                      <option value="Niedrig">Niedrig</option>
-                      <option value="Durchschnittlich">Durchschnittlich</option>
-                      <option value="Hoch">Hoch</option>
-                      <option value="Sehr hoch">Sehr hoch</option>
+                      <option value="täglich">Täglich</option>
+                      <option value="wöchentlich">Mehrmals pro Woche</option>
+                      <option value="monatlich">Mehrmals pro Monat</option>
+                      <option value="selten">Selten (weniger als monatlich)</option>
+                      <option value="nie">Nie</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Bevorzugtes Gerät für Formulare
+                    </label>
+                    <select 
+                      value={demographics.device_preference}
+                      onChange={(e) => setDemographics(prev => ({ ...prev, device_preference: e.target.value }))}
+                      className="w-full border border-gray-300 rounded-md px-3 py-2"
+                    >
+                      <option value="">Keine Präferenz</option>
+                      <option value="desktop">Desktop/Laptop</option>
+                      <option value="tablet">Tablet</option>
+                      <option value="smartphone">Smartphone</option>
                     </select>
                   </div>
                 </div>
@@ -287,503 +467,389 @@ function StudyContent() {
     )
   }
 
-  // Erste Variante Einführung
-  if (step === 'variant1_intro') {
-    const variant = getFirstVariant()
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-8">
-        <div className="container mx-auto px-4 max-w-3xl">
-          <div className="text-center mb-6">
-            <h1 className="text-3xl font-bold text-gray-800 mb-2">
-              Erste Variante: {variant === 'A' ? 'Sichtbares Formular' : 'Dialog-System'}
-            </h1>
-            <p className="text-gray-600">Schritt 2 von 6</p>
-          </div>
-
-          <Card>
-            <CardContent className="p-8">
-              <div className="space-y-6">
-                <div className="bg-blue-50 p-6 rounded-lg">
-                  <h3 className="text-xl font-semibold text-blue-800 mb-3">🏢 Erinnerung an Ihr Szenario</h3>
-                  <p className="text-blue-900 mb-3">
-                    Sie möchten für Ihr <strong>Mehrfamilienhaus (Baujahr 1965)</strong> eine energetische Sanierung durchführen 
-                    und benötigen eine Beratung zur Berechnung möglicher Mieterhöhungen. Dafür müssen Sie Gebäudedaten digital erfassen.
-                  </p>
-                  <div className="text-sm text-blue-700 bg-blue-100 p-3 rounded">
-                    <strong>Kontext:</strong> Siedlungsstraße 23, 12345 Großstadt • 10 Wohneinheiten • 634m² Wohnfläche • 
-                    Geplant: Fassadendämmung mit WDVS (140mm Mineralwolle)
-                  </div>
-                </div>
-
-                <div className="bg-gray-50 p-6 rounded-lg">
-                  <h3 className="text-lg font-semibold text-gray-800 mb-3">
-                    {variant === 'A' ? '📋 Variante A: Sichtbares Formular' : '💬 Variante B: Dialog-System'}
-                  </h3>
-                  <p className="text-gray-700 mb-4">
-                    {variant === 'A' 
-                      ? 'Sie sehen alle Formularfelder auf einmal und können bei schwierigen Fragen einen KI-Chat-Assistenten um Hilfe bitten. Die Felder enthalten Hinweise zur korrekten Ausfüllung.'
-                      : 'Ein KI-Assistent führt Sie Schritt für Schritt durch einen Dialog und stellt Ihnen nacheinander gezielte Fragen zu Ihrem Gebäude. Bei Unklarheiten können Sie nachfragen.'
-                    }
-                  </p>
-                  
-                  {variant === 'A' && (
-                    <div className="bg-green-100 p-3 rounded text-sm text-green-800">
-                      <strong>Tipp:</strong> Nutzen Sie den Chat-Assistenten, wenn Sie bei einem Feld unsicher sind!
-                    </div>
-                  )}
-                  
-                  {variant === 'B' && (
-                    <div className="bg-purple-100 p-3 rounded text-sm text-purple-800">
-                      <strong>Tipp:</strong> Antworten Sie natürlich und fragen Sie bei Unklarheiten einfach nach!
-                    </div>
-                  )}
-                </div>
-
-                <div className="space-y-3">
-                  <h4 className="font-semibold text-gray-700">Ihre Aufgabe:</h4>
-                  <ul className="space-y-2 text-gray-600">
-                    <li className="flex items-start space-x-2">
-                      <span className="text-blue-500 mt-1">•</span>
-                      <span>Geben Sie die Gebäudedaten für die Energieberatung ein</span>
-                    </li>
-                    <li className="flex items-start space-x-2">
-                      <span className="text-blue-500 mt-1">•</span>
-                      <span>Nutzen Sie die verfügbaren Hilfe-Funktionen wenn nötig</span>
-                    </li>
-                    <li className="flex items-start space-x-2">
-                      <span className="text-blue-500 mt-1">•</span>
-                      <span>Nehmen Sie sich die Zeit, die Sie benötigen</span>
-                    </li>
-                    <li className="flex items-start space-x-2">
-                      <span className="text-blue-500 mt-1">•</span>
-                      <span>Speichern Sie am Ende Ihre Eingaben</span>
-                    </li>
-                  </ul>
-                </div>
-
-                <Button 
-                  onClick={() => {
-                    const url = variant === 'A' ? '/form-a' : '/form-b'
-                    router.push(`${url}?study=true&step=2&participant=${participantId}&variant=${variant}`)
-                  }}
-                  className="w-full bg-green-600 hover:bg-green-700 text-white py-4 text-lg"
-                  size="lg"
-                >
-                  Variante {variant} jetzt starten →
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    )
-  }
-
-  // Fragebogen nach erster Variante
+  // Variant 1 Survey - SUS + Trust + Comments
   if (step === 'variant1_survey') {
     const variant = getFirstVariant()
+    const currentVariantData = variant === 'A' ? variantAData : variantBData
+    const setCurrentVariantData = variant === 'A' ? setVariantAData : setVariantBData
+
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-8">
-        <div className="container mx-auto px-4 max-w-2xl">
+        <div className="container mx-auto px-4 max-w-4xl">
           <div className="text-center mb-6">
             <h1 className="text-3xl font-bold text-gray-800 mb-2">
               Bewertung: Variante {variant}
             </h1>
-            <p className="text-gray-600">Schritt 3 von 6</p>
+            <p className="text-gray-600">Schritt 2 von 4</p>
+            <Badge variant="outline" className="mt-2">
+              {variant === 'A' ? 'Sichtbares Formular' : 'Dialog-System'}
+            </Badge>
           </div>
 
-          <Card>
-            <CardContent className="p-8">
-              <form onSubmit={(e) => {
-                e.preventDefault()
-                updateStep('variant2_intro')
-              }}>
-                <div className="space-y-6">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Wie bewerten Sie die Benutzerfreundlichkeit? *
-                    </label>
-                    <select 
-                      required
-                      value={variant1Survey.usability}
-                      onChange={(e) => setVariant1Survey(prev => ({ ...prev, usability: e.target.value }))}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                      <option value="">Bitte bewerten</option>
-                      <option value="1">1 - Sehr schlecht</option>
-                      <option value="2">2 - Schlecht</option>
-                      <option value="3">3 - Neutral</option>
-                      <option value="4">4 - Gut</option>
-                      <option value="5">5 - Sehr gut</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Wie effizient war die Dateneingabe? *
-                    </label>
-                    <select 
-                      required
-                      value={variant1Survey.efficiency}
-                      onChange={(e) => setVariant1Survey(prev => ({ ...prev, efficiency: e.target.value }))}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                      <option value="">Bitte bewerten</option>
-                      <option value="1">1 - Sehr ineffizient</option>
-                      <option value="2">2 - Ineffizient</option>
-                      <option value="3">3 - Neutral</option>
-                      <option value="4">4 - Effizient</option>
-                      <option value="5">5 - Sehr effizient</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Wie zufrieden waren Sie mit der Erfahrung? *
-                    </label>
-                    <select 
-                      required
-                      value={variant1Survey.satisfaction}
-                      onChange={(e) => setVariant1Survey(prev => ({ ...prev, satisfaction: e.target.value }))}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                      <option value="">Bitte bewerten</option>
-                      <option value="1">1 - Sehr unzufrieden</option>
-                      <option value="2">2 - Unzufrieden</option>
-                      <option value="3">3 - Neutral</option>
-                      <option value="4">4 - Zufrieden</option>
-                      <option value="5">5 - Sehr zufrieden</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Wie hilfreich war die KI-Unterstützung? *
-                    </label>
-                    <select 
-                      required
-                      value={variant1Survey.helpfulness}
-                      onChange={(e) => setVariant1Survey(prev => ({ ...prev, helpfulness: e.target.value }))}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                      <option value="">Bitte bewerten</option>
-                      <option value="0">Nicht genutzt</option>
-                      <option value="1">1 - Nicht hilfreich</option>
-                      <option value="2">2 - Wenig hilfreich</option>
-                      <option value="3">3 - Neutral</option>
-                      <option value="4">4 - Hilfreich</option>
-                      <option value="5">5 - Sehr hilfreich</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Zusätzliche Kommentare (optional)
-                    </label>
-                    <textarea 
-                      value={variant1Survey.comments}
-                      onChange={(e) => setVariant1Survey(prev => ({ ...prev, comments: e.target.value }))}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      rows={3}
-                      placeholder="Was ist Ihnen besonders aufgefallen? Gab es Probleme?"
-                    />
-                  </div>
-                </div>
-
-                <Button 
-                  type="submit"
-                  className="w-full mt-8 bg-blue-600 hover:bg-blue-700 text-white py-3"
-                >
-                  Weiter zur zweiten Variante →
-                </Button>
-              </form>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    )
-  }
-
-  // Zweite Variante Einführung
-  if (step === 'variant2_intro') {
-    const variant = getSecondVariant()
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-8">
-        <div className="container mx-auto px-4 max-w-3xl">
-          <div className="text-center mb-6">
-            <h1 className="text-3xl font-bold text-gray-800 mb-2">
-              Zweite Variante: {variant === 'A' ? 'Sichtbares Formular' : 'Dialog-System'}
-            </h1>
-            <p className="text-gray-600">Schritt 4 von 6</p>
-          </div>
-
-          <Card>
-            <CardContent className="p-8">
-              <div className="space-y-6">
-                <div className="bg-blue-50 p-6 rounded-lg">
-                  <h3 className="text-xl font-semibold text-blue-800 mb-3">🏢 Gleiches Szenario, andere Variante</h3>
-                  <p className="text-blue-900">
-                    Sie erfassen wieder die Daten für dasselbe Mehrfamilienhaus, diesmal jedoch mit einem anderen digitalen Ansatz. 
-                    Vergleichen Sie dabei beide Erfahrungen.
-                  </p>
-                </div>
-
-                <div className="bg-gray-50 p-6 rounded-lg">
-                  <h3 className="text-lg font-semibold text-gray-800 mb-3">
-                    {variant === 'A' ? '📋 Variante A: Sichtbares Formular' : '💬 Variante B: Dialog-System'}
-                  </h3>
-                  <p className="text-gray-700 mb-4">
-                    {variant === 'A' 
-                      ? 'Sie sehen alle Formularfelder auf einmal und können bei schwierigen Fragen einen KI-Chat-Assistenten um Hilfe bitten. Die Felder enthalten Hinweise zur korrekten Ausfüllung.'
-                      : 'Ein KI-Assistent führt Sie Schritt für Schritt durch einen Dialog und stellt Ihnen nacheinander gezielte Fragen zu Ihrem Gebäude. Bei Unklarheiten können Sie nachfragen.'
-                    }
-                  </p>
-                  
-                  {variant === 'A' && (
-                    <div className="bg-green-100 p-3 rounded text-sm text-green-800">
-                      <strong>Tipp:</strong> Nutzen Sie den Chat-Assistenten, wenn Sie bei einem Feld unsicher sind!
-                    </div>
-                  )}
-                  
-                  {variant === 'B' && (
-                    <div className="bg-purple-100 p-3 rounded text-sm text-purple-800">
-                      <strong>Tipp:</strong> Antworten Sie natürlich und fragen Sie bei Unklarheiten einfach nach!
-                    </div>
-                  )}
-                </div>
-
-                <Button 
-                  onClick={() => {
-                    const url = variant === 'A' ? '/form-a' : '/form-b'
-                    router.push(`${url}?study=true&step=4&participant=${participantId}&variant=${variant}`)
+          <div className="space-y-8">
+            {/* SUS Questionnaire */}
+            <Card>
+              <CardContent className="p-6">
+                <SUSQuestionnaire
+                  variant={variant}
+                  onComplete={(susResults) => {
+                    setCurrentVariantData(prev => ({ 
+                      ...prev, 
+                      susResults,
+                      endTime: new Date(),
+                      completionTime: Date.now() - prev.startTime.getTime()
+                    }))
                   }}
-                  className="w-full bg-green-600 hover:bg-green-700 text-white py-4 text-lg"
-                  size="lg"
-                >
-                  Variante {variant} jetzt starten →
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+                />
+              </CardContent>
+            </Card>
+
+            {/* Trust Questionnaire */}
+            <Card>
+              <CardContent className="p-6">
+                <TrustScale
+                  trustResults={currentVariantData.trustResults || {
+                    system_reliability: 0,
+                    data_security: 0, 
+                    error_handling: 0,
+                    transparency: 0,
+                    user_control: 0
+                  }}
+                  onChange={(trustResults) => {
+                    setCurrentVariantData(prev => ({ ...prev, trustResults }))
+                  }}
+                />
+              </CardContent>
+            </Card>
+
+            {/* Comments */}
+            <Card>
+              <CardContent className="p-6">
+                <h3 className="text-lg font-semibold mb-4">Zusätzliche Kommentare</h3>
+                <textarea
+                  value={currentVariantData.comments}
+                  onChange={(e) => setCurrentVariantData(prev => ({ ...prev, comments: e.target.value }))}
+                  placeholder="Was ist Ihnen besonders aufgefallen? Gab es Probleme oder positive Aspekte?"
+                  className="w-full h-24 border border-gray-300 rounded-md px-3 py-2"
+                />
+              </CardContent>
+            </Card>
+
+            <div className="text-center">
+              <Button 
+                onClick={() => {
+                  endQuestionnaire('variantA')
+                  updateStep('variant2_intro')
+                }}
+                disabled={!currentVariantData.susResults || !currentVariantData.trustResults}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3"
+              >
+                Weiter zur zweiten Variante →
+              </Button>
+            </div>
+          </div>
         </div>
       </div>
     )
   }
 
-  // Fragebogen nach zweiter Variante
+  // Variant 2 Survey - Same as variant 1
   if (step === 'variant2_survey') {
     const variant = getSecondVariant()
+    const currentVariantData = variant === 'A' ? variantAData : variantBData
+    const setCurrentVariantData = variant === 'A' ? setVariantAData : setVariantBData
+
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-8">
-        <div className="container mx-auto px-4 max-w-2xl">
+        <div className="container mx-auto px-4 max-w-4xl">
           <div className="text-center mb-6">
             <h1 className="text-3xl font-bold text-gray-800 mb-2">
               Bewertung: Variante {variant}
             </h1>
-            <p className="text-gray-600">Schritt 5 von 6</p>
+            <p className="text-gray-600">Schritt 3 von 4</p>
+            <Badge variant="outline" className="mt-2">
+              {variant === 'A' ? 'Sichtbares Formular' : 'Dialog-System'}
+            </Badge>
           </div>
 
-          <Card>
-            <CardContent className="p-8">
-              <form onSubmit={(e) => {
-                e.preventDefault()
-                updateStep('final_survey')
-              }}>
-                <div className="space-y-6">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Wie bewerten Sie die Benutzerfreundlichkeit? *
-                    </label>
-                    <select 
-                      required
-                      value={variant2Survey.usability}
-                      onChange={(e) => setVariant2Survey(prev => ({ ...prev, usability: e.target.value }))}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                      <option value="">Bitte bewerten</option>
-                      <option value="1">1 - Sehr schlecht</option>
-                      <option value="2">2 - Schlecht</option>
-                      <option value="3">3 - Neutral</option>
-                      <option value="4">4 - Gut</option>
-                      <option value="5">5 - Sehr gut</option>
-                    </select>
-                  </div>
+          <div className="space-y-8">
+            {/* SUS + Trust + Comments - Same structure as variant 1 */}
+            <Card>
+              <CardContent className="p-6">
+                <SUSQuestionnaire
+                  variant={variant}
+                  onComplete={(susResults) => {
+                    setCurrentVariantData(prev => ({ 
+                      ...prev, 
+                      susResults,
+                      endTime: new Date(),
+                      completionTime: Date.now() - prev.startTime.getTime()
+                    }))
+                  }}
+                />
+              </CardContent>
+            </Card>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Wie effizient war die Dateneingabe? *
-                    </label>
-                    <select 
-                      required
-                      value={variant2Survey.efficiency}
-                      onChange={(e) => setVariant2Survey(prev => ({ ...prev, efficiency: e.target.value }))}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                      <option value="">Bitte bewerten</option>
-                      <option value="1">1 - Sehr ineffizient</option>
-                      <option value="2">2 - Ineffizient</option>
-                      <option value="3">3 - Neutral</option>
-                      <option value="4">4 - Effizient</option>
-                      <option value="5">5 - Sehr effizient</option>
-                    </select>
-                  </div>
+            <Card>
+              <CardContent className="p-6">
+                <TrustScale
+                  trustResults={currentVariantData.trustResults || {
+                    system_reliability: 0,
+                    data_security: 0,
+                    error_handling: 0,
+                    transparency: 0,
+                    user_control: 0
+                  }}
+                  onChange={(trustResults) => {
+                    setCurrentVariantData(prev => ({ ...prev, trustResults }))
+                  }}
+                />
+              </CardContent>
+            </Card>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Wie zufrieden waren Sie mit der Erfahrung? *
-                    </label>
-                    <select 
-                      required
-                      value={variant2Survey.satisfaction}
-                      onChange={(e) => setVariant2Survey(prev => ({ ...prev, satisfaction: e.target.value }))}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                      <option value="">Bitte bewerten</option>
-                      <option value="1">1 - Sehr unzufrieden</option>
-                      <option value="2">2 - Unzufrieden</option>
-                      <option value="3">3 - Neutral</option>
-                      <option value="4">4 - Zufrieden</option>
-                      <option value="5">5 - Sehr zufrieden</option>
-                    </select>
-                  </div>
+            <Card>
+              <CardContent className="p-6">
+                <h3 className="text-lg font-semibold mb-4">Zusätzliche Kommentare</h3>
+                <textarea
+                  value={currentVariantData.comments}
+                  onChange={(e) => setCurrentVariantData(prev => ({ ...prev, comments: e.target.value }))}
+                  placeholder="Was ist Ihnen besonders aufgefallen? Gab es Probleme oder positive Aspekte?"
+                  className="w-full h-24 border border-gray-300 rounded-md px-3 py-2"
+                />
+              </CardContent>
+            </Card>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Wie hilfreich war die KI-Unterstützung? *
-                    </label>
-                    <select 
-                      required
-                      value={variant2Survey.helpfulness}
-                      onChange={(e) => setVariant2Survey(prev => ({ ...prev, helpfulness: e.target.value }))}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                      <option value="">Bitte bewerten</option>
-                      <option value="0">Nicht genutzt</option>
-                      <option value="1">1 - Nicht hilfreich</option>
-                      <option value="2">2 - Wenig hilfreich</option>
-                      <option value="3">3 - Neutral</option>
-                      <option value="4">4 - Hilfreich</option>
-                      <option value="5">5 - Sehr hilfreich</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Zusätzliche Kommentare (optional)
-                    </label>
-                    <textarea 
-                      value={variant2Survey.comments}
-                      onChange={(e) => setVariant2Survey(prev => ({ ...prev, comments: e.target.value }))}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      rows={3}
-                      placeholder="Was ist Ihnen besonders aufgefallen? Gab es Probleme?"
-                    />
-                  </div>
-                </div>
-
-                <Button 
-                  type="submit"
-                  className="w-full mt-8 bg-blue-600 hover:bg-blue-700 text-white py-3"
-                >
-                  Weiter zum Abschluss →
-                </Button>
-              </form>
-            </CardContent>
-          </Card>
+            <div className="text-center">
+              <Button 
+                onClick={() => {
+                  endQuestionnaire('variantB')
+                  startQuestionnaire('comparison')
+                  updateStep('final_survey')
+                }}
+                disabled={!currentVariantData.susResults || !currentVariantData.trustResults}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3"
+              >
+                Zum abschließenden Vergleich →
+              </Button>
+            </div>
+          </div>
         </div>
       </div>
     )
   }
 
-  // Abschließender Vergleich
+  // Final Comparison Survey
   if (step === 'final_survey') {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-8">
-        <div className="container mx-auto px-4 max-w-2xl">
+        <div className="container mx-auto px-4 max-w-3xl">
           <div className="text-center mb-6">
             <h1 className="text-3xl font-bold text-gray-800 mb-2">Abschließender Vergleich</h1>
-            <p className="text-gray-600">Schritt 6 von 6</p>
+            <p className="text-gray-600">Schritt 4 von 4</p>
           </div>
 
           <Card>
             <CardContent className="p-8">
               <form onSubmit={(e) => {
                 e.preventDefault()
+                endQuestionnaire('comparison')
+                saveCompleteStudy()
                 updateStep('complete')
               }}>
-                <div className="space-y-6">
+                <div className="space-y-8">
+                  {/* Overall Preference */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Welche Variante bevorzugen Sie insgesamt? *
-                    </label>
-                    <select 
-                      required
-                      value={finalSurvey.preference}
-                      onChange={(e) => setFinalSurvey(prev => ({ ...prev, preference: e.target.value }))}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                      <option value="">Bitte wählen</option>
-                      <option value="A_stark">Variante A (stark bevorzugt)</option>
-                      <option value="A_leicht">Variante A (leicht bevorzugt)</option>
-                      <option value="neutral">Beide gleich gut</option>
-                      <option value="B_leicht">Variante B (leicht bevorzugt)</option>
-                      <option value="B_stark">Variante B (stark bevorzugt)</option>
-                    </select>
+                    <h3 className="text-lg font-semibold mb-4">Gesamtpräferenz</h3>
+                    <div className="space-y-3">
+                      {[
+                        { value: 'A', label: 'Variante A (Sichtbares Formular)' },
+                        { value: 'B', label: 'Variante B (Dialog-System)' },
+                        { value: 'no_preference', label: 'Keine klare Präferenz' }
+                      ].map(option => (
+                        <label key={option.value} className="flex items-center space-x-3 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="overall_preference"
+                            value={option.value}
+                            checked={preferenceComparison.overall_preference === option.value}
+                            onChange={(e) => setPreferenceComparison(prev => ({ 
+                              ...prev, 
+                              overall_preference: e.target.value as 'A' | 'B' | 'no_preference'
+                            }))}
+                            className="w-4 h-4 text-blue-600"
+                            required
+                          />
+                          <span>{option.label}</span>
+                        </label>
+                      ))}
+                    </div>
                   </div>
 
+                  {/* Speed Comparison */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Welche Variante war schneller zu bearbeiten? *
-                    </label>
-                    <select 
-                      required
-                      value={finalSurvey.speed_comparison}
-                      onChange={(e) => setFinalSurvey(prev => ({ ...prev, speed_comparison: e.target.value }))}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                      <option value="">Bitte wählen</option>
-                      <option value="A">Variante A (Formular)</option>
-                      <option value="B">Variante B (Dialog)</option>
-                      <option value="gleich">Beide gleich schnell</option>
-                    </select>
+                    <h3 className="text-lg font-semibold mb-4">Welche Variante war schneller zu bedienen?</h3>
+                    <div className="space-y-3">
+                      {[
+                        { value: 'A', label: 'Variante A war schneller' },
+                        { value: 'B', label: 'Variante B war schneller' },
+                        { value: 'equal', label: 'Beide gleich schnell' }
+                      ].map(option => (
+                        <label key={option.value} className="flex items-center space-x-3 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="speed_winner"
+                            value={option.value}
+                            checked={preferenceComparison.speed_winner === option.value}
+                            onChange={(e) => setPreferenceComparison(prev => ({ 
+                              ...prev, 
+                              speed_winner: e.target.value as 'A' | 'B' | 'equal'
+                            }))}
+                            className="w-4 h-4 text-blue-600"
+                            required
+                          />
+                          <span>{option.label}</span>
+                        </label>
+                      ))}
+                    </div>
                   </div>
 
+                  {/* Ease Comparison */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Welche Variante war einfacher zu bedienen? *
-                    </label>
-                    <select 
-                      required
-                      value={finalSurvey.ease_comparison}
-                      onChange={(e) => setFinalSurvey(prev => ({ ...prev, ease_comparison: e.target.value }))}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                      <option value="">Bitte wählen</option>
-                      <option value="A">Variante A (Formular)</option>
-                      <option value="B">Variante B (Dialog)</option>
-                      <option value="gleich">Beide gleich einfach</option>
-                    </select>
+                    <h3 className="text-lg font-semibold mb-4">Welche Variante war einfacher zu bedienen?</h3>
+                    <div className="space-y-3">
+                      {[
+                        { value: 'A', label: 'Variante A war einfacher' },
+                        { value: 'B', label: 'Variante B war einfacher' },
+                        { value: 'equal', label: 'Beide gleich einfach' }
+                      ].map(option => (
+                        <label key={option.value} className="flex items-center space-x-3 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="ease_winner"
+                            value={option.value}
+                            checked={preferenceComparison.ease_winner === option.value}
+                            onChange={(e) => setPreferenceComparison(prev => ({ 
+                              ...prev, 
+                              ease_winner: e.target.value as 'A' | 'B' | 'equal'
+                            }))}
+                            className="w-4 h-4 text-blue-600"
+                            required
+                          />
+                          <span>{option.label}</span>
+                        </label>
+                      ))}
+                    </div>
                   </div>
 
+                  {/* Trust Comparison */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Abschließende Kommentare (optional)
+                    <h3 className="text-lg font-semibold mb-4">Welcher Variante vertrauen Sie mehr?</h3>
+                    <div className="space-y-3">
+                      {[
+                        { value: 'A', label: 'Ich vertraue Variante A mehr' },
+                        { value: 'B', label: 'Ich vertraue Variante B mehr' },
+                        { value: 'equal', label: 'Gleiches Vertrauen in beide' }
+                      ].map(option => (
+                        <label key={option.value} className="flex items-center space-x-3 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="trust_winner"
+                            value={option.value}
+                            checked={preferenceComparison.trust_winner === option.value}
+                            onChange={(e) => setPreferenceComparison(prev => ({ 
+                              ...prev, 
+                              trust_winner: e.target.value as 'A' | 'B' | 'equal'
+                            }))}
+                            className="w-4 h-4 text-blue-600"
+                            required
+                          />
+                          <span>{option.label}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Future Use */}
+                  <div>
+                    <h3 className="text-lg font-semibold mb-4">Welche würden Sie in Zukunft nutzen?</h3>
+                    <div className="space-y-3">
+                      {[
+                        { value: 'A', label: 'Definitiv Variante A' },
+                        { value: 'B', label: 'Definitiv Variante B' },
+                        { value: 'depends', label: 'Kommt auf die Situation an' }
+                      ].map(option => (
+                        <label key={option.value} className="flex items-center space-x-3 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="future_use"
+                            value={option.value}
+                            checked={preferenceComparison.future_use === option.value}
+                            onChange={(e) => setPreferenceComparison(prev => ({ 
+                              ...prev, 
+                              future_use: e.target.value as 'A' | 'B' | 'depends'
+                            }))}
+                            className="w-4 h-4 text-blue-600"
+                            required
+                          />
+                          <span>{option.label}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* NPS Score */}
+                  <div>
+                    <h3 className="text-lg font-semibold mb-4">
+                      Wie wahrscheinlich würden Sie FormularIQ weiterempfehlen? (0-10)
+                    </h3>
+                    <div className="flex justify-center space-x-2">
+                      {[0,1,2,3,4,5,6,7,8,9,10].map(num => (
+                        <label key={num} className="flex flex-col items-center cursor-pointer">
+                          <input
+                            type="radio"
+                            name="recommendation_score"
+                            value={num}
+                            checked={preferenceComparison.recommendation_score === num}
+                            onChange={(e) => setPreferenceComparison(prev => ({ 
+                              ...prev, 
+                              recommendation_score: parseInt(e.target.value)
+                            }))}
+                            className="w-4 h-4 text-blue-600"
+                            required
+                          />
+                          <span className="text-sm mt-1">{num}</span>
+                        </label>
+                      ))}
+                    </div>
+                    <div className="flex justify-between text-xs text-gray-500 mt-2">
+                      <span>Sehr unwahrscheinlich</span>
+                      <span>Sehr wahrscheinlich</span>
+                    </div>
+                  </div>
+
+                  {/* Final Comments */}
+                  <div>
+                    <label className="block text-lg font-semibold mb-4">
+                      Abschließende Kommentare
                     </label>
-                    <textarea 
-                      value={finalSurvey.overall_comments}
-                      onChange={(e) => setFinalSurvey(prev => ({ ...prev, overall_comments: e.target.value }))}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      rows={4}
-                      placeholder="Welche Gedanken haben Sie zum Vergleich beider Systeme? Verbesserungsvorschläge?"
+                    <textarea
+                      value={preferenceComparison.final_comments}
+                      onChange={(e) => setPreferenceComparison(prev => ({ 
+                        ...prev, 
+                        final_comments: e.target.value 
+                      }))}
+                      placeholder="Was würden Sie den Entwicklern mitteilen? Verbesserungsvorschläge, positive Aspekte, etc."
+                      className="w-full h-32 border border-gray-300 rounded-md px-3 py-2"
                     />
                   </div>
                 </div>
 
                 <Button 
                   type="submit"
-                  className="w-full mt-8 bg-green-600 hover:bg-green-700 text-white py-3"
+                  className="w-full mt-8 bg-green-600 hover:bg-green-700 text-white py-4 text-lg"
                 >
-                  Studie abschließen →
+                  <CheckCircle className="mr-2" />
+                  Studie abschließen
                 </Button>
               </form>
             </CardContent>
@@ -793,41 +859,106 @@ function StudyContent() {
     )
   }
 
-  // Abschluss
+  // Complete Screen
   if (step === 'complete') {
-    // Hier würden normalerweise alle Daten gespeichert werden
+    const totalMinutes = Math.round((Date.now() - startTime.getTime()) / 60000)
+    
     return (
-      <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-100 py-8">
+      <div className="min-h-screen bg-gradient-to-br from-green-50 to-emerald-100 py-8">
         <div className="container mx-auto px-4 max-w-2xl">
+          <div className="text-center">
+            <div className="mb-6">
+              <CheckCircle className="w-16 h-16 text-green-600 mx-auto mb-4" />
+              <h1 className="text-4xl font-bold text-gray-800 mb-2">
+                Vielen Dank!
+              </h1>
+              <p className="text-lg text-gray-600">
+                Sie haben die Studie erfolgreich abgeschlossen.
+              </p>
+            </div>
+
+            <Card>
+              <CardContent className="p-8">
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <span className="font-medium">Teilnehmer-ID:</span>
+                    <Badge>{participantId}</Badge>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="font-medium">Dauer:</span>
+                    <span>{totalMinutes} Minuten</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="font-medium">Randomisierung:</span>
+                    <span>{randomization}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="font-medium">Status:</span>
+                    <Badge className="bg-green-100 text-green-800">Vollständig</Badge>
+                  </div>
+                </div>
+
+                <div className="mt-6 pt-6 border-t text-sm text-gray-600">
+                  <p>
+                    Ihre Daten wurden sicher gespeichert und werden ausschließlich für wissenschaftliche 
+                    Zwecke verwendet. Bei Fragen kontaktieren Sie gerne: 
+                    <strong> moritz.treu@haw-hamburg.de</strong>
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+
+            <div className="mt-6">
+              <Button 
+                onClick={() => window.location.href = '/'}
+                variant="outline"
+              >
+                Zur Startseite
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Variant introduction screens... (simplified for space)
+  if (step === 'variant1_intro' || step === 'variant2_intro') {
+    const variant = step === 'variant1_intro' ? getFirstVariant() : getSecondVariant()
+    const nextStep = step === 'variant1_intro' ? 'variant1_survey' : 'variant2_survey'
+    
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-8">
+        <div className="container mx-auto px-4 max-w-3xl">
+          <div className="text-center mb-6">
+            <h1 className="text-3xl font-bold text-gray-800 mb-2">
+              {step === 'variant1_intro' ? 'Erste' : 'Zweite'} Variante: {variant}
+            </h1>
+          </div>
+
           <Card>
             <CardContent className="p-8 text-center">
               <div className="mb-6">
-                <div className="text-6xl mb-4">🎉</div>
-                <h1 className="text-3xl font-bold text-green-800 mb-2">Vielen Dank!</h1>
-                <p className="text-lg text-gray-600">
-                  Sie haben die Studie erfolgreich abgeschlossen.
+                <Badge className="mb-4">
+                  {variant === 'A' ? 'Sichtbares Formular' : 'Dialog-System'}
+                </Badge>
+                <p className="text-gray-600">
+                  {variant === 'A' 
+                    ? 'Sie sehen alle Formularfelder auf einmal und können diese direkt ausfüllen.'
+                    : 'Das System führt Sie durch einen interaktiven Dialog und stellt Fragen.'
+                  }
                 </p>
-              </div>
-
-              <div className="bg-green-50 p-6 rounded-lg mb-6">
-                <h3 className="font-semibold text-green-800 mb-2">Ihre Teilnehmer-ID:</h3>
-                <p className="text-xl font-mono text-green-900">{participantId}</p>
-                <p className="text-sm text-green-700 mt-2">
-                  Ihre Daten wurden erfolgreich und anonymisiert gespeichert.
-                </p>
-              </div>
-
-              <div className="text-gray-600 mb-6">
-                <p className="mb-2">Bei Fragen zur Studie wenden Sie sich gerne an:</p>
-                <p className="font-semibold">HAW Hamburg - Department Informatik</p>
-                <p className="text-sm">Masterarbeit: Moritz Treu</p>
               </div>
 
               <Button 
-                onClick={() => router.push('/')}
-                className="bg-blue-600 hover:bg-blue-700 text-white"
+                onClick={() => {
+                  startVariant(variant)
+                  const url = variant === 'A' ? '/form-a' : '/form-b'
+                  router.push(`${url}?study=true&step=${nextStep}&participant=${participantId}&variant=${variant}`)
+                }}
+                className="bg-green-600 hover:bg-green-700 text-white px-8 py-4 text-lg"
               >
-                Zur Startseite
+                Variante {variant} starten →
               </Button>
             </CardContent>
           </Card>
@@ -839,18 +970,9 @@ function StudyContent() {
   return null
 }
 
-// Main component with Suspense wrapper
 export default function StudyPage() {
   return (
-    <Suspense fallback={
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-4 border-blue-600 mx-auto mb-6"></div>
-          <h1 className="text-2xl font-bold text-gray-800 mb-2">FormularIQ Studie</h1>
-          <p className="text-lg text-gray-600">Wird geladen...</p>
-        </div>
-      </div>
-    }>
+    <Suspense fallback={<div>Loading...</div>}>
       <StudyContent />
     </Suspense>
   )
