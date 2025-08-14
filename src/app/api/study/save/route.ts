@@ -1,6 +1,5 @@
 // src/app/api/study/save/route.ts
-// Aktualisierte Version mit Google Cloud Storage Integration
-// Sicherer Rollout - behält Vercel Logs als Fallback
+// Finale Version mit funktionierender Google Cloud Storage Integration
 
 import { NextRequest, NextResponse } from 'next/server'
 import { saveStudyDataToCloud, checkStorageStatus } from '@/lib/google-cloud-storage'
