@@ -1,4 +1,4 @@
-// src/components/VariantA.tsx - UPDATED FOR VERCEL STUDY
+// src/components/VariantA.tsx - FLOW FIXED
 'use client'
 
 import React, { useState, useEffect } from 'react'
@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
-import { MessageCircle, Save, Lightbulb, HelpCircle, AlertCircle, Play } from 'lucide-react'
+import { MessageCircle, Save, Lightbulb, HelpCircle, Play } from 'lucide-react'
 
 interface FormField {
   id: string
@@ -39,6 +39,7 @@ export default function VariantA({ onComplete, startTime }: VariantAProps) {
   const isStudy = searchParams.get('study') === 'true'
   const participantId = searchParams.get('participant')
   const variant = searchParams.get('variant')
+  const step = searchParams.get('step') // '2' for first variant, '4' for second variant
 
   // Form state
   const [formValues, setFormValues] = useState<Record<string, string>>({})
@@ -181,9 +182,10 @@ Beginnen Sie einfach mit dem Ausfüllen und fragen Sie bei Unsicherheiten!`,
       if (!response.ok) throw new Error('Save failed')
       
       if (isStudy) {
-        // Return to study flow
-        const step = searchParams.get('step') === '4' ? 'variant2_survey' : 'variant1_survey'
-        router.push(`/study?step=${step}&participant=${participantId}`)
+        // Correct flow: determine next step based on current step
+        const nextStep = step === '2' ? 'variant1_survey' : 'variant2_survey'
+        console.log('🔄 Redirecting to:', nextStep, 'from step:', step)
+        router.push(`/study?step=${nextStep}&participant=${participantId}`)
       } else {
         alert('Daten erfolgreich gespeichert!')
         if (onComplete) onComplete(formData)
@@ -271,6 +273,11 @@ Beginnen Sie einfach mit dem Ausfüllen und fragen Sie bei Unsicherheiten!`,
               {participantId && (
                 <Badge variant="outline" className="mt-2">Teilnehmer: {participantId}</Badge>
               )}
+              <div className="mt-2">
+                <Badge variant="outline" className="text-blue-600">
+                  {step === '2' ? 'Erste Variante' : 'Zweite Variante'}
+                </Badge>
+              </div>
             </div>
           )}
 
@@ -349,6 +356,11 @@ Beginnen Sie einfach mit dem Ausfüllen und fragen Sie bei Unsicherheiten!`,
             {participantId && (
               <Badge variant="outline" className="mt-2">Teilnehmer: {participantId}</Badge>
             )}
+            <div className="mt-2">
+              <Badge variant="outline" className="text-blue-600">
+                {step === '2' ? 'Erste Variante' : 'Zweite Variante'}
+              </Badge>
+            </div>
           </div>
         )}
 
@@ -381,8 +393,8 @@ Beginnen Sie einfach mit dem Ausfüllen und fragen Sie bei Unsicherheiten!`,
                         type="button"
                         variant="outline"
                         onClick={() => {
-                          const step = searchParams.get('step') === '4' ? 'variant2_survey' : 'variant1_survey'
-                          router.push(`/study?step=${step}&participant=${participantId}`)
+                          const nextStep = step === '2' ? 'variant1_survey' : 'variant2_survey'
+                          router.push(`/study?step=${nextStep}&participant=${participantId}`)
                         }}
                       >
                         Überspringen

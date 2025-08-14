@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -40,8 +40,17 @@ interface FinalSurvey {
 
 export default function StudyPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  
+  // URL Parameter lesen
+  const urlStep = searchParams.get('step')
+  const urlParticipant = searchParams.get('participant')
+  
   const [step, setStep] = useState<StudyStep>('intro')
-  const [participantId] = useState(`P${Math.random().toString(36).substr(2, 8).toUpperCase()}`)
+  const [participantId] = useState(() => {
+    if (urlParticipant) return urlParticipant
+    return `P${Math.random().toString(36).substr(2, 8).toUpperCase()}`
+  })
   const [randomization] = useState(Math.random() < 0.5 ? 'A-B' : 'B-A')
   const [startTime] = useState(new Date())
   
@@ -59,8 +68,25 @@ export default function StudyPage() {
     preference: '', speed_comparison: '', ease_comparison: '', overall_comments: ''
   })
 
+  // URL Parameter in Step umwandeln
+  useEffect(() => {
+    if (urlStep) {
+      console.log('🔗 URL Step detected:', urlStep)
+      setStep(urlStep as StudyStep)
+    }
+  }, [urlStep])
+
   const getFirstVariant = () => randomization === 'A-B' ? 'A' : 'B'
   const getSecondVariant = () => randomization === 'A-B' ? 'B' : 'A'
+
+  // Helper function to update URL without causing re-render loop
+  const updateStep = (newStep: StudyStep) => {
+    setStep(newStep)
+    const url = new URL(window.location.href)
+    url.searchParams.set('step', newStep)
+    url.searchParams.set('participant', participantId)
+    window.history.replaceState({}, '', url.toString())
+  }
 
   // Einleitung
   if (step === 'intro') {
@@ -138,7 +164,7 @@ export default function StudyPage() {
               </div>
 
               <Button 
-                onClick={() => setStep('demographics')}
+                onClick={() => updateStep('demographics')}
                 className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 text-lg"
                 size="lg"
               >
@@ -165,7 +191,7 @@ export default function StudyPage() {
             <CardContent className="p-8">
               <form onSubmit={(e) => {
                 e.preventDefault()
-                setStep('variant1_intro')
+                updateStep('variant1_intro')
               }}>
                 <div className="space-y-6">
                   <div>
@@ -370,7 +396,7 @@ export default function StudyPage() {
             <CardContent className="p-8">
               <form onSubmit={(e) => {
                 e.preventDefault()
-                setStep('variant2_intro')
+                updateStep('variant2_intro')
               }}>
                 <div className="space-y-6">
                   <div>
@@ -561,7 +587,7 @@ export default function StudyPage() {
             <CardContent className="p-8">
               <form onSubmit={(e) => {
                 e.preventDefault()
-                setStep('final_survey')
+                updateStep('final_survey')
               }}>
                 <div className="space-y-6">
                   <div>
@@ -683,7 +709,7 @@ export default function StudyPage() {
             <CardContent className="p-8">
               <form onSubmit={(e) => {
                 e.preventDefault()
-                setStep('complete')
+                updateStep('complete')
               }}>
                 <div className="space-y-6">
                   <div>

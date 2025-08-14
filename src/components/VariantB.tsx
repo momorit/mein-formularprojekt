@@ -1,4 +1,4 @@
-// src/components/VariantB.tsx - FIXED FOR VERCEL
+// src/components/VariantB.tsx - FLOW FIXED
 'use client'
 
 import React, { useState, useEffect } from 'react'
@@ -36,6 +36,7 @@ export default function VariantB({ onComplete, startTime }: VariantBProps) {
   const isStudy = searchParams.get('study') === 'true'
   const participantId = searchParams.get('participant')
   const variant = searchParams.get('variant')
+  const step = searchParams.get('step') // '2' for first variant, '4' for second variant
 
   // Dialog state
   const [dialogStarted, setDialogStarted] = useState(false)
@@ -282,9 +283,10 @@ Ihre Daten wurden erfasst und können nun gespeichert werden.`
       if (!response.ok) throw new Error('Save failed')
       
       if (isStudy) {
-        // Return to study flow
-        const step = searchParams.get('step') === '4' ? 'variant2_survey' : 'variant1_survey'
-        router.push(`/study?step=${step}&participant=${participantId}`)
+        // Correct flow: determine next step based on current step
+        const nextStep = step === '2' ? 'variant1_survey' : 'variant2_survey'
+        console.log('🔄 Redirecting to:', nextStep, 'from step:', step)
+        router.push(`/study?step=${nextStep}&participant=${participantId}`)
       } else {
         alert('Daten erfolgreich gespeichert!')
         if (onComplete) onComplete(dialogData)
@@ -315,6 +317,11 @@ Ihre Daten wurden erfasst und können nun gespeichert werden.`
               {participantId && (
                 <Badge variant="outline" className="mt-2">Teilnehmer: {participantId}</Badge>
               )}
+              <div className="mt-2">
+                <Badge variant="outline" className="text-purple-600">
+                  {step === '2' ? 'Erste Variante' : 'Zweite Variante'}
+                </Badge>
+              </div>
             </div>
           )}
 
@@ -403,6 +410,11 @@ Ihre Daten wurden erfasst und können nun gespeichert werden.`
             {participantId && (
               <Badge variant="outline" className="mt-2">Teilnehmer: {participantId}</Badge>
             )}
+            <div className="mt-2">
+              <Badge variant="outline" className="text-purple-600">
+                {step === '2' ? 'Erste Variante' : 'Zweite Variante'}
+              </Badge>
+            </div>
           </div>
         )}
 
@@ -578,8 +590,8 @@ Ihre Daten wurden erfasst und können nun gespeichert werden.`
                       <Button 
                         variant="outline"
                         onClick={() => {
-                          const step = searchParams.get('step') === '4' ? 'variant2_survey' : 'variant1_survey'
-                          router.push(`/study?step=${step}&participant=${participantId}`)
+                          const nextStep = step === '2' ? 'variant1_survey' : 'variant2_survey'
+                          router.push(`/study?step=${nextStep}&participant=${participantId}`)
                         }}
                         className="w-full"
                       >
