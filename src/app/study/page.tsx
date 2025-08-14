@@ -124,43 +124,52 @@ function StudyContent() {
 
   // Handle questionnaire completion
   const handleQuestionnaireComplete = async (data: QuestionnaireData, nextStep: StudyStep) => {
-    try {
-      console.log(`📋 Questionnaire completed for ${data.variant}:`, data)
+  try {
+    console.log('🐛 DEBUG handleQuestionnaireComplete:', {
+      currentStep: step,
+      nextStep,
+      dataVariant: data.variant,
+      participantId,
+      randomization
+    })
 
-      // Store the data locally for now
-      if (data.variant === 'A' || data.variant === 'B') {
-        if (step === 'variant1_survey') {
-          setVariant1QuestionnaireData(data)
-        } else if (step === 'variant2_survey') {
-          setVariant2QuestionnaireData(data)
-        }
-      } else if (data.variant === 'comparison') {
-        setComparisonQuestionnaireData(data)
+    console.log(`📋 Questionnaire completed for ${data.variant}:`, data)
+
+    // Store the data locally for now
+    if (data.variant === 'A' || data.variant === 'B') {
+      if (step === 'variant1_survey') {
+        setVariant1QuestionnaireData(data)
+      } else if (step === 'variant2_survey') {
+        setVariant2QuestionnaireData(data)
       }
-
-      // Save to API
-      const response = await fetch('/api/questionnaire/save', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-      })
-
-      if (!response.ok) {
-        throw new Error('Failed to save questionnaire data')
-      }
-
-      const result = await response.json()
-      console.log('✅ Questionnaire saved:', result)
-
-      // Move to next step
-      updateStep(nextStep)
-
-    } catch (error) {
-      console.error('❌ Failed to save questionnaire:', error)
-      alert('Fehler beim Speichern der Fragebogen-Daten. Möchten Sie trotzdem fortfahren?')
-      updateStep(nextStep)
+    } else if (data.variant === 'comparison') {
+      setComparisonQuestionnaireData(data)
     }
+
+    // Save to API
+    const response = await fetch('/api/questionnaire/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    })
+
+    if (!response.ok) {
+      throw new Error('Failed to save questionnaire data')
+    }
+
+    const result = await response.json()
+    console.log('✅ Questionnaire saved:', result)
+
+    // Move to next step
+    console.log('🔄 DEBUG: Moving to next step:', nextStep)
+    updateStep(nextStep)
+
+  } catch (error) {
+    console.error('❌ Failed to save questionnaire:', error)
+    alert('Fehler beim Speichern der Fragebogen-Daten. Möchten Sie trotzdem fortfahren?')
+    updateStep(nextStep)
   }
+}
 
   // NOW ALL THE CONDITIONAL RENDERS START HERE - AFTER ALL HOOKS
 
@@ -440,6 +449,17 @@ function StudyContent() {
   // Intro für zweite Variante
   if (step === 'variant2_intro') {
     const variant = getSecondVariant()
+    
+    // DEBUG LOGGING
+    console.log('🐛 DEBUG variant2_intro:', {
+      step,
+      randomization,
+      firstVariant: getFirstVariant(),
+      secondVariant: getSecondVariant(),
+      variant,
+      participantId
+    })
+    
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-8">
         <div className="container mx-auto px-4 max-w-2xl">
@@ -448,6 +468,11 @@ function StudyContent() {
               Zweite Variante: {variant === 'A' ? 'Sichtbares Formular' : 'Dialog-System'}
             </h1>
             <p className="text-gray-600">Schritt 4 von 6</p>
+            
+            {/* DEBUG INFO */}
+            <div className="bg-yellow-50 p-3 rounded-lg mt-4 text-xs">
+              <p><strong>Debug:</strong> Randomization: {randomization} | First: {getFirstVariant()} | Second: {getSecondVariant()}</p>
+            </div>
           </div>
 
           <Card>
@@ -482,7 +507,7 @@ function StudyContent() {
                 <Button 
                   onClick={() => {
                     const url = variant === 'A' ? '/form-a' : '/form-b'
-                    router.push(`${url}?study=true&step=5&participant=${participantId}&variant=${variant}`)
+                    router.push(`${url}?study=true&step=4&participant=${participantId}&variant=${variant}`)
                   }}
                   className="w-full bg-green-600 hover:bg-green-700 text-white py-4 text-lg"
                   size="lg"

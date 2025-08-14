@@ -145,57 +145,74 @@ Beginnen Sie einfach mit dem Ausfüllen und fragen Sie bei Unsicherheiten!`,
     }
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault()
+  
+  // DEBUG LOGGING
+  console.log('🐛 DEBUG VariantA handleSubmit:', {
+    step,
+    isStudy,
+    participantId,
+    variant,
+    searchParams: Object.fromEntries(searchParams.entries())
+  })
+  
+  try {
+    // Validate required fields
+    const missingFields = formFields
+      .filter(field => field.required && !formValues[field.id]?.trim())
+      .map(field => field.label)
     
-    try {
-      // Validate required fields
-      const missingFields = formFields
-        .filter(field => field.required && !formValues[field.id]?.trim())
-        .map(field => field.label)
-      
-      if (missingFields.length > 0) {
-        alert(`Bitte füllen Sie folgende Pflichtfelder aus: ${missingFields.join(', ')}`)
-        return
+    if (missingFields.length > 0) {
+      alert(`Bitte füllen Sie folgende Pflichtfelder aus: ${missingFields.join(', ')}`)
+      return
+    }
+    
+    // Save data
+    const formData = {
+      variant: 'A',
+      participantId: participantId,
+      formValues: formValues,
+      chatHistory: chatHistory,
+      timestamp: new Date().toISOString(),
+      metadata: {
+        completion_rate: calculateCompletionRate(),
+        total_fields: formFields.length,
+        filled_fields: Object.keys(formValues).filter(key => formValues[key]?.trim()).length
       }
+    }
+    
+    const response = await fetch('/api/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(formData)
+    })
+    
+    if (!response.ok) throw new Error('Save failed')
+    
+    if (isStudy) {
+      // NAVIGATION LOGIC WITH DEBUG
+      const nextStep = step === '2' ? 'variant1_survey' : 'variant2_survey'
       
-      // Save data
-      const formData = {
-        variant: 'A',
-        participantId: participantId,
-        formValues: formValues,
-        chatHistory: chatHistory,
-        timestamp: new Date().toISOString(),
-        metadata: {
-          completion_rate: calculateCompletionRate(),
-          total_fields: formFields.length,
-          filled_fields: Object.keys(formValues).filter(key => formValues[key]?.trim()).length
-        }
-      }
-      
-      const response = await fetch('/api/save', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
+      console.log('🔄 DEBUG VariantA Navigation:', {
+        currentStep: step,
+        nextStep,
+        participantId,
+        url: `/study?step=${nextStep}&participant=${participantId}`
       })
       
-      if (!response.ok) throw new Error('Save failed')
-      
-      if (isStudy) {
-        // Correct flow: determine next step based on current step
-        const nextStep = step === '2' ? 'variant1_survey' : 'variant2_survey'
-        console.log('🔄 Redirecting to:', nextStep, 'from step:', step)
-        router.push(`/study?step=${nextStep}&participant=${participantId}`)
-      } else {
-        alert('Daten erfolgreich gespeichert!')
-        if (onComplete) onComplete(formData)
-      }
-      
-    } catch (error) {
-      console.error('Save error:', error)
-      alert('Fehler beim Speichern. Versuchen Sie es erneut.')
+      router.push(`/study?step=${nextStep}&participant=${participantId}`)
+    } else {
+      alert('Daten erfolgreich gespeichert!')
+      if (onComplete) onComplete(formData)
     }
+    
+  } catch (error) {
+    console.error('❌ VariantA Save error:', error)
+    alert('Fehler beim Speichern. Versuchen Sie es erneut.')
   }
+}
+
 
   const calculateCompletionRate = () => {
     const totalFields = formFields.length

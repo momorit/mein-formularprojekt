@@ -246,59 +246,75 @@ Ihre Daten wurden erfasst und können nun gespeichert werden.`
   }
 
   const handleSave = async () => {
-    try {
-      setIsLoading(true)
-      
-      // Include current message if dialog isn't completed yet
-      const finalAnswers = { ...answers }
-      if (!isCompleted && userMessage.trim()) {
-        const currentQuestion = questions[currentQuestionIndex]
-        if (currentQuestion) {
-          finalAnswers[currentQuestion.id] = userMessage.trim()
-        }
+  // DEBUG LOGGING  
+  console.log('🐛 DEBUG VariantB handleSave:', {
+    step,
+    isStudy,
+    participantId,
+    variant,
+    searchParams: Object.fromEntries(searchParams.entries())
+  })
+  
+  try {
+    setIsLoading(true)
+    
+    // Include current message if dialog isn't completed yet
+    const finalAnswers = { ...answers }
+    if (!isCompleted && userMessage.trim()) {
+      const currentQuestion = questions[currentQuestionIndex]
+      if (currentQuestion) {
+        finalAnswers[currentQuestion.id] = userMessage.trim()
       }
-      
-      const dialogData = {
-        variant: 'B',
-        participantId: participantId,
-        session_id: sessionId,
-        questions: questions,
-        answers: finalAnswers,
-        chatHistory: chatHistory,
-        timestamp: new Date().toISOString(),
-        metadata: {
-          completion_rate: calculateCompletionRate(finalAnswers),
-          total_questions: questions.length,
-          answered_questions: Object.keys(finalAnswers).length,
-          is_completed: isCompleted
-        }
+    }
+    
+    const dialogData = {
+      variant: 'B',
+      participantId: participantId,
+      session_id: sessionId,
+      questions: questions,
+      answers: finalAnswers,
+      chatHistory: chatHistory,
+      timestamp: new Date().toISOString(),
+      metadata: {
+        completion_rate: calculateCompletionRate(finalAnswers),
+        total_questions: questions.length,
+        answered_questions: Object.keys(finalAnswers).length,
+        is_completed: isCompleted
       }
+    }
+    
+    const response = await fetch('/api/dialog/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(dialogData)
+    })
+    
+    if (!response.ok) throw new Error('Save failed')
+    
+    if (isStudy) {
+      // NAVIGATION LOGIC WITH DEBUG
+      const nextStep = step === '2' ? 'variant1_survey' : 'variant2_survey'
       
-      const response = await fetch('/api/dialog/save', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(dialogData)
+      console.log('🔄 DEBUG VariantB Navigation:', {
+        currentStep: step,
+        nextStep,
+        participantId,
+        url: `/study?step=${nextStep}&participant=${participantId}`
       })
       
-      if (!response.ok) throw new Error('Save failed')
-      
-      if (isStudy) {
-        // Correct flow: determine next step based on current step
-        const nextStep = step === '2' ? 'variant1_survey' : 'variant2_survey'
-        console.log('🔄 Redirecting to:', nextStep, 'from step:', step)
-        router.push(`/study?step=${nextStep}&participant=${participantId}`)
-      } else {
-        alert('Daten erfolgreich gespeichert!')
-        if (onComplete) onComplete(dialogData)
-      }
-      
-    } catch (error) {
-      console.error('Save error:', error)
-      alert('Fehler beim Speichern. Versuchen Sie es erneut.')
-    } finally {
-      setIsLoading(false)
+      router.push(`/study?step=${nextStep}&participant=${participantId}`)
+    } else {
+      alert('Daten erfolgreich gespeichert!')
+      if (onComplete) onComplete(dialogData)
     }
+    
+  } catch (error) {
+    console.error('❌ VariantB Save error:', error)
+    alert('Fehler beim Speichern. Versuchen Sie es erneut.')
+  } finally {
+    setIsLoading(false)
   }
+}
 
   const calculateCompletionRate = (currentAnswers: Record<string, string>) => {
     const totalQuestions = questions.length
