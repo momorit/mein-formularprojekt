@@ -52,6 +52,8 @@ function StudyContent() {
   const [variant2QuestionnaireData, setVariant2QuestionnaireData] = useState<QuestionnaireData | null>(null)
   const [comparisonQuestionnaireData, setComparisonQuestionnaireData] = useState<QuestionnaireData | null>(null)
 
+  // ALL HOOKS MUST BE AT THE TOP - BEFORE ANY CONDITIONALS OR RETURNS
+  
   // URL Parameter in Step umwandeln
   useEffect(() => {
     if (urlStep) {
@@ -60,6 +62,54 @@ function StudyContent() {
     }
   }, [urlStep])
 
+  // Handle final save effect - MOVED TO TOP
+  useEffect(() => {
+    const handleFinalSave = async () => {
+      if (step !== 'complete') return
+
+      try {
+        // Combine all study data
+        const finalStudyData = {
+          participant_id: participantId,
+          randomization: randomization,
+          start_time: startTime.toISOString(),
+          end_time: new Date().toISOString(),
+          demographics: demographics,
+          variant1_questionnaire: variant1QuestionnaireData,
+          variant2_questionnaire: variant2QuestionnaireData,
+          comparison_questionnaire: comparisonQuestionnaireData,
+          study_metadata: {
+            project: 'FormularIQ - LLM-gestützte Formularbearbeitung',
+            institution: 'HAW Hamburg',
+            researcher: 'Moritz Treu',
+            version: '2.0.0'
+          }
+        }
+
+        console.log('📊 Final study data:', finalStudyData)
+
+        // Save comprehensive study data
+        const response = await fetch('/api/study/complete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(finalStudyData)
+        })
+
+        if (response.ok) {
+          console.log('✅ Study completed successfully')
+        } else {
+          console.warn('⚠️ Failed to save final study data')
+        }
+
+      } catch (error) {
+        console.error('❌ Error saving final study data:', error)
+      }
+    }
+
+    handleFinalSave()
+  }, [step, participantId, randomization, startTime, demographics, variant1QuestionnaireData, variant2QuestionnaireData, comparisonQuestionnaireData])
+
+  // Helper functions
   const getFirstVariant = () => randomization === 'A-B' ? 'A' : 'B'
   const getSecondVariant = () => randomization === 'A-B' ? 'B' : 'A'
 
@@ -111,6 +161,8 @@ function StudyContent() {
       updateStep(nextStep)
     }
   }
+
+  // NOW ALL THE CONDITIONAL RENDERS START HERE - AFTER ALL HOOKS
 
   // Einleitung
   if (step === 'intro') {
@@ -372,7 +424,7 @@ function StudyContent() {
     )
   }
 
-  // NEUER ERWEITERTER FRAGEBOGEN für erste Variante
+  // ERWEITERTER FRAGEBOGEN für erste Variante
   if (step === 'variant1_survey') {
     const variant = getFirstVariant()
     return (
@@ -445,7 +497,7 @@ function StudyContent() {
     )
   }
 
-  // NEUER ERWEITERTER FRAGEBOGEN für zweite Variante
+  // ERWEITERTER FRAGEBOGEN für zweite Variante
   if (step === 'variant2_survey') {
     const variant = getSecondVariant()
     return (
@@ -458,7 +510,7 @@ function StudyContent() {
     )
   }
 
-  // NEUER ERWEITERTER VERGLEICHS-FRAGEBOGEN
+  // ERWEITERTER VERGLEICHS-FRAGEBOGEN
   if (step === 'final_comparison') {
     return (
       <EnhancedQuestionnaire
@@ -469,53 +521,6 @@ function StudyContent() {
       />
     )
   }
-
-  // Handle final save effect (moved outside conditional rendering)
-  useEffect(() => {
-    const handleFinalSave = async () => {
-      if (step !== 'complete') return
-
-      try {
-        // Combine all study data
-        const finalStudyData = {
-          participant_id: participantId,
-          randomization: randomization,
-          start_time: startTime.toISOString(),
-          end_time: new Date().toISOString(),
-          demographics: demographics,
-          variant1_questionnaire: variant1QuestionnaireData,
-          variant2_questionnaire: variant2QuestionnaireData,
-          comparison_questionnaire: comparisonQuestionnaireData,
-          study_metadata: {
-            project: 'FormularIQ - LLM-gestützte Formularbearbeitung',
-            institution: 'HAW Hamburg',
-            researcher: 'Moritz Treu',
-            version: '2.0.0'
-          }
-        }
-
-        console.log('📊 Final study data:', finalStudyData)
-
-        // Save comprehensive study data
-        const response = await fetch('/api/study/complete', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(finalStudyData)
-        })
-
-        if (response.ok) {
-          console.log('✅ Study completed successfully')
-        } else {
-          console.warn('⚠️ Failed to save final study data')
-        }
-
-      } catch (error) {
-        console.error('❌ Error saving final study data:', error)
-      }
-    }
-
-    handleFinalSave()
-  }, [step, participantId, randomization, startTime, demographics, variant1QuestionnaireData, variant2QuestionnaireData, comparisonQuestionnaireData])
 
   // Abschluss
   if (step === 'complete') {
