@@ -39,7 +39,16 @@ function StudyContent() {
     if (urlParticipant) return urlParticipant
     return `P${Math.random().toString(36).substr(2, 8).toUpperCase()}`
   })
-  const [randomization] = useState(Math.random() < 0.5 ? 'A-B' : 'B-A')
+  
+  // FIX: Deterministic randomization based on participantId (no storage needed)
+  const [randomization] = useState(() => {
+    // Use participantId to create deterministic randomization
+    const hash = participantId.split('').reduce((a, b) => {
+      a = ((a << 5) - a) + b.charCodeAt(0)
+      return a & a
+    }, 0)
+    return Math.abs(hash) % 2 === 0 ? 'A-B' : 'B-A'
+  })
   const [startTime] = useState(new Date())
   
   // Form states
@@ -109,6 +118,16 @@ function StudyContent() {
     handleFinalSave()
   }, [step, participantId, randomization, startTime, demographics, variant1QuestionnaireData, variant2QuestionnaireData, comparisonQuestionnaireData])
 
+  // Debug randomization consistency
+  useEffect(() => {
+    console.log('🎲 DEBUG Randomization:', {
+      participantId,
+      randomization,
+      firstVariant: getFirstVariant(),
+      secondVariant: getSecondVariant()
+    })
+  }, [participantId, randomization])
+
   // Helper functions
   const getFirstVariant = () => randomization === 'A-B' ? 'A' : 'B'
   const getSecondVariant = () => randomization === 'A-B' ? 'B' : 'A'
@@ -124,52 +143,43 @@ function StudyContent() {
 
   // Handle questionnaire completion
   const handleQuestionnaireComplete = async (data: QuestionnaireData, nextStep: StudyStep) => {
-  try {
-    console.log('🐛 DEBUG handleQuestionnaireComplete:', {
-      currentStep: step,
-      nextStep,
-      dataVariant: data.variant,
-      participantId,
-      randomization
-    })
+    try {
+      console.log(`📋 Questionnaire completed for ${data.variant}:`, data)
 
-    console.log(`📋 Questionnaire completed for ${data.variant}:`, data)
-
-    // Store the data locally for now
-    if (data.variant === 'A' || data.variant === 'B') {
-      if (step === 'variant1_survey') {
-        setVariant1QuestionnaireData(data)
-      } else if (step === 'variant2_survey') {
-        setVariant2QuestionnaireData(data)
+      // Store the data locally for now
+      if (data.variant === 'A' || data.variant === 'B') {
+        if (step === 'variant1_survey') {
+          setVariant1QuestionnaireData(data)
+        } else if (step === 'variant2_survey') {
+          setVariant2QuestionnaireData(data)
+        }
+      } else if (data.variant === 'comparison') {
+        setComparisonQuestionnaireData(data)
       }
-    } else if (data.variant === 'comparison') {
-      setComparisonQuestionnaireData(data)
+
+      // Save to API
+      const response = await fetch('/api/questionnaire/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to save questionnaire data')
+      }
+
+      const result = await response.json()
+      console.log('✅ Questionnaire saved:', result)
+
+      // Move to next step
+      updateStep(nextStep)
+
+    } catch (error) {
+      console.error('❌ Failed to save questionnaire:', error)
+      alert('Fehler beim Speichern der Fragebogen-Daten. Möchten Sie trotzdem fortfahren?')
+      updateStep(nextStep)
     }
-
-    // Save to API
-    const response = await fetch('/api/questionnaire/save', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data)
-    })
-
-    if (!response.ok) {
-      throw new Error('Failed to save questionnaire data')
-    }
-
-    const result = await response.json()
-    console.log('✅ Questionnaire saved:', result)
-
-    // Move to next step
-    console.log('🔄 DEBUG: Moving to next step:', nextStep)
-    updateStep(nextStep)
-
-  } catch (error) {
-    console.error('❌ Failed to save questionnaire:', error)
-    alert('Fehler beim Speichern der Fragebogen-Daten. Möchten Sie trotzdem fortfahren?')
-    updateStep(nextStep)
   }
-}
 
   // NOW ALL THE CONDITIONAL RENDERS START HERE - AFTER ALL HOOKS
 
@@ -436,6 +446,14 @@ function StudyContent() {
   // ERWEITERTER FRAGEBOGEN für erste Variante
   if (step === 'variant1_survey') {
     const variant = getFirstVariant()
+    
+    console.log('🐛 DEBUG variant1_survey:', {
+      step,
+      randomization, 
+      firstVariant: getFirstVariant(),
+      variantToPass: variant
+    })
+    
     return (
       <EnhancedQuestionnaire
         variant={variant}
@@ -525,6 +543,14 @@ function StudyContent() {
   // ERWEITERTER FRAGEBOGEN für zweite Variante
   if (step === 'variant2_survey') {
     const variant = getSecondVariant()
+    
+    console.log('🐛 DEBUG variant2_survey:', {
+      step,
+      randomization,
+      secondVariant: getSecondVariant(), 
+      variantToPass: variant
+    })
+    
     return (
       <EnhancedQuestionnaire
         variant={variant}

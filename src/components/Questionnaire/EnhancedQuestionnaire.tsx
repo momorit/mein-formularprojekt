@@ -55,7 +55,7 @@ export const EnhancedQuestionnaire: React.FC<EnhancedQuestionnaireProps> = ({
   const [sectionStartTime, setSectionStartTime] = useState(new Date())
   
   const [responses, setResponses] = useState<QuestionnaireData>({
-    variant,
+    variant, // This should be the correct variant passed from props
     participantId,
     trustResponses: {},
     susResponses: {},
@@ -64,6 +64,15 @@ export const EnhancedQuestionnaire: React.FC<EnhancedQuestionnaireProps> = ({
     startTime,
     sectionTimes: {}
   })
+
+  // Debug log to check variant consistency
+  useEffect(() => {
+    console.log('🐛 DEBUG EnhancedQuestionnaire initialized:', {
+      propVariant: variant,
+      stateVariant: responses.variant,
+      participantId
+    })
+  }, [variant, responses.variant, participantId])
 
   const sections = SECTIONS[variant] || []
   const currentSectionConfig = sections[currentSection]
@@ -121,6 +130,7 @@ export const EnhancedQuestionnaire: React.FC<EnhancedQuestionnaireProps> = ({
       
       setResponses(prev => ({
         ...prev,
+        variant, // FORCE the correct variant - don't let it change!
         completedSections: [...prev.completedSections, currentSectionConfig.key],
         sectionTimes: {
           ...prev.sectionTimes,
@@ -144,9 +154,17 @@ export const EnhancedQuestionnaire: React.FC<EnhancedQuestionnaireProps> = ({
         // Complete questionnaire
         const finalData = {
           ...responses,
+          variant, // FORCE the correct variant again!
           endTime: new Date(),
           completedSections: [...responses.completedSections, currentSectionConfig.key]
         }
+        
+        console.log('🐛 DEBUG EnhancedQuestionnaire onComplete:', {
+          passedVariant: variant,
+          finalDataVariant: finalData.variant,
+          sections: finalData.completedSections
+        })
+        
         onComplete(finalData)
       }
     }
