@@ -10,7 +10,7 @@ export { LikertScale } from './LikertScale'
 // Legacy components (if still needed)
 export { ComparisonQuestionnaire } from './ComparisonQuestionnaire'
 export { CustomUsabilityItems } from './CustomUsabilityItems'
-export { TimingTracker, useTimingTracker } from './TimingTracker'
+export { useTimingTracker } from './TimingTracker'
 
 // Types
 export interface QuestionnaireData {

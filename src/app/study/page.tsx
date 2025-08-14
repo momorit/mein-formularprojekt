@@ -470,9 +470,11 @@ function StudyContent() {
     )
   }
 
-  // Abschluss
-  if (step === 'complete') {
+  // Handle final save effect (moved outside conditional rendering)
+  useEffect(() => {
     const handleFinalSave = async () => {
+      if (step !== 'complete') return
+
       try {
         // Combine all study data
         const finalStudyData = {
@@ -512,11 +514,11 @@ function StudyContent() {
       }
     }
 
-    // Trigger save on component mount
-    useEffect(() => {
-      handleFinalSave()
-    }, [])
+    handleFinalSave()
+  }, [step, participantId, randomization, startTime, demographics, variant1QuestionnaireData, variant2QuestionnaireData, comparisonQuestionnaireData])
 
+  // Abschluss
+  if (step === 'complete') {
     return (
       <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-100 py-8">
         <div className="container mx-auto px-4 max-w-2xl">
