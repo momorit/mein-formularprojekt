@@ -1,258 +1,378 @@
 'use client'
 
-import { useState, useEffect, Suspense } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+import { Label } from '@/components/ui/label'
+import { Badge } from '@/components/ui/badge'
+import { MessageCircle, Save, Lightbulb, HelpCircle, AlertCircle } from 'lucide-react'
 
-function FormAContent() {
+interface FormField {
+  id: string
+  label: string
+  type: 'text' | 'number' | 'select' | 'textarea'
+  options?: string[]
+  required: boolean
+  difficulty: 'easy' | 'hard'
+  hint: string
+  placeholder: string
+}
+
+interface ChatMessage {
+  role: 'user' | 'assistant'
+  message: string
+  timestamp: Date
+}
+
+export default function FormAPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const isStudy = searchParams.get('study') === 'true'
   const participantId = searchParams.get('participant')
+  const variant = searchParams.get('variant')
 
-  const [instructions, setInstructions] = useState<any>(null)
-  const [values, setValues] = useState<Record<string, string>>({})
-  const [chatMessages, setChatMessages] = useState<Array<{role: string, content: string}>>([])
-  const [chatInput, setChatInput] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [chatLoading, setChatLoading] = useState(false)
+  // Form state
+  const [formValues, setFormValues] = useState<Record<string, string>>({})
+  const [chatHistory, setChatHistory] = useState<ChatMessage[]>([])
+  const [chatMessage, setChatMessage] = useState('')
+  const [isGenerating, setIsGenerating] = useState(false)
+  const [isChatLoading, setIsChatLoading] = useState(false)
+  const [isFormGenerated, setIsFormGenerated] = useState(false)
+  const [formFields, setFormFields] = useState<FormField[]>([])
 
-  // Generate instructions on mount
+  // Definierte Formularfelder für Variante A (unterschiedlich zu Variante B)
+  const variantAFields: FormField[] = [
+    {
+      id: 'building_type',
+      label: 'GEBÄUDEART',
+      type: 'select',
+      options: ['Einfamilienhaus', 'Mehrfamilienhaus', 'Reihenhaus', 'Doppelhaushälfte'],
+      required: true,
+      difficulty: 'easy',
+      hint: 'Wählen Sie die Gebäudeart aus der Liste aus. Bei Unsicherheit können Sie den Chat-Assistenten fragen.',
+      placeholder: 'Bitte wählen Sie die Gebäudeart'
+    },
+    {
+      id: 'construction_year',
+      label: 'BAUJAHR',
+      type: 'number',
+      required: true,
+      difficulty: 'easy', 
+      hint: 'Geben Sie das Jahr ein, in dem das Gebäude ursprünglich errichtet wurde (z.B. 1965).',
+      placeholder: 'z.B. 1965'
+    },
+    {
+      id: 'facade_area',
+      label: 'FASSADENFLÄCHE (m²)',
+      type: 'number',
+      required: true,
+      difficulty: 'hard',
+      hint: 'Berechnung: Länge × Höhe der Außenwände abzgl. Fenster/Türen. Für komplexe Berechnungen nutzen Sie den Chat-Assistenten.',
+      placeholder: 'Gesamtfläche aller zu dämmenden Fassaden'
+    },
+    {
+      id: 'insulation_spec',
+      label: 'GEPLANTE DÄMMSPEZIFIKATION',
+      type: 'textarea',
+      required: true,
+      difficulty: 'hard',
+      hint: 'Beschreiben Sie detailliert: Dämmstoff, Dicke, Ausführung (z.B. "140mm Mineralwolle WDVS mit Riemchen-Verkleidung"). Bei Unklarheiten fragen Sie den Assistenten.',
+      placeholder: 'z.B. 140mm Mineralwolle, WDVS-System, Eingangsfassade mit Spaltklinker...'
+    }
+  ]
+
   useEffect(() => {
-    generateForm()
+    setFormFields(variantAFields)
+    // Initialize form values
+    const initialValues: Record<string, string> = {}
+    variantAFields.forEach(field => {
+      initialValues[field.id] = ''
+    })
+    setFormValues(initialValues)
   }, [])
 
-  const generateForm = async () => {
-    setLoading(true)
-    try {
-      const response = await fetch('/api/generate-instructions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          context: 'Gebäude-Energieberatung Formular mit grundlegenden Gebäudedaten' 
-        })
-      })
-      
-      if (response.ok) {
-        const data = await response.json()
-        setInstructions(data)
-      } else {
-        // Fallback form
-        setInstructions({
-          fields: [
-            {
-              id: "gebaeudeart",
-              label: "Art des Gebäudes",
-              type: "select",
-              required: true,
-              options: ["Einfamilienhaus", "Mehrfamilienhaus", "Gewerbe"]
-            },
-            {
-              id: "baujahr",
-              label: "Baujahr",
-              type: "number",
-              required: true,
-              placeholder: "z.B. 1995"
-            },
-            {
-              id: "wohnflaeche",
-              label: "Wohnfläche (m²)",
-              type: "number",
-              required: true,
-              placeholder: "z.B. 150"
-            },
-            {
-              id: "heizung",
-              label: "Heizungsart",
-              type: "select",
-              required: true,
-              options: ["Gas", "Öl", "Wärmepumpe", "Fernwärme"]
-            }
-          ]
-        })
-      }
-    } catch (error) {
-      console.error('Error generating form:', error)
-      // Fallback form
-      setInstructions({
-        fields: [
-          {
-            id: "gebaeudeart",
-            label: "Art des Gebäudes",
-            type: "select",
-            required: true,
-            options: ["Einfamilienhaus", "Mehrfamilienhaus", "Gewerbe"]
-          },
-          {
-            id: "baujahr",
-            label: "Baujahr",
-            type: "number",
-            required: true,
-            placeholder: "z.B. 1995"
-          }
-        ]
-      })
-    }
-    setLoading(false)
-  }
-
-  const handleInputChange = (fieldId: string, value: string) => {
-    setValues(prev => ({ ...prev, [fieldId]: value }))
-  }
-
-  const sendChatMessage = async () => {
-    if (!chatInput.trim()) return
-
-    setChatLoading(true)
-    const userMessage = chatInput
-    setChatInput('')
+  const generateFormInstructions = async () => {
+    setIsGenerating(true)
+    setIsFormGenerated(false)
     
-    setChatMessages(prev => [...prev, { role: 'user', content: userMessage }])
-
     try {
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          message: userMessage,
-          context: 'Gebäude-Energieberatung Formular'
-        })
-      })
+      // Simulate LLM call for form instructions
+      await new Promise(resolve => setTimeout(resolve, 2000))
+      
+      // In einer echten Implementierung würde hier eine API-Call stattfinden
+      setChatHistory([{
+        role: 'assistant',
+        message: `Willkommen! Ich helfe Ihnen beim Ausfüllen des Formulars für Ihre Gebäude-Energieberatung. 
 
-      if (response.ok) {
-        const data = await response.json()
-        setChatMessages(prev => [...prev, { 
-          role: 'assistant', 
-          content: data.response || 'Ich helfe Ihnen gerne bei Ihren Fragen zum Formular!'
-        }])
-      } else {
-        setChatMessages(prev => [...prev, { 
-          role: 'assistant', 
-          content: 'Entschuldigung, ich kann Ihnen momentan nicht helfen. Versuchen Sie es später erneut.'
-        }])
-      }
-    } catch (error) {
-      setChatMessages(prev => [...prev, { 
-        role: 'assistant', 
-        content: 'Es gab ein Problem bei der Verbindung. Bitte versuchen Sie es erneut.'
+Das Formular ist jetzt bereit und enthält Hinweise zu jedem Feld. Bei schwierigen Feldern (markiert mit ⚠️) können Sie mich gerne um detaillierte Hilfe bitten.
+
+Ihr Szenario: Mehrfamilienhaus, Baujahr 1965, Siedlungsstraße 23 in Großstadt. Sie planen eine Fassadendämmung mit WDVS (140mm Mineralwolle).
+
+Beginnen Sie einfach mit dem Ausfüllen und fragen Sie bei Unsicherheiten!`,
+        timestamp: new Date()
       }])
+      
+      setIsFormGenerated(true)
+    } catch (error) {
+      console.error('Error generating instructions:', error)
+      setChatHistory([{
+        role: 'assistant',
+        message: 'Entschuldigung, es gab einen Fehler beim Generieren der Anweisungen. Das Formular ist trotzdem verfügbar.',
+        timestamp: new Date()
+      }])
+      setIsFormGenerated(true)
+    } finally {
+      setIsGenerating(false)
     }
-    setChatLoading(false)
+  }
+
+  const handleChatMessage = async () => {
+    if (!chatMessage.trim()) return
+    
+    setIsChatLoading(true)
+    const userMsg = chatMessage
+    setChatMessage('')
+    
+    // Add user message
+    setChatHistory(prev => [...prev, {
+      role: 'user',
+      message: userMsg,
+      timestamp: new Date()
+    }])
+    
+    try {
+      // Simulate LLM response
+      await new Promise(resolve => setTimeout(resolve, 1500))
+      
+      // Einfache Regel-basierte Antworten für Demo
+      let response = 'Ich helfe gerne! '
+      
+      if (userMsg.toLowerCase().includes('fassadenfläche') || userMsg.toLowerCase().includes('fläche')) {
+        response += `Für die Fassadenfläche berechnen Sie: 
+
+**Eingangsfassade (Ost):** 26,50m × 8,20m = 217,30 m² abzgl. Fenster/Türen = ca. 180 m²
+**Giebelfassaden:** Etwa 227,40 m²
+**Hoffassade (West):** Etwa 182 m²
+
+Für Ihr Mehrfamilienhaus mit geplanter Eingangs- und Seitenfassadendämmung wären das ca. **345-400 m²**. Welche Fassaden möchten Sie genau dämmen?`
+      } else if (userMsg.toLowerCase().includes('dämmung') || userMsg.toLowerCase().includes('wdvs')) {
+        response += `Für die Dämmspezifikation beschreiben Sie:
+
+**Material:** Mineralwolle (empfohlen: 140mm Dicke)
+**System:** WDVS (Wärmedämmverbundsystem) 
+**Oberfläche:** 
+- Eingangsfassade: Spaltklinker/Riemchen (Optik erhalten)
+- Hoffassade: Weißer Putz
+
+**Beispiel:** "140mm Mineralwolle WDVS, Eingangsfassade mit Spaltklinker-Verkleidung, Hoffassade weiß verputzt"`
+      } else if (userMsg.toLowerCase().includes('baujahr')) {
+        response += `Ihr Gebäude wurde **1965** errichtet. Das ist wichtig für die Berechnung der energetischen Standards und möglicher Förderungen.`
+      } else {
+        response += `Können Sie Ihre Frage spezifischer stellen? Ich kann Ihnen bei der Berechnung von Flächen, Dämmspezifikationen oder anderen technischen Details helfen.`
+      }
+      
+      setChatHistory(prev => [...prev, {
+        role: 'assistant', 
+        message: response,
+        timestamp: new Date()
+      }])
+      
+    } catch (error) {
+      setChatHistory(prev => [...prev, {
+        role: 'assistant',
+        message: 'Entschuldigung, der Chat-Service ist momentan nicht verfügbar.',
+        timestamp: new Date()
+      }])
+    } finally {
+      setIsChatLoading(false)
+    }
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
     try {
-      const response = await fetch('/api/save', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          instructions,
-          values,
-          chatHistory: chatMessages,
-          timestamp: new Date().toISOString(),
-          variant: 'A',
-          participantId: participantId || 'unknown'
-        })
-      })
-
-      if (response.ok) {
-        if (isStudy) {
-          router.push('/study?step=survey1')
-        } else {
-          alert('Formular erfolgreich gespeichert!')
-        }
-      } else {
-        alert('Fehler beim Speichern. Bitte versuchen Sie es erneut.')
+      // Validate required fields
+      const missingFields = formFields
+        .filter(field => field.required && !formValues[field.id]?.trim())
+        .map(field => field.label)
+      
+      if (missingFields.length > 0) {
+        alert(`Bitte füllen Sie folgende Pflichtfelder aus: ${missingFields.join(', ')}`)
+        return
       }
+      
+      // Save data (simulate API call)
+      const formData = {
+        variant: 'A',
+        participantId: participantId,
+        formValues: formValues,
+        chatHistory: chatHistory,
+        timestamp: new Date().toISOString(),
+        metadata: {
+          completion_rate: calculateCompletionRate(),
+          total_fields: formFields.length,
+          filled_fields: Object.keys(formValues).filter(key => formValues[key]?.trim()).length
+        }
+      }
+      
+      console.log('Form data to save:', formData)
+      
+      if (isStudy) {
+        // Return to study flow
+        router.push(`/study?step=variant1_survey&participant=${participantId}`)
+      } else {
+        alert('Daten erfolgreich gespeichert!')
+      }
+      
     } catch (error) {
-      alert('Verbindungsfehler. Bitte versuchen Sie es erneut.')
+      console.error('Save error:', error)
+      alert('Fehler beim Speichern. Versuchen Sie es erneut.')
     }
   }
 
-  const renderFormField = (field: any) => {
-    if (!field || typeof field !== 'object') {
-      return null
-    }
+  const calculateCompletionRate = () => {
+    const totalFields = formFields.length
+    const filledFields = Object.keys(formValues).filter(key => formValues[key]?.trim()).length
+    return totalFields > 0 ? Math.round((filledFields / totalFields) * 100) : 0
+  }
 
-    const value = values[field.id] || ''
-
+  const renderFormField = (field: FormField) => {
+    const value = formValues[field.id] || ''
+    const isHard = field.difficulty === 'hard'
+    
     const commonProps = {
       id: field.id,
-      name: field.id,
-      required: field.required,
       value: value,
       onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => 
-        handleInputChange(field.id, e.target.value),
-      className: "w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        setFormValues(prev => ({ ...prev, [field.id]: e.target.value })),
+      className: `w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+        field.required && !value.trim() ? 'border-red-300' : ''
+      }`,
+      required: field.required
     }
 
-    switch (field.type) {
-      case 'select':
-        return (
-          <div key={field.id} className="mb-4">
-            <label htmlFor={field.id} className="block text-sm font-medium text-gray-700 mb-2">
-              {String(field.label)} {field.required && <span className="text-red-500">*</span>}
-            </label>
-            <select {...commonProps}>
-              <option value="">{String(field.placeholder || 'Bitte wählen')}</option>
-              {Array.isArray(field.options) && field.options.map((option: any, index: number) => (
-                <option key={index} value={String(option)}>{String(option)}</option>
-              ))}
-            </select>
+    return (
+      <div key={field.id} className="mb-6">
+        <div className="flex items-center space-x-2 mb-2">
+          <Label htmlFor={field.id} className="text-sm font-medium text-gray-700">
+            {field.label} {field.required && <span className="text-red-500">*</span>}
+          </Label>
+          {isHard && <Badge variant="outline" className="text-xs bg-orange-50 text-orange-700 border-orange-200">
+            ⚠️ Komplex
+          </Badge>}
+        </div>
+        
+        {/* Hint */}
+        <div className="bg-blue-50 p-3 rounded-lg mb-3 text-sm text-blue-800 border border-blue-200">
+          <div className="flex items-start space-x-2">
+            <Lightbulb className="w-4 h-4 mt-0.5 text-blue-600" />
+            <span>{field.hint}</span>
           </div>
-        )
+        </div>
 
-      case 'textarea':
-        return (
-          <div key={field.id} className="mb-4">
-            <label htmlFor={field.id} className="block text-sm font-medium text-gray-700 mb-2">
-              {String(field.label)} {field.required && <span className="text-red-500">*</span>}
-            </label>
-            <textarea 
-              {...commonProps}
-              rows={3}
-              placeholder={String(field.placeholder || '')}
-            />
-          </div>
-        )
-
-      case 'number':
-        return (
-          <div key={field.id} className="mb-4">
-            <label htmlFor={field.id} className="block text-sm font-medium text-gray-700 mb-2">
-              {String(field.label)} {field.required && <span className="text-red-500">*</span>}
-            </label>
-            <input 
-              {...commonProps}
-              type="number"
-              placeholder={String(field.placeholder || '')}
-            />
-          </div>
-        )
-
-      default:
-        return (
-          <div key={field.id} className="mb-4">
-            <label htmlFor={field.id} className="block text-sm font-medium text-gray-700 mb-2">
-              {String(field.label)} {field.required && <span className="text-red-500">*</span>}
-            </label>
-            <input 
-              {...commonProps}
-              type={String(field.type || 'text')}
-              placeholder={String(field.placeholder || '')}
-            />
-          </div>
-        )
-    }
+        {/* Field */}
+        {field.type === 'select' ? (
+          <select {...commonProps}>
+            <option value="">{field.placeholder}</option>
+            {field.options?.map(option => (
+              <option key={option} value={option}>{option}</option>
+            ))}
+          </select>
+        ) : field.type === 'textarea' ? (
+          <Textarea 
+            {...commonProps}
+            rows={4}
+            placeholder={field.placeholder}
+          />
+        ) : (
+          <Input 
+            {...commonProps}
+            type={field.type}
+            placeholder={field.placeholder}
+          />
+        )}
+      </div>
+    )
   }
 
-  if (loading) {
+  if (!isFormGenerated) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-lg text-gray-600">Formular wird generiert...</p>
+      <div className="min-h-screen bg-gray-50 py-8">
+        <div className="container mx-auto px-4 max-w-4xl">
+          {isStudy && (
+            <div className="text-center mb-8">
+              <h1 className="text-3xl font-bold text-blue-600 mb-2">Variante A: Sichtbares Formular</h1>
+              <p className="text-gray-600">Alle Felder sind sichtbar, KI-Chat verfügbar</p>
+              {participantId && (
+                <Badge variant="outline" className="mt-2">Teilnehmer: {participantId}</Badge>
+              )}
+            </div>
+          )}
+
+          <Card className="max-w-2xl mx-auto">
+            <CardHeader>
+              <CardTitle className="text-center">🏢 Gebäude-Energieberatung</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="bg-blue-50 p-6 rounded-lg">
+                <h3 className="text-lg font-semibold text-blue-800 mb-3">📋 Ihr Szenario</h3>
+                <p className="text-blue-900 mb-3">
+                  Sie besitzen ein <strong>Mehrfamilienhaus (Baujahr 1965)</strong> in der Siedlungsstraße 23, Großstadt. 
+                  Das Gebäude hat 10 Wohneinheiten mit 634m² Wohnfläche. Sie planen eine energetische Sanierung 
+                  der Fassade mit einem Wärmedämmverbundsystem (WDVS) aus Mineralwolle.
+                </p>
+                <p className="text-blue-800 text-sm">
+                  <strong>Ziel:</strong> Erfassung der Gebäudedaten für eine Energieberatung zur Berechnung 
+                  möglicher Mieterhöhungen nach der geplanten Sanierung.
+                </p>
+              </div>
+
+              <div className="bg-green-50 p-6 rounded-lg">
+                <h3 className="text-lg font-semibold text-green-800 mb-3">💡 So funktioniert Variante A</h3>
+                <ul className="space-y-2 text-green-700">
+                  <li className="flex items-start space-x-2">
+                    <span className="text-green-600 mt-1">•</span>
+                    <span>Sie sehen alle Formularfelder gleichzeitig</span>
+                  </li>
+                  <li className="flex items-start space-x-2">
+                    <span className="text-green-600 mt-1">•</span>
+                    <span>Jedes Feld hat Ausfüllhinweise</span>
+                  </li>
+                  <li className="flex items-start space-x-2">
+                    <span className="text-green-600 mt-1">•</span>
+                    <span>Schwierige Felder sind markiert (⚠️)</span>
+                  </li>
+                  <li className="flex items-start space-x-2">
+                    <span className="text-green-600 mt-1">•</span>
+                    <span>KI-Chat-Assistent hilft bei Fragen</span>
+                  </li>
+                </ul>
+              </div>
+
+              <Button 
+                onClick={generateFormInstructions}
+                disabled={isGenerating}
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 text-lg"
+                size="lg"
+              >
+                {isGenerating ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    Formular wird vorbereitet...
+                  </>
+                ) : (
+                  <>
+                    <MessageCircle className="w-5 h-5 mr-2" />
+                    Formular starten & KI-Hilfe aktivieren
+                  </>
+                )}
+              </Button>
+            </CardContent>
+          </Card>
         </div>
       </div>
     )
@@ -265,105 +385,118 @@ function FormAContent() {
           <div className="text-center mb-6">
             <h1 className="text-3xl font-bold text-blue-600 mb-2">Variante A: Sichtbares Formular</h1>
             <p className="text-gray-600">Alle Felder sind sichtbar, KI-Chat verfügbar</p>
+            {participantId && (
+              <Badge variant="outline" className="mt-2">Teilnehmer: {participantId}</Badge>
+            )}
           </div>
         )}
 
         <div className="grid lg:grid-cols-3 gap-8 max-w-7xl mx-auto">
           {/* Formular */}
           <div className="lg:col-span-2">
-            <div className="bg-white rounded-lg shadow-lg p-8">
-              <h2 className="text-2xl font-bold text-gray-800 mb-6">
-                📋 Gebäude-Energieberatung Formular
-              </h2>
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-xl">📋 Gebäude-Energieberatung Formular</CardTitle>
+                  <Badge variant="outline" className="bg-green-50 text-green-700">
+                    {calculateCompletionRate()}% ausgefüllt
+                  </Badge>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <form onSubmit={handleSubmit}>
+                  {formFields.map(field => renderFormField(field))}
 
-              <form onSubmit={handleSubmit}>
-                {instructions?.fields && Array.isArray(instructions.fields) && 
-                  instructions.fields.map((field: any) => renderFormField(field))
-                }
-
-                <button 
-                  type="submit"
-                  className="w-full bg-blue-600 text-white py-3 px-4 rounded-md hover:bg-blue-700 transition-colors font-medium mt-6"
-                >
-                  {isStudy ? 'Weiter zur Bewertung' : 'Formular speichern'}
-                </button>
-              </form>
-            </div>
+                  <div className="flex items-center space-x-4 pt-6 border-t">
+                    <Button 
+                      type="submit"
+                      className="flex-1 bg-green-600 hover:bg-green-700 text-white py-3"
+                    >
+                      <Save className="w-4 h-4 mr-2" />
+                      {isStudy ? 'Daten speichern & weiter' : 'Formular speichern'}
+                    </Button>
+                    {isStudy && (
+                      <Button 
+                        type="button"
+                        variant="outline"
+                        onClick={() => router.push(`/study?step=variant1_survey&participant=${participantId}`)}
+                      >
+                        Überspringen
+                      </Button>
+                    )}
+                  </div>
+                </form>
+              </CardContent>
+            </Card>
           </div>
 
           {/* Chat */}
           <div className="lg:col-span-1">
-            <div className="bg-white rounded-lg shadow-lg p-6 sticky top-8">
-              <h3 className="text-xl font-bold text-gray-800 mb-4">💬 KI-Assistent</h3>
-              
-              <div className="h-64 overflow-y-auto border border-gray-200 rounded-md p-3 mb-4 space-y-3">
-                {chatMessages.length === 0 && (
-                  <p className="text-gray-500 text-sm">
-                    Hallo! Ich helfe Ihnen gerne beim Ausfüllen des Formulars. Stellen Sie mir einfach eine Frage!
-                  </p>
-                )}
-                
-                {chatMessages.map((message, index) => (
-                  <div key={index} className={`${message.role === 'user' ? 'text-right' : 'text-left'}`}>
-                    <div className={`inline-block p-3 rounded-lg max-w-xs ${
-                      message.role === 'user' 
-                        ? 'bg-blue-500 text-white' 
-                        : 'bg-gray-100 text-gray-800'
-                    }`}>
-                      <p className="text-sm">{String(message.content)}</p>
-                    </div>
-                  </div>
-                ))}
-                
-                {chatLoading && (
-                  <div className="text-left">
-                    <div className="inline-block p-3 rounded-lg bg-gray-100">
-                      <div className="flex space-x-1">
-                        <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                        <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
-                        <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
+            <Card className="sticky top-8">
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center">
+                  <MessageCircle className="w-5 h-5 mr-2 text-blue-600" />
+                  KI-Assistent
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {/* Chat History */}
+                  <div className="h-96 overflow-y-auto space-y-3 p-3 bg-gray-50 rounded-lg">
+                    {chatHistory.map((msg, index) => (
+                      <div key={index} className={`p-3 rounded-lg ${
+                        msg.role === 'user' 
+                          ? 'bg-blue-100 text-blue-900 ml-4' 
+                          : 'bg-white text-gray-800 mr-4 border'
+                      }`}>
+                        <div className="text-sm whitespace-pre-wrap">{msg.message}</div>
                       </div>
-                    </div>
+                    ))}
+                    {isChatLoading && (
+                      <div className="bg-white p-3 rounded-lg mr-4 border">
+                        <div className="flex items-center space-x-2">
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                          <span className="text-sm text-gray-500">Assistent antwortet...</span>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
 
-              <div className="flex space-x-2">
-                <input
-                  type="text"
-                  value={chatInput}
-                  onChange={(e) => setChatInput(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && sendChatMessage()}
-                  placeholder="Ihre Frage..."
-                  className="flex-1 border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-                <button
-                  onClick={sendChatMessage}
-                  disabled={chatLoading}
-                  className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50"
-                >
-                  ↗
-                </button>
-              </div>
-            </div>
+                  {/* Chat Input */}
+                  <div className="space-y-2">
+                    <Textarea
+                      value={chatMessage}
+                      onChange={(e) => setChatMessage(e.target.value)}
+                      placeholder="Fragen Sie den Assistenten..."
+                      rows={2}
+                      className="resize-none"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault()
+                          handleChatMessage()
+                        }
+                      }}
+                    />
+                    <Button 
+                      onClick={handleChatMessage}
+                      disabled={!chatMessage.trim() || isChatLoading}
+                      className="w-full bg-blue-600 hover:bg-blue-700"
+                    >
+                      <HelpCircle className="w-4 h-4 mr-2" />
+                      Frage stellen
+                    </Button>
+                  </div>
+
+                  <div className="text-xs text-gray-500 bg-yellow-50 p-2 rounded border">
+                    💡 <strong>Tipp:</strong> Fragen Sie z.B. "Wie berechne ich die Fassadenfläche?" 
+                    oder "Was bedeutet WDVS?"
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           </div>
         </div>
       </div>
     </div>
-  )
-}
-
-export default function FormAPage() {
-  return (
-    <Suspense fallback={
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-lg text-gray-600">Laden...</p>
-        </div>
-      </div>
-    }>
-      <FormAContent />
-    </Suspense>
   )
 }
