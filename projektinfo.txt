@@ -1,0 +1,187 @@
+# FormularIQ - Systemzusammenfassung (Version 2.0.0)
+
+## PROJEKTÜBERSICHT
+- **Projekt**: FormularIQ - LLM-gestützte Formularbearbeitung
+- **Institution**: HAW Hamburg, Masterarbeit Wintersemester 2024/25
+- **Forscher**: Moritz Treu
+- **Deployment**: Vercel (https://mein-formularprojekt.vercel.app)
+
+## STUDIENZIEL
+Vergleich zweier Ansätze zur intelligenten Formularbearbeitung:
+- **Variante A**: Klassisches sichtbares Formular mit KI-Chat-Unterstützung
+- **Variante B**: Interaktives Dialog-System mit konversationeller Datenerfassung
+- **Testszenario**: Gebäude-Energieberatung für Mehrfamilienhaus (Baujahr 1965)
+
+## TECH STACK
+- **Frontend**: Next.js 15.4.1, TypeScript, Tailwind CSS, shadcn/ui
+- **Backend**: Next.js API Routes (Vercel Functions)
+- **Deployment**: Vercel (Full-Stack Next.js)
+- **Datenspeicherung**: Vercel Logging (strukturierte console.log)
+- **State Management**: React State (kein Browser Storage)
+
+## PROJEKTSTRUKTUR
+```
+FormularIQ/
+├── src/app/
+│   ├── page.tsx                    # Redirect zur Studie
+│   ├── study/page.tsx              # Haupt-Studienablauf
+│   ├── form-a/page.tsx             # Variante A Wrapper
+│   ├── form-b/page.tsx             # Variante B Wrapper
+│   └── api/                        # Backend API Routes
+│       ├── health/route.ts         # Health Check
+│       ├── save/route.ts           # Variante A Daten
+│       ├── dialog/save/route.ts    # Variante B Daten
+│       ├── questionnaire/save/route.ts # Fragebogen-Daten
+│       └── study/complete/route.ts # Studie-Abschluss
+├── src/components/
+│   ├── VariantA.tsx                # Sichtbares Formular
+│   ├── VariantB.tsx                # Dialog-System
+│   ├── LoadingStates.tsx           # UI Loading Components
+│   ├── ui/                         # shadcn/ui Komponenten
+│   └── Questionnaire/              # Fragebogen-System
+│       ├── EnhancedQuestionnaire.tsx # Haupt-Fragebogen
+│       ├── TrustQuestionnaire.tsx  # Vertrauen (5-Punkt Likert)
+│       ├── SUSQuestionnaire.tsx    # System Usability Scale
+│       ├── PreferenceQuestionnaire.tsx # Nutzerpräferenz
+│       └── LikertScale.tsx         # Wiederverwendbare Skala
+```
+
+## STUDIENABLAUF (6 Schritte)
+```
+1. intro → 2. demographics → 3. variant1_intro → [Variante] → 4. variant1_survey → 
+5. variant2_intro → [Variante] → 6. variant2_survey → 7. final_comparison → 8. complete
+```
+
+## RANDOMISIERUNG
+- **Deterministische Randomisierung** basierend auf Teilnehmer-ID
+- **Konsistente Zuordnung**: A-B oder B-A Order bleibt während Session gleich
+- **URL-Parameter**: step, participant, variant für Navigation
+
+## FRAGEBOGEN-SYSTEM
+### Pro Variante (A/B):
+- **Vertrauen**: 5 Items (Zuverlässigkeit, Genauigkeit, Empfehlungen, Datenschutz, Entscheidungsunterstützung)
+- **SUS**: Standard 10-Item System Usability Scale
+- **Navigation**: Sektionsweise mit Fortschrittsanzeige und Validierung
+
+### Vergleichs-Fragebogen:
+- **Direkte Vergleiche**: Geschwindigkeit, Einfachheit, Hilfen, Kontrolle (Radio Buttons)
+- **Präferenz-Bewertungen**: 5 Likert-Skalen für Empfehlungen und Zukunftsnutzung
+- **Kontext-Spezifisch**: Präferenz für einfache vs. komplexe Formulare
+- **Freitext**: Begründung der Präferenz
+
+### Analytics:
+- **SUS-Score**: Automatische Berechnung (0-100)
+- **Trust-Level**: Kategorisierung (low/medium/high)
+- **Completion-Times**: Detailliertes Timing pro Sektion
+- **Preference-Direction**: Klare Präferenz-Klassifikation
+
+## API ENDPOINTS
+- GET /api/health - System Health Check
+- POST /api/save - Variante A Formulardaten
+- POST /api/dialog/save - Variante B Dialogdaten
+- POST /api/questionnaire/save - Fragebogen-Daten mit Analytics
+- POST /api/study/complete - Vollständige Studien-Zusammenfassung
+
+## DATENFORMAT BEISPIEL
+```json
+{
+  "type": "questionnaire_response",
+  "variant": "A|B|comparison",
+  "participant_id": "string",
+  "responses": {
+    "trust": {},
+    "sus": {},
+    "preference": {}
+  },
+  "analytics": {
+    "sus_score": "number",
+    "trust_analysis": {
+      "average_score": "number",
+      "trust_level": "string"
+    },
+    "preference_analysis": {
+      "overall_preference_direction": "string"
+    }
+  },
+  "timing": {
+    "section_times": {},
+    "total_duration": "number"
+  },
+  "study_metadata": {
+    "project": "FormularIQ - LLM-gestützte Formularbearbeitung",
+    "institution": "HAW Hamburg",
+    "version": "2.0.0"
+  }
+}
+```
+
+## DEBUG-SYSTEM
+### Logging-Pattern in Browser Console (F12):
+- 🎲 DEBUG Randomization: Teilnehmer-ID, Randomisierung, Varianten-Zuordnung
+- 🐛 DEBUG [Component]: Kritische State-Übergänge und Navigation
+- 🔄 DEBUG Navigation: Schritt-zu-Schritt Weiterleitung
+- 📋 Questionnaire completed: Vollständige Fragebogen-Daten
+- ✅ [Action] saved: Erfolgreiche API-Calls
+
+## VERCEL-EINSCHRÄNKUNGEN
+- **Kein Browser Storage**: localStorage/sessionStorage nicht verfügbar
+- **Serverless Functions**: Stateless, keine persistente Speicherung
+- **Rate Limits**: API-Calls haben Vercel-spezifische Limits
+- **LLM Development Only**: Ollama+LLaMA3 nur für lokale Entwicklung
+
+## KRITISCHE NAVIGATION-LOGIK
+```javascript
+// study/page.tsx - Hauptnavigation
+const getFirstVariant = () => randomization === 'A-B' ? 'A' : 'B'
+const getSecondVariant = () => randomization === 'A-B' ? 'B' : 'A'
+
+// VariantA.tsx / VariantB.tsx - Nach Formular/Dialog
+const nextStep = step === '2' ? 'variant1_survey' : 'variant2_survey'
+router.push(`/study?step=${nextStep}&participant=${participantId}`)
+
+// EnhancedQuestionnaire.tsx - Wichtige React Keys
+<EnhancedQuestionnaire 
+  key={`variant1-${variant}-questionnaire`}  // Kritisch für React!
+  variant={variant}
+  ...
+/>
+```
+
+## HÄUFIGE PROBLEME & LÖSUNGEN
+1. **"React Hook Rules"**: Alle useEffect/useState müssen vor return/conditionals stehen
+2. **Fragebogen falsche Variante**: React-Keys und variant-Prop-Forcing prüfen
+3. **Randomisierung inkonsistent**: Deterministische Hash-Funktion basierend auf participantId
+4. **Navigation-Loops**: Debug-Logs verfolgen für step-Parameter und nextStep-Logic
+5. **Deployment-Fehler**: Next.js Build-Errors meist durch conditional Hook-Calls
+
+## HEALTH CHECK
+```bash
+curl https://mein-formularprojekt.vercel.app/api/health
+# Erwartung: {"status": "healthy", "services": {"vercel_api_routes": "online"}}
+```
+
+## DATENAUSWERTUNG
+### Verfügbare Metriken:
+- Completion Rates (pro Variante und Gesamt)
+- SUS Scores (mit automatischer Berechnung und Vergleich)
+- Trust Levels (kategorisiert mit Durchschnittswerten)
+- Preference Patterns (direkte Vergleiche und Kontext-spezifische Präferenzen)
+- Timing Data (detaillierte Zeitmessungen pro Abschnitt)
+- Demographics (vollständige Teilnehmer-Profile)
+
+### Export:
+Alle Daten als strukturierte JSON-Objekte in Vercel-Logs, exportierbar über Vercel Dashboard oder CLI.
+
+## VERSION INFO
+- **Version**: 2.0.0
+- **Letztes Update**: August 2025
+- **Status**: Production-Ready für Studie
+- **GitHub**: momorit/mein-formularprojekt
+- **Deployment-URL**: https://mein-formularprojekt.vercel.app
+
+## WICHTIGE DATEIEN FÜR ÄNDERUNGEN
+- src/app/study/page.tsx - Haupt-Studienablauf und Navigation
+- src/components/Questionnaire/EnhancedQuestionnaire.tsx - Fragebogen-System
+- src/components/VariantA.tsx - Formular-Interface
+- src/components/VariantB.tsx - Dialog-Interface
+- src/app/api/questionnaire/save/route.ts - Fragebogen-API mit Analytics
