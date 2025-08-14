@@ -72,10 +72,27 @@ export const EnhancedQuestionnaire: React.FC<EnhancedQuestionnaireProps> = ({
       stateVariant: responses.variant,
       participantId
     })
+    
+    // FIX: Force correct variant if it gets overwritten
+    if (responses.variant !== variant) {
+      console.log('🔧 FIXING variant mismatch:', responses.variant, '→', variant)
+      setResponses(prev => ({ ...prev, variant }))
+    }
   }, [variant, responses.variant, participantId])
 
   const sections = SECTIONS[variant] || []
   const currentSectionConfig = sections[currentSection]
+
+  // Debug sections
+  useEffect(() => {
+    console.log('🐛 DEBUG Sections:', {
+      variant,
+      sections,
+      currentSection,
+      currentSectionConfig,
+      totalSections: sections.length
+    })
+  }, [variant, sections, currentSection, currentSectionConfig])
 
   // Track section timing
   useEffect(() => {
@@ -154,13 +171,14 @@ export const EnhancedQuestionnaire: React.FC<EnhancedQuestionnaireProps> = ({
         // Complete questionnaire
         const finalData = {
           ...responses,
-          variant, // FORCE the correct variant again!
+          variant, // ALWAYS use the prop variant, not the state variant!
           endTime: new Date(),
           completedSections: [...responses.completedSections, currentSectionConfig.key]
         }
         
         console.log('🐛 DEBUG EnhancedQuestionnaire onComplete:', {
           passedVariant: variant,
+          stateVariant: responses.variant,
           finalDataVariant: finalData.variant,
           sections: finalData.completedSections
         })

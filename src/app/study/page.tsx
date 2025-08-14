@@ -456,6 +456,7 @@ function StudyContent() {
     
     return (
       <EnhancedQuestionnaire
+        key={`variant1-${variant}-questionnaire`} // Unique key per variant
         variant={variant}
         participantId={participantId}
         onComplete={(data) => handleQuestionnaireComplete(data, 'variant2_intro')}
@@ -553,6 +554,7 @@ function StudyContent() {
     
     return (
       <EnhancedQuestionnaire
+        key={`variant2-${variant}-questionnaire`} // Unique key per variant
         variant={variant}
         participantId={participantId}
         onComplete={(data) => handleQuestionnaireComplete(data, 'final_comparison')}
