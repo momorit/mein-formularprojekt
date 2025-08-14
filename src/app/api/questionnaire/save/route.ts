@@ -1,5 +1,8 @@
 // src/app/api/questionnaire/save/route.ts
+// Aktualisierte Version mit Google Cloud Storage Integration
+
 import { NextRequest, NextResponse } from 'next/server'
+import { Storage } from '@google-cloud/storage'
 
 interface QuestionnaireData {
   variant: 'A' | 'B' | 'comparison'
@@ -93,7 +96,7 @@ function analyzePreferenceResponses(responses: Record<string, number | string>) 
 
 export async function POST(request: NextRequest) {
   try {
-    console.log('📋 API: Saving questionnaire data...')
+    console.log('📋 API: Saving questionnaire data with GCS support...')
     
     const data: QuestionnaireData = await request.json()
     
@@ -144,8 +147,87 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Log comprehensive data (Vercel compatible)
-    console.log('📊 QUESTIONNAIRE DATA:', JSON.stringify(enhancedData, null, 2))
+    // INLINE Google Cloud Storage Integration
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+    const fileName = `questionnaire_${data.variant}_${data.participantId}_${timestamp}.json`
+    
+    let storageResult: {
+      success: boolean
+      method: 'vercel_logs' | 'google_cloud'
+      fileName: string
+      fileId?: string
+      error?: string
+    } = { success: false, method: 'vercel_logs', fileName, error: '' }
+    
+    // Versuche Google Cloud Storage
+    try {
+      console.log('☁️ Versuche Google Cloud Storage für Questionnaire...')
+      
+      // Credentials laden und parsen
+      const credentials = process.env.GOOGLE_CLOUD_CREDENTIALS
+      const projectId = process.env.GOOGLE_CLOUD_PROJECT_ID
+      const bucketName = process.env.GOOGLE_CLOUD_BUCKET_NAME
+
+      if (credentials && projectId && bucketName) {
+        let credentialsObject
+        try {
+          credentialsObject = JSON.parse(Buffer.from(credentials, 'base64').toString())
+        } catch {
+          credentialsObject = JSON.parse(credentials)
+        }
+
+        // Storage Client erstellen
+        const storage = new Storage({
+          projectId,
+          credentials: credentialsObject,
+        })
+
+        const bucket = storage.bucket(bucketName)
+        const file = bucket.file(`formulariq-questionnaire-data/${fileName}`)
+
+        // Upload zu Google Cloud Storage
+        await file.save(JSON.stringify(enhancedData, null, 2), {
+          metadata: {
+            contentType: 'application/json',
+            metadata: {
+              project: 'FormularIQ',
+              institution: 'HAW-Hamburg',
+              dataType: 'questionnaire-response',
+              variant: data.variant,
+              participantId: data.participantId || 'unknown'
+            }
+          }
+        })
+
+        console.log('✅ Google Cloud Storage erfolgreich (Questionnaire):', fileName)
+        storageResult = {
+          success: true,
+          method: 'google_cloud',
+          fileName: fileName,
+          fileId: `gs://${bucketName}/formulariq-questionnaire-data/${fileName}`
+        }
+
+      } else {
+        console.log('⚠️ Google Cloud Umgebungsvariablen nicht vollständig (Questionnaire)')
+        throw new Error('Umgebungsvariablen fehlen')
+      }
+
+    } catch (gcsError) {
+      console.error('❌ Google Cloud Storage Fehler (Questionnaire):', gcsError)
+      
+      // Fallback: Vercel Logs
+      console.log('📝 Fallback: Speichere Questionnaire in Vercel Logs...')
+      
+      // Log comprehensive data (Vercel compatible)
+      console.log('📊 QUESTIONNAIRE DATA:', JSON.stringify(enhancedData, null, 2))
+
+      storageResult = {
+        success: true,
+        method: 'vercel_logs',
+        fileName: fileName,
+        error: gcsError instanceof Error ? gcsError.message : 'Unknown error'
+      }
+    }
     
     // Create summary for quick analysis
     const summary = {
@@ -154,7 +236,7 @@ export async function POST(request: NextRequest) {
       sus_score: analytics.sus_score,
       trust_level: analytics.trust_analysis?.trust_level,
       overall_preference: analytics.preference_analysis?.overall_preference_direction,
-      completion_time_minutes: analytics.completion_stats.total_duration ? 
+      completion_time_minutes: analytics.completion_stats.total_duration ?
         Math.round(analytics.completion_stats.total_duration / 60000) : null
     }
     
@@ -168,9 +250,15 @@ export async function POST(request: NextRequest) {
         trust_average: analytics.trust_analysis?.average_score,
         completion_time: analytics.completion_stats.total_duration
       },
-      storage_location: 'vercel_logging',
+      storage: {
+        method: storageResult.method,
+        file_name: storageResult.fileName,
+        file_id: storageResult.fileId,
+        status: storageResult.success ? 'saved' : 'failed'
+      },
+      storage_location: storageResult.method === 'google_cloud' ? 'google_cloud_storage' : 'vercel_logging',
       timestamp: new Date().toISOString(),
-      message: `Questionnaire data for variant ${data.variant} saved successfully`
+      message: `Questionnaire data for variant ${data.variant} saved successfully in ${storageResult.method === 'google_cloud' ? 'Google Cloud Storage' : 'Vercel Logs'}`
     })
     
   } catch (error) {
