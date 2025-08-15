@@ -2,16 +2,32 @@ import { NextRequest, NextResponse } from 'next/server'
 import { callLLM } from '@/lib/llm'
 
 export async function POST(request: NextRequest) {
+  let message = 'Unbekannte Frage'
+  let context = ''
+  let formValues = {}
+  
   try {
-    const { message, context, formValues } = await request.json()
-    
+    const requestData = await request.json()
+    message = requestData.message || 'Unbekannte Frage'
+    context = requestData.context || ''
+    formValues = requestData.formValues || {}
+  } catch (parseError) {
+    console.error('Could not parse request:', parseError)
+    return NextResponse.json({
+      response: "Fehler beim Verarbeiten der Anfrage. Bitte versuchen Sie es erneut.",
+      llm_used: false,
+      error: "Request parsing failed"
+    }, { status: 400 })
+  }
+  
+  try {
     // Kontext für das LLM aufbauen
     const fullContext = `
 GEBÄUDE-ENERGIEBERATUNG SZENARIO:
 ${context || 'Mehrfamilienhaus Baujahr 1965, Eingangsfassade Südseite, WDVS-Sanierung 140mm Mineralwolle, Ölheizung, Mieterin EG rechts 57.5m²'}
 
 AKTUELLER FORMULAR-ZUSTAND:
-${Object.keys(formValues || {}).length > 0 ? 
+${Object.keys(formValues).length > 0 ? 
   Object.entries(formValues).map(([key, value]) => `${key}: ${value}`).join('\n') : 
   'Noch keine Felder ausgefüllt'}
 
@@ -30,26 +46,9 @@ AUFGABE: Beantworte die Frage als Experte für Gebäude-Energieberatung. Gib kon
   } catch (error) {
     console.error('Chat API error:', error)
     
-    // Fallback bei LLM-Ausfall - message wird hier neu definiert
-    let userMessage = 'Unbekannte Frage'
-    try {
-      const { message: msg } = await request.json()
-      userMessage = msg || 'Unbekannte Frage'
-    } catch (parseError) {
-      console.error('Could not parse request in fallback:', parseError)
-    }
+    // TypeScript-sichere Error-Behandlung
+    const errorMessage = error instanceof Error ? error.message : 'Unbekannter Fehler'
     
+    // Fallback bei LLM-Ausfall
     return NextResponse.json({
-      response: `Entschuldigung, der KI-Assistent ist momentan nicht verfügbar. 
-
-**Ihr Szenario:** Mehrfamilienhaus (1965), Eingangsfassade Südseite, WDVS mit 140mm Mineralwolle, Ölheizung.
-
-**Ihre Frage:** ${userMessage}
-
-Bitte versuchen Sie es später erneut oder wenden Sie sich an den Support.`,
-      context_understanding: "Fallback-Antwort (LLM nicht verfügbar)",
-      llm_used: false,
-      error: error.message
-    }, { status: 200 }) // 200 damit Frontend die Fallback-Antwort anzeigen kann
-  }
-}
+      response: `
