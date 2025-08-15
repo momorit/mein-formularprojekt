@@ -5,7 +5,7 @@ import { callLLM } from '@/lib/llm'
 interface DialogSession {
   sessionId: string
   questions: string[]
-  answers: Record<string, string>
+  answers: { [key: string]: string } // Explizit für dynamische Keys
   currentQuestionIndex: number
   context: string
 }
@@ -36,7 +36,8 @@ export async function POST(request: NextRequest) {
     }
     
     // Antwort zur Session hinzufügen
-    session.answers[`question_${session.currentQuestionIndex + 1}`] = message
+    const questionKey = `question_${session.currentQuestionIndex + 1}` as string
+    session.answers[questionKey] = message
     
     // Kontext für LLM zusammenstellen
     const conversationContext = `
