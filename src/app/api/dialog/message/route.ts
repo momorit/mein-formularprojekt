@@ -1,21 +1,22 @@
-// src/app/api/dialog/message/route.ts - MIT LLM-INTEGRATION
+// src/app/api/dialog/message/route.ts - KOMPLETT ÜBERARBEITET
 import { NextRequest, NextResponse } from 'next/server'
 import { callLLM } from '@/lib/llm'
 
 interface DialogSession {
   sessionId: string
   questions: string[]
-  answers: { [key: string]: string } // Nur noch dieser Typ, kein Union mehr
+  answers: { [key: string]: string }
   currentQuestionIndex: number
   context: string
 }
 
-// Session Storage (in production: Redis/Database)
 const sessions = new Map<string, DialogSession>()
 
 export async function POST(request: NextRequest) {
   try {
     const { message, session_id, questionIndex } = await request.json()
+    
+    console.log('💬 Dialog message:', { message, session_id, questionIndex })
     
     // Session abrufen oder erstellen
     let session = sessions.get(session_id)
@@ -29,76 +30,129 @@ export async function POST(request: NextRequest) {
           "Wurden bereits andere energetische Maßnahmen am Gebäude durchgeführt?",
           "Handelt es sich um eine freiwillige Modernisierung oder besteht eine gesetzliche Verpflichtung?"
         ],
-        answers: {} as { [key: string]: string }, // Explizit typisiert
+        answers: {} as { [key: string]: string },
         currentQuestionIndex: questionIndex || 0,
-        context: `Sie besitzen ein Mehrfamilienhaus (Baujahr 1965) in der Siedlungsstraße 23. 
-                  Es hat eine Rotklinkerfassade und 10 Wohneinheiten. 
-                  Sie planen eine WDVS-Sanierung der Eingangsfassade zur Straße (Südseite) mit 140mm Mineralwolle-Dämmung. 
-                  Das Gebäude hat eine Ölheizung im Keller. 
-                  Sie müssen für eine Mieterin (EG rechts, 57,5m²) die mögliche Mieterhöhung berechnen.`
+        context: "Mehrfamilienhaus Baujahr 1965, WDVS-Sanierung Eingangsfassade Südseite, 140mm Mineralwolle, Ölheizung, Mieterin EG rechts 57,5m²"
       }
     }
     
-    // Antwort zur Session hinzufügen
-    const questionKey = `question_${session.currentQuestionIndex + 1}` as string
+    // Antwort speichern
+    const questionKey = `question_${session.currentQuestionIndex + 1}`
     session.answers[questionKey] = message
     
-    // Kontext für LLM zusammenstellen
-    const conversationContext = `
-GEBÄUDE-KONTEXT: ${session.context}
-
-BISHERIGE ANTWORTEN:
-${Object.entries(session.answers).map(([key, value]) => `${key}: ${value}`).join('\n')}
-
-AKTUELLE FRAGE: ${session.questions[session.currentQuestionIndex] || 'Alle Fragen beantwortet'}
-NUTZER ANTWORT: ${message}
+    // Nächste Frage bestimmen
+    const nextQuestionIndex = session.currentQuestionIndex + 1
+    const isLastQuestion = nextQuestionIndex >= session.questions.length
+    const nextQuestion = isLastQuestion ? null : session.questions[nextQuestionIndex]
+    
+    // PRÄZISER LLM-PROMPT
+    const llmPrompt = isLastQuestion 
+      ? `Der Nutzer hat gerade die letzte Frage beantwortet: "${message}"
 
 AUFGABE: 
-1. Bestätige die Antwort des Nutzers
-2. Wenn noch Fragen offen sind: Stelle die nächste Frage aus der Liste
-3. Wenn alle Fragen beantwortet: Bedanke dich und fasse die wichtigsten Punkte zusammen
-4. Sei hilfreich, freundlich und professionell
-5. Antworte auf Deutsch
-    `
+1. Bestätige die Antwort höflich
+2. Gratuliere zur Vervollständigung 
+3. Fasse die 4 gesammelten Antworten kurz zusammen
+4. Sage, dass die Daten erfasst wurden
 
-    // LLM-Antwort generieren
-    let llmResponse: string
+ANTWORTE NUR auf Deutsch, freundlich und professionell.`
+      
+      : `Der Nutzer hat auf die Frage "${session.questions[session.currentQuestionIndex]}" geantwortet: "${message}"
+
+SZENARIO: ${session.context}
+
+AUFGABE:
+1. Bestätige die Antwort kurz und positiv
+2. Stelle dann die nächste Frage: "${nextQuestion}"
+3. Gib bei Bedarf einen hilfreichen Hinweis zum Szenario
+
+ANTWORTE NUR auf Deutsch, strukturiert und freundlich.`
+
     try {
-      llmResponse = await callLLM(
-        `Führe das Energieberatungs-Gespräch fort basierend auf der Nutzer-Antwort: "${message}"`,
-        conversationContext,
-        true // dialogMode = true
+      const llmResponse = await callLLM(
+        llmPrompt,
+        '', // Kein extra Kontext - alles ist im Prompt
+        true // Dialog-Modus
       )
-    } catch (error) {
-      console.error('LLM call failed:', error)
+      
+      console.log('✅ Dialog LLM response generated')
+      
+      // Session aktualisieren
+      session.currentQuestionIndex = nextQuestionIndex
+      sessions.set(session_id, session)
+      
+      return NextResponse.json({
+        response: llmResponse,
+        session_id: session_id,
+        question_index: nextQuestionIndex,
+        dialog_complete: isLastQuestion,
+        answers_collected: session.answers
+      })
+      
+    } catch (llmError) {
+      console.error('❌ Dialog LLM failed:', llmError)
+      
       // Fallback bei LLM-Ausfall
-      llmResponse = `Vielen Dank für Ihre Antwort! ${
-        session.currentQuestionIndex < session.questions.length - 1 
-          ? `\n\n**Nächste Frage:** ${session.questions[session.currentQuestionIndex + 1]}`
-          : '\n\n🎉 Alle Fragen sind beantwortet! Ihre Daten wurden erfasst.'
-      }`
+      const fallbackResponse = generateDialogFallback(
+        message, 
+        session.currentQuestionIndex, 
+        nextQuestion, 
+        isLastQuestion,
+        session.answers
+      )
+      
+      // Session trotzdem aktualisieren
+      session.currentQuestionIndex = nextQuestionIndex
+      sessions.set(session_id, session)
+      
+      return NextResponse.json({
+        response: fallbackResponse,
+        session_id: session_id,
+        question_index: nextQuestionIndex,
+        dialog_complete: isLastQuestion,
+        answers_collected: session.answers
+      })
     }
     
-    // Session aktualisieren
-    session.currentQuestionIndex++
-    sessions.set(session_id, session)
-    
-    // Prüfen ob Dialog komplett
-    const isDialogComplete = session.currentQuestionIndex >= session.questions.length
-    
-    return NextResponse.json({
-      response: llmResponse,
-      session_id: session_id,
-      question_index: session.currentQuestionIndex,
-      dialog_complete: isDialogComplete,
-      answers_collected: session.answers
-    })
-    
   } catch (error) {
-    console.error('Dialog message error:', error)
+    console.error('❌ Dialog API error:', error)
     return NextResponse.json({
       response: "Entschuldigung, es gab einen Fehler. Können Sie Ihre Antwort wiederholen?",
       session_id: "error"
     }, { status: 500 })
   }
+}
+
+function generateDialogFallback(
+  message: string, 
+  currentQuestionIndex: number, 
+  nextQuestion: string | null, 
+  isLastQuestion: boolean,
+  allAnswers: { [key: string]: string }
+): string {
+  
+  if (isLastQuestion) {
+    return `🎉 **Ausgezeichnet!** Sie haben alle Fragen beantwortet.
+
+**Ihre Angaben:**
+- Sanierungsbereich: ${allAnswers['question_1'] || 'Eingangsfassade'}
+- Dämmmaterial: ${allAnswers['question_2'] || 'Mineralwolle'}  
+- Vorherige Maßnahmen: ${allAnswers['question_3'] || 'Keine'}
+- Rechtliche Basis: ${message}
+
+✅ **Ihre Daten wurden erfolgreich erfasst!**`
+  }
+  
+  const confirmations = [
+    `✅ **"${message}"** wurde als Sanierungsbereich erfasst.`,
+    `✅ **"${message}"** als Dämmmaterial notiert.`,
+    `✅ **"${message}"** zu vorherigen Maßnahmen erfasst.`,
+    `✅ **"${message}"** zur rechtlichen Einordnung gespeichert.`
+  ]
+  
+  return `${confirmations[currentQuestionIndex]}
+
+**Nächste Frage (${currentQuestionIndex + 2}/4):** ${nextQuestion}
+
+💡 *Nutzen Sie die Informationen aus Ihrem Szenario zur Beantwortung.*`
 }
