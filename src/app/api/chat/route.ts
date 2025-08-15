@@ -1,41 +1,34 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { callLLM } from '@/lib/llm'
+
+// LLM Import erst später hinzufügen
+// import { callLLM } from '@/lib/llm'
 
 export async function POST(request: NextRequest) {
-  let message = 'Unbekannte Frage'
-  let context = ''
-  let formValues = {}
-  
   try {
-    const requestData = await request.json()
-    message = requestData.message || 'Unbekannte Frage'
-    context = requestData.context || ''
-    formValues = requestData.formValues || {}
-  } catch (parseError) {
-    console.error('Could not parse request:', parseError)
-    return NextResponse.json({
-      response: "Fehler beim Verarbeiten der Anfrage. Bitte versuchen Sie es erneut.",
-      llm_used: false,
-      error: "Request parsing failed"
-    }, { status: 400 })
-  }
-  
-  try {
-    // Kontext für das LLM aufbauen
-    const fullContext = `GEBÄUDE-ENERGIEBERATUNG SZENARIO:
-${context || 'Mehrfamilienhaus Baujahr 1965, Eingangsfassade Südseite, WDVS-Sanierung 140mm Mineralwolle, Ölheizung, Mieterin EG rechts 57.5m²'}
-
-AKTUELLER FORMULAR-ZUSTAND:
-${Object.keys(formValues).length > 0 ? 
-  Object.entries(formValues).map(([key, value]) => `${key}: ${value}`).join('\n') : 
-  'Noch keine Felder ausgefüllt'}
-
-NUTZER-FRAGE: ${message}
-
-AUFGABE: Beantworte die Frage als Experte für Gebäude-Energieberatung. Gib konkrete, hilfreiche Antworten basierend auf dem Szenario. Nutze deutsche Sprache und formatiere die Antwort übersichtlich.`
-
-    // Echtes LLM aufrufen
-    const response = await callLLM(fullContext, context, false)
+    const { message, context, formValues } = await request.json()
+    
+    // TODO: LLM integration
+    // const llmResponse = await callLLM(prompt, context, false)
+    
+    // Für jetzt: einfache Antworten
+    const response = generateSimpleResponse(message, context)
     
     return NextResponse.json({
       response: response,
+      context_understanding: "Einfache Antwort",
+      llm_used: false
+    })
+  } catch (error) {
+    console.error('Chat API error:', error)
+    
+    return NextResponse.json({
+      response: "Entschuldigung, es gab einen Fehler. Bitte versuchen Sie es erneut.",
+      llm_used: false
+    }, { status: 200 })
+  }
+}
+
+function generateSimpleResponse(message: string, context: string): string {
+  // Ihre bisherige Logik hier
+  return "Antwort auf: " + message
+}
