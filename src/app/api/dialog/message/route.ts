@@ -1,89 +1,87 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { callLLM } from '@/lib/llm'
 
 export async function POST(request: NextRequest) {
-  let message = ''
-  let session_id = ''
-  let currentQuestion = null
-  let questionIndex = 0
-  let isHelpRequest = false
-  
   try {
-    const requestData = await request.json()
-    message = requestData.message || ''
-    session_id = requestData.session_id || ''
-    currentQuestion = requestData.currentQuestion
-    questionIndex = requestData.questionIndex || 0
-    isHelpRequest = requestData.isHelpRequest || false
-  } catch (parseError) {
-    console.error('Could not parse request:', parseError)
-    return NextResponse.json({
-      response: "Fehler beim Verarbeiten der Anfrage.",
-      llm_used: false,
-      error: "Request parsing failed"
-    }, { status: 400 })
-  }
-  
-  try {
-    // Kontext für LLM aufbauen
-    const szenario = `GEBÄUDE-ENERGIEBERATUNG DIALOG-SYSTEM
-
-SZENARIO:
-Sie besitzen ein Mehrfamilienhaus (Baujahr 1965) in der Siedlungsstraße 23. 
-Es hat eine Rotklinkerfassade und 10 Wohneinheiten. Sie planen eine WDVS-Sanierung 
-der Eingangsfassade zur Straße (Südseite) mit 140mm Mineralwolle-Dämmung. 
-Das Gebäude hat eine Ölheizung im Keller. Sie müssen für eine Mieterin 
-(EG rechts, 57,5m²) die mögliche Mieterhöhung berechnen.
-
-AKTUELLE FRAGE: ${currentQuestion?.question || 'Keine aktuelle Frage'}
-FRAGE ${questionIndex + 1} von 4
-
-NUTZER-NACHRICHT: ${message}`
-
-    let prompt = ''
+    const { message, session_id, questionIndex } = await request.json()
     
-    if (isHelpRequest) {
-      prompt = `${szenario}
+    const lowerMessage = message.toLowerCase()
+    const currentQuestionNum = questionIndex || 0
+    
+    // Hilfe-Anfragen erkennen
+    if (message.includes('?') && message.length < 5) {
+      let helpText = ''
+      
+      if (currentQuestionNum === 0) {
+        helpText = `**Gerne helfe ich Ihnen!**
 
-AUFGABE: Der Nutzer hat eine Hilfe-Anfrage gestellt. Erkläre als Energieberatungs-Experte die aktuelle Frage verständlich. Gib konkrete Hilfe basierend auf dem Szenario. Nutze deutsche Sprache und formatiere übersichtlich.`
-    } else {
-      prompt = `${szenario}
+Zur aktuellen Frage: Laut Ihrem Szenario wird die **Eingangsfassade zur Straße (Südseite)** saniert.
 
-AUFGABE: 
-1. Bewerte die Nutzer-Antwort zur aktuellen Frage
-2. Bestätige kurz die Antwort
-3. Stelle die nächste relevante Frage zur Gebäude-Energieberatung`
+Sie können antworten:
+- "Eingangsfassade" 
+- "Straßenseite"
+- "Südseite"
+
+**Tipp:** Diese Information steht bereits in Ihrem Szenario!`
+      } else if (currentQuestionNum === 1) {
+        helpText = `**Gerne helfe ich Ihnen!**
+
+Zur aktuellen Frage: Laut Ihrem Szenario ist **140mm Mineralwolle** vorgesehen.
+
+Sie können antworten:
+- "Mineralwolle"
+- "140mm Mineralwolle"`
+      } else {
+        helpText = `**Gerne helfe ich Ihnen!**
+
+Schauen Sie in Ihrem Szenario nach - dort finden Sie die Antwort auf die aktuelle Frage!`
+      }
+      
+      return NextResponse.json({
+        response: helpText,
+        session_id: session_id,
+        is_help: true
+      })
     }
+    
+    // Normale Antworten verarbeiten und nächste Frage stellen
+    let responseText = ''
+    
+    if (currentQuestionNum === 0) {
+      responseText = `Vielen Dank! Ihre Antwort wurde gespeichert.
 
-    // LLM aufrufen
-    const llmResponse = await callLLM(prompt, szenario, true)
+**Nächste Frage (2/4):** Welches Dämmmaterial ist für Ihr Vorhaben vorgesehen? Der Energieberater hat Mineralwolle empfohlen.`
+    } else if (currentQuestionNum === 1) {
+      responseText = `Vielen Dank! Ihre Antwort wurde gespeichert.
+
+**Nächste Frage (3/4):** Wurden bereits andere energetische Maßnahmen am Gebäude durchgeführt (Dach, Keller, Fenster)?`
+    } else if (currentQuestionNum === 2) {
+      responseText = `Vielen Dank! Ihre Antwort wurde gespeichert.
+
+**Letzte Frage (4/4):** Handelt es sich um eine freiwillige Modernisierung oder besteht eine gesetzliche Verpflichtung nach dem Gebäudeenergiegesetz (GEG)?`
+    } else {
+      responseText = `🎉 Ausgezeichnet! Sie haben alle Fragen beantwortet.
+
+**Zusammenfassung Ihrer Angaben:**
+- GEBÄUDESEITE_SANIERUNG: ${message}
+- DÄMMSTOFF_TYP: [Ihre vorherigen Antworten]  
+- VORHERIGE_MODERNISIERUNG: [Ihre vorherigen Antworten]
+- MASSNAHMEN_KATEGORIE: [Ihre vorherigen Antworten]
+
+Ihre Daten wurden erfasst und können nun gespeichert werden.`
+    }
     
     return NextResponse.json({
-      response: llmResponse,
+      response: responseText,
       session_id: session_id,
-      question_index: questionIndex,
-      is_help_response: isHelpRequest,
-      llm_used: true
+      question_index: currentQuestionNum + 1,
+      dialog_complete: currentQuestionNum >= 3
     })
     
   } catch (error) {
     console.error('Dialog message error:', error)
-    
-    // TypeScript-sichere Error-Behandlung
-    const errorMessage = error instanceof Error ? error.message : 'Unbekannter Fehler'
-    
-    // Fallback-Antworten
-    const fallbackResponse = isHelpRequest 
-      ? `**Gerne helfe ich Ihnen!**\n\nZur aktuellen Frage: ${currentQuestion?.question || 'Keine Frage verfügbar'}\n\nBitte formulieren Sie eine spezifische Frage, dann kann ich Ihnen besser helfen.`
-      : `Vielen Dank für Ihre Antwort!\n\nLeider ist der KI-Assistent momentan nicht verfügbar. Ihre Antwort wurde trotzdem gespeichert.`
-    
     return NextResponse.json({
-      response: fallbackResponse,
-      session_id: session_id,
-      question_index: questionIndex,
-      is_help_response: isHelpRequest,
-      llm_used: false,
-      error: errorMessage
+      response: "Entschuldigung, es gab einen Fehler. Können Sie Ihre Antwort wiederholen?",
+      session_id: "error"
     }, { status: 200 })
   }
 }

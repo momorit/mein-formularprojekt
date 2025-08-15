@@ -50,177 +50,117 @@ export default function VariantB({ onComplete, startTime }: VariantBProps) {
   const [sessionId, setSessionId] = useState('')
 
   const startDialog = async () => {
-    setIsLoading(true)
-    setDialogStarted(true)
-    
-    try {
-      const response = await fetch('/api/dialog/start', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          context: 'Mehrfamilienhaus Baujahr 1965, Eingangsfassade Südseite, WDVS-Sanierung 140mm Mineralwolle, Ölheizung, Mieterin EG rechts 57.5m²',
-        })
+  setIsLoading(true)
+  setDialogStarted(true)
+  
+  try {
+    const response = await fetch('/api/dialog/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        context: 'Mehrfamilienhaus Baujahr 1965, Eingangsfassade Südseite, WDVS-Sanierung 140mm Mineralwolle, Ölheizung, Mieterin EG rechts 57.5m²',
       })
-      
-      if (!response.ok) throw new Error('Failed to start dialog')
-      
-      const data = await response.json()
-      
-      if (data.questions && Array.isArray(data.questions)) {
-        setQuestions(data.questions)
-        setSessionId(data.session_id || `session_${Date.now()}`)
-        setCurrentQuestionIndex(0)
-        
-        const welcomeMessage = `Hallo! Ich bin Ihr KI-Assistent für die Gebäude-Energieberatung. 
-
-Ich führe Sie Schritt für Schritt durch die Erfassung Ihrer Gebäudedaten für die geplante Fassadensanierung.
-
-Ihr Szenario: Sie besitzen ein Mehrfamilienhaus (Baujahr 1965) in der Siedlungsstraße 23. 
-Es hat eine Rotklinkerfassade und 10 Wohneinheiten. Sie planen eine WDVS-Sanierung 
-der Eingangsfassade zur Straße (Südseite) mit 140mm Mineralwolle-Dämmung. 
-Das Gebäude hat eine Ölheizung im Keller. Sie müssen für eine Mieterin 
-(EG rechts, 57,5m²) die mögliche Mieterhöhung berechnen.
-
-Lassen Sie uns beginnen! Ich stelle Ihnen nacheinander ${data.questions.length} Fragen. Bei Unklarheiten können Sie gerne nachfragen.
-
-${data.questions[0]?.question || 'Erste Frage wird geladen...'}`
-
-        setChatHistory([{
-          role: 'assistant',
-          message: welcomeMessage,
-          timestamp: new Date()
-        }])
-      } else {
-        throw new Error('Invalid dialog response')
-      }
-    } catch (error) {
-      console.error('Failed to start dialog:', error)
-      // Fallback questions
-      const fallbackQuestions: DialogQuestion[] = [
-        {
-          id: 'total_living_space',
-          question: 'Wie groß ist die gesamte Wohnfläche Ihres Gebäudes in Quadratmetern?',
-          field: 'WOHNFLÄCHE_GESAMT',
-          type: 'number',
-          difficulty: 'easy',
-          required: true
-        },
-        {
-          id: 'num_units',
-          question: 'Wie viele Wohneinheiten befinden sich in dem Gebäude?',
-          field: 'ANZAHL_WOHNEINHEITEN',
-          type: 'number',
-          difficulty: 'easy',
-          required: true
-        },
-        {
-          id: 'insulation_measures',
-          question: 'Beschreiben Sie detailliert die geplanten Dämmmaßnahmen. Welche Fassaden sollen gedämmt werden und mit welchem System?',
-          field: 'DÄMMUNGSMASSNAHMEN_DETAIL',
-          type: 'textarea',
-          difficulty: 'hard',
-          required: true
-        },
-        {
-          id: 'cost_calculation',
-          question: 'Wie hoch schätzen Sie die Gesamtkosten der Sanierung ein und wie soll die Finanzierung erfolgen? Bitte geben Sie auch an, welcher Anteil auf die Mieter umgelegt werden soll.',
-          field: 'KOSTEN_FINANZIERUNG',
-          type: 'textarea',
-          difficulty: 'hard',
-          required: true
-        }
-      ]
-      
-      setQuestions(fallbackQuestions)
-      setSessionId(`fallback_${Date.now()}`)
-      
-      setChatHistory([{
-        role: 'assistant',
-        message: `Willkommen! Aufgrund eines technischen Problems verwende ich vordefinierte Fragen.
-
-${fallbackQuestions[0].question}`,
-        timestamp: new Date()
-      }])
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const handleSendMessage = async () => {
-    if (!userMessage.trim()) return
+    })
     
-    const currentMessage = userMessage.trim()
-    setUserMessage('')
-    setIsLoading(true)
+    if (!response.ok) throw new Error('Failed to start dialog')
     
-    // Add user message
-    setChatHistory(prev => [...prev, {
-      role: 'user',
-      message: currentMessage,
+    const data = await response.json()
+    
+    // Neue Logik: Keine questions Array mehr
+    setSessionId(data.session_id || `session_${Date.now()}`)
+    setCurrentQuestionIndex(0)
+    
+    setChatHistory([{
+      role: 'assistant',
+      message: data.welcome_message,
       timestamp: new Date()
     }])
     
-    try {
-      // Check if it's a help request
-      const isHelpRequest = currentMessage.includes('?') || 
-                          currentMessage.toLowerCase().includes('hilfe') || 
-                          currentMessage.toLowerCase().includes('help') ||
-                          currentMessage.toLowerCase().includes('erklär') ||
-                          currentMessage.toLowerCase().includes('was bedeutet') ||
-                          currentMessage.toLowerCase().includes('verstehe nicht') ||
-                          currentMessage.toLowerCase().includes('was ist')
+  } catch (error) {
+    console.error('Failed to start dialog:', error)
+    
+    // Fallback bei API-Ausfall
+    setSessionId(`fallback_${Date.now()}`)
+    setChatHistory([{
+      role: 'assistant',
+      message: `Hallo! Ich bin Ihr KI-Assistent für die Gebäude-Energieberatung.
 
-      // Send to LLM
-      const response = await fetch('/api/dialog/message', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          message: currentMessage,
-          session_id: sessionId,
-          currentQuestion: { question: "Aktuelle Frage im LLM-Dialog" },
-          questionIndex: Object.keys(answers).length,
-          isHelpRequest: isHelpRequest
-        })
+**Erste Frage:** Welche Gebäudeseite soll hauptsächlich saniert werden? Die Eingangsfassade zur Straße oder eine andere Seite?`,
+      timestamp: new Date()
+    }])
+  } finally {
+    setIsLoading(false)
+  }
+}
+
+  const handleSendMessage = async () => {
+  if (!userMessage.trim()) return
+  
+  const currentMessage = userMessage.trim()
+  setUserMessage('')
+  setIsLoading(true)
+  
+  // Add user message
+  setChatHistory(prev => [...prev, {
+    role: 'user',
+    message: currentMessage,
+    timestamp: new Date()
+  }])
+  
+  try {
+    const response = await fetch('/api/dialog/message', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        message: currentMessage,
+        session_id: sessionId,
+        questionIndex: currentQuestionIndex
       })
+    })
+    
+    if (response.ok) {
+      const data = await response.json()
       
-      if (response.ok) {
-        const data = await response.json()
-        
-        // Add LLM response
-        setChatHistory(prev => [...prev, {
-          role: 'assistant',
-          message: data.response,
-          timestamp: new Date()
-        }])
-        
-        // Save answer if it's not a help request
-        if (!isHelpRequest) {
-          setAnswers(prev => ({
-            ...prev,
-            [`question_${Object.keys(answers).length + 1}`]: currentMessage
-          }))
-          
-          // Check if dialog should complete (after 4 questions)
-          if (Object.keys(answers).length >= 3) {
-            setIsCompleted(true)
-          }
-        }
-        
-      } else {
-        throw new Error('Dialog API failed')
-      }
-      
-    } catch (error) {
-      console.error('Error sending message:', error)
+      // Add API response
       setChatHistory(prev => [...prev, {
         role: 'assistant',
-        message: 'Entschuldigung, es gab einen Fehler. Können Sie Ihre Antwort wiederholen?',
+        message: data.response,
         timestamp: new Date()
       }])
-    } finally {
-      setIsLoading(false)
+      
+      // Save answer if it's not a help request
+      if (!data.is_help) {
+        setAnswers(prev => ({
+          ...prev,
+          [`question_${currentQuestionIndex + 1}`]: currentMessage
+        }))
+        
+        // Move to next question
+        if (data.question_index) {
+          setCurrentQuestionIndex(data.question_index)
+        }
+        
+        // Check if dialog is complete
+        if (data.dialog_complete) {
+          setIsCompleted(true)
+        }
+      }
+      
+    } else {
+      throw new Error('Dialog API failed')
     }
+    
+  } catch (error) {
+    console.error('Error sending message:', error)
+    setChatHistory(prev => [...prev, {
+      role: 'assistant',
+      message: 'Entschuldigung, es gab einen Fehler. Können Sie Ihre Antwort wiederholen?',
+      timestamp: new Date()
+    }])
+  } finally {
+    setIsLoading(false)
   }
+}
 
   const handleSave = async () => {
   // DEBUG LOGGING  
