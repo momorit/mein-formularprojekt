@@ -22,8 +22,7 @@ export async function POST(request: NextRequest) {
   
   try {
     // Kontext für das LLM aufbauen
-    const fullContext = `
-GEBÄUDE-ENERGIEBERATUNG SZENARIO:
+    const fullContext = `GEBÄUDE-ENERGIEBERATUNG SZENARIO:
 ${context || 'Mehrfamilienhaus Baujahr 1965, Eingangsfassade Südseite, WDVS-Sanierung 140mm Mineralwolle, Ölheizung, Mieterin EG rechts 57.5m²'}
 
 AKTUELLER FORMULAR-ZUSTAND:
@@ -40,15 +39,3 @@ AUFGABE: Beantworte die Frage als Experte für Gebäude-Energieberatung. Gib kon
     
     return NextResponse.json({
       response: response,
-      context_understanding: "LLM-gestützte Antwort",
-      llm_used: true
-    })
-  } catch (error) {
-    console.error('Chat API error:', error)
-    
-    // TypeScript-sichere Error-Behandlung
-    const errorMessage = error instanceof Error ? error.message : 'Unbekannter Fehler'
-    
-    // Fallback bei LLM-Ausfall
-    return NextResponse.json({
-      response: `
