@@ -1,18 +1,27 @@
-// src/components/VariantB.tsx - KOMPLETT REPARIERT
+// src/components/VariantB.tsx - VOLLSTÄNDIG ÜBERARBEITET
 'use client'
 
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
+import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
-import { MessageCircle, Save, Send, Play, CheckCircle } from 'lucide-react'
+import { MessageCircle, Save, Play, Send, HelpCircle, CheckCircle, Clock } from 'lucide-react'
 
 interface ChatMessage {
   role: 'user' | 'assistant'
   message: string
   timestamp: Date
+}
+
+interface DialogQuestion {
+  id: string
+  question: string
+  answered: boolean
+  answer?: string
 }
 
 interface VariantBProps {
@@ -27,80 +36,84 @@ export default function VariantB({ onComplete, startTime }: VariantBProps) {
   const participantId = searchParams.get('participant')
   const variant = searchParams.get('variant')
   const step = searchParams.get('step')
-  const messagesEndRef = useRef<HTMLDivElement>(null)
 
-  // State Management
-  const [dialogStarted, setDialogStarted] = useState(false)
-  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
-  const [totalQuestions] = useState(4)
-  const [answers, setAnswers] = useState<Record<string, string>>({})
+  // Dialog State
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([])
   const [userMessage, setUserMessage] = useState('')
   const [isLoading, setIsLoading] = useState(false)
-  const [isCompleted, setIsCompleted] = useState(false)
+  const [isDialogStarted, setIsDialogStarted] = useState(false)
   const [sessionId, setSessionId] = useState('')
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
+  const [answers, setAnswers] = useState<Record<string, string>>({})
+  const [isCompleted, setIsCompleted] = useState(false)
+  const [progress, setProgress] = useState(0)
 
-  // Auto-scroll to bottom
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
-  }
+  // Dialog Questions
+  const dialogQuestions: DialogQuestion[] = [
+    { id: 'q1', question: 'Welche Gebäudeseite soll hauptsächlich saniert werden?', answered: false },
+    { id: 'q2', question: 'Welches Dämmmaterial ist für Ihr Vorhaben vorgesehen?', answered: false },
+    { id: 'q3', question: 'Wurden bereits andere energetische Maßnahmen am Gebäude durchgeführt?', answered: false },
+    { id: 'q4', question: 'Handelt es sich um eine freiwillige Modernisierung oder besteht eine gesetzliche Verpflichtung?', answered: false }
+  ]
 
+  // Initialize
   useEffect(() => {
-    scrollToBottom()
-  }, [chatHistory])
+    const id = `dialog_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+    setSessionId(id)
+    
+    console.log('🎬 VariantB initialized:', { isStudy, participantId, variant, step, sessionId: id })
+  }, [])
+
+  // Calculate progress
+  useEffect(() => {
+    const answeredCount = Object.keys(answers).length
+    const totalQuestions = dialogQuestions.length
+    const newProgress = totalQuestions > 0 ? Math.round((answeredCount / totalQuestions) * 100) : 0
+    setProgress(newProgress)
+    
+    if (answeredCount === totalQuestions) {
+      setIsCompleted(true)
+    }
+  }, [answers])
 
   // Start Dialog
-  const startDialog = async () => {
+  const handleStartDialog = async () => {
+    if (isDialogStarted) return
+    
     setIsLoading(true)
-    setDialogStarted(true)
+    console.log('🚀 Starting dialog...', { sessionId })
     
     try {
-      const response = await fetch('/api/dialog/start', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          context: 'Mehrfamilienhaus Baujahr 1965, Eingangsfassade Südseite, WDVS-Sanierung 140mm Mineralwolle, Ölheizung, Mieterin EG rechts 57.5m²',
-        })
-      })
-      
-      if (!response.ok) throw new Error('Failed to start dialog')
-      
-      const data = await response.json()
-      
-      setSessionId(data.session_id || `session_${Date.now()}`)
-      setCurrentQuestionIndex(0)
-      
-      setChatHistory([{
+      // Add welcome message
+      const welcomeMessage: ChatMessage = {
         role: 'assistant',
-        message: data.welcome_message,
+        message: `👋 **Willkommen zum Dialog-System!**
+
+Ich bin Ihr KI-Assistent für die Gebäude-Energieberatung und führe Sie durch 4 wichtige Fragen.
+
+**Ihr Szenario:** 
+Mehrfamilienhaus (Baujahr 1965), WDVS-Sanierung der Eingangsfassade zur Straße (Südseite) mit 140mm Mineralwolle-Dämmung.
+
+**📋 Erste Frage (1/4):** 
+Welche Gebäudeseite soll hauptsächlich saniert werden?
+
+*Geben Sie Ihre Antwort ein und ich führe Sie zur nächsten Frage.*`,
         timestamp: new Date()
-      }])
+      }
       
-      console.log('✅ Dialog started successfully')
+      setChatHistory([welcomeMessage])
+      setIsDialogStarted(true)
       
     } catch (error) {
-      console.error('❌ Failed to start dialog:', error)
-      
-      // Robust Fallback
-      const fallbackSessionId = `fallback_${Date.now()}`
-      setSessionId(fallbackSessionId)
-      setChatHistory([{
-        role: 'assistant',
-        message: `Hallo! Ich bin Ihr KI-Assistent für die Gebäude-Energieberatung.
-
-**Ihr Szenario:** Mehrfamilienhaus (Baujahr 1965), WDVS-Sanierung der Eingangsfassade zur Straße (Südseite) mit 140mm Mineralwolle-Dämmung.
-
-**Erste Frage (1/4):** Welche Gebäudeseite soll hauptsächlich saniert werden?`,
-        timestamp: new Date()
-      }])
+      console.error('❌ Error starting dialog:', error)
     } finally {
       setIsLoading(false)
     }
   }
 
-  // Send Message with better error handling
+  // Send Message
   const handleSendMessage = async () => {
-    if (!userMessage.trim()) return
+    if (!userMessage.trim() || isLoading) return
     
     const currentMessage = userMessage.trim()
     setUserMessage('')
@@ -112,7 +125,7 @@ export default function VariantB({ onComplete, startTime }: VariantBProps) {
       questionIndex: currentQuestionIndex 
     })
     
-    // Add user message immediately
+    // Add user message
     const newUserMessage: ChatMessage = {
       role: 'user',
       message: currentMessage,
@@ -136,12 +149,11 @@ export default function VariantB({ onComplete, startTime }: VariantBProps) {
       }
       
       const data = await response.json()
-      
       console.log('✅ Dialog response received:', data)
       
       // Validate response
-      if (!data.response || data.response.trim().length < 10) {
-        throw new Error('Invalid or empty LLM response')
+      if (!data.response || data.response.trim().length < 5) {
+        throw new Error('Invalid LLM response')
       }
       
       // Add API response
@@ -152,32 +164,30 @@ export default function VariantB({ onComplete, startTime }: VariantBProps) {
       }
       setChatHistory(prev => [...prev, assistantMessage])
       
-      // Update state based on API response
+      // Update state
       if (data.answers_collected) {
         setAnswers(data.answers_collected)
-        console.log('📋 Updated answers:', data.answers_collected)
       }
       
       if (data.question_index !== undefined) {
         setCurrentQuestionIndex(data.question_index)
-        console.log('📊 Updated question index:', data.question_index)
       }
       
       if (data.dialog_complete) {
         setIsCompleted(true)
-        console.log('🎉 Dialog completed!')
       }
       
     } catch (error) {
       console.error('❌ Error sending message:', error)
       
-      // Detailed error message
-      const errorMessage = error instanceof Error ? error.message : 'Unbekannter Fehler'
+      // Fallback response
       const fallbackMessage: ChatMessage = {
         role: 'assistant',
-        message: `Entschuldigung, es gab einen technischen Fehler: ${errorMessage}
+        message: `❌ **Entschuldigung, es gab einen technischen Fehler.**
 
-**Bitte versuchen Sie es erneut.** Falls das Problem weiterhin besteht, ist das LLM-System möglicherweise nicht verfügbar.`,
+Das LLM-System ist möglicherweise nicht verfügbar. Bitte versuchen Sie es erneut.
+
+**Für Hilfe:** Geben Sie "?" ein oder kontaktieren Sie den Support.`,
         timestamp: new Date()
       }
       setChatHistory(prev => [...prev, fallbackMessage])
@@ -186,10 +196,17 @@ export default function VariantB({ onComplete, startTime }: VariantBProps) {
     }
   }
 
+  // Handle Enter key
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      handleSendMessage()
+    }
+  }
+
   // Save Data
   const handleSave = async () => {
     console.log('💾 Saving dialog data...', {
-      step, isStudy, participantId, variant,
       answers, isCompleted, chatHistory: chatHistory.length
     })
     
@@ -200,13 +217,12 @@ export default function VariantB({ onComplete, startTime }: VariantBProps) {
         variant: 'B',
         participantId: participantId,
         session_id: sessionId,
-        questions: [], // Dynamic questions - no static array needed
         answers: answers,
         chatHistory: chatHistory,
         timestamp: new Date().toISOString(),
         metadata: {
-          completion_rate: calculateCompletionRate(),
-          total_questions: totalQuestions,
+          completion_rate: progress,
+          total_questions: dialogQuestions.length,
           answered_questions: Object.keys(answers).length,
           is_completed: isCompleted,
           chat_interactions: chatHistory.length
@@ -240,229 +256,277 @@ export default function VariantB({ onComplete, startTime }: VariantBProps) {
     }
   }
 
-  const calculateCompletionRate = () => {
-    const answeredQuestions = Object.keys(answers).length
-    return totalQuestions > 0 ? Math.round((answeredQuestions / totalQuestions) * 100) : 0
-  }
-
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-6xl mx-auto p-4">
+    <div className="min-h-screen bg-gray-50 p-4">
+      <div className="max-w-7xl mx-auto">
+        
         {/* Header */}
-        <Card className="mb-6">
-          <CardHeader className="bg-purple-600 text-white">
+        <div className="mb-6">
+          <div className="bg-white rounded-lg shadow-sm border p-6">
             <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <MessageCircle className="w-6 h-6" />
-                <CardTitle>KI-Assistent Dialog</CardTitle>
+              <div>
+                <h1 className="text-3xl font-bold text-gray-900">
+                  💬 Dialog-System (Variante B)
+                </h1>
+                <p className="text-gray-600 mt-1">
+                  Schritt-für-Schritt Datenerfassung durch KI-Dialog
+                </p>
               </div>
-              <Badge variant="secondary" className="bg-purple-500 text-white">
-                Frage {Math.min(currentQuestionIndex + 1, totalQuestions)} von {totalQuestions}
-              </Badge>
+              <div className="text-right">
+                <Badge variant="secondary" className="mb-2">
+                  {isStudy ? `Teilnehmer ${participantId}` : 'Demo-Modus'}
+                </Badge>
+                <div className="text-sm text-gray-500">
+                  Fortschritt: {progress}% ({Object.keys(answers).length}/{dialogQuestions.length})
+                </div>
+              </div>
             </div>
-          </CardHeader>
-        </Card>
+          </div>
+        </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          {/* Chat Interface - Takes 3/4 of space */}
-          <div className="lg:col-span-3">
-            <Card className="h-[700px] flex flex-col">
-              <CardHeader className="border-b bg-white">
-                <CardTitle className="text-lg flex items-center">
-                  <MessageCircle className="w-5 h-5 mr-2 text-purple-600" />
-                  Energieberatungs-Gespräch
-                </CardTitle>
-              </CardHeader>
-              
-              <CardContent className="flex-1 flex flex-col p-0">
-                {!dialogStarted ? (
-                  <div className="flex-1 flex items-center justify-center bg-gray-50">
-                    <div className="text-center p-8">
-                      <MessageCircle className="w-20 h-20 text-purple-600 mx-auto mb-6" />
-                      <h3 className="text-2xl font-semibold text-gray-800 mb-4">
-                        Bereit für das Interview?
-                      </h3>
-                      <p className="text-gray-600 mb-8 max-w-md">
-                        Ich führe Sie durch 4 strukturierte Fragen zur Gebäude-Energieberatung. 
-                        Das Gespräch dauert etwa 5-10 Minuten.
+        {/* Main Layout - 2/3 Dialog + 1/3 Status */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          
+          {/* Dialog Area (2/3) */}
+          <div className="lg:col-span-2 space-y-4">
+            
+            {/* Start Button */}
+            {!isDialogStarted && (
+              <Card>
+                <CardContent className="p-8 text-center">
+                  <div className="space-y-4">
+                    <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto">
+                      <MessageCircle className="w-8 h-8 text-purple-600" />
+                    </div>
+                    <h3 className="text-xl font-semibold">Dialog starten</h3>
+                    <p className="text-gray-600 max-w-md mx-auto">
+                      Klicken Sie auf "Dialog starten" und ich führe Sie durch 4 wichtige Fragen 
+                      zu Ihrer Gebäude-Energieberatung.
+                    </p>
+                    <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                      <p className="text-sm text-blue-800">
+                        <strong>💡 Tipp:</strong> Antworten Sie natürlich, als würden Sie mit einem Berater sprechen. 
+                        Für Hilfe tippen Sie einfach "?" ein.
                       </p>
-                      <Button 
-                        onClick={startDialog} 
-                        size="lg"
-                        className="bg-purple-600 hover:bg-purple-700"
-                      >
-                        <Play className="w-5 h-5 mr-2" />
-                        Dialog beginnen
-                      </Button>
                     </div>
+                    <Button 
+                      onClick={handleStartDialog}
+                      disabled={isLoading}
+                      size="lg"
+                      className="bg-purple-600 hover:bg-purple-700"
+                    >
+                      <Play className="w-4 h-4 mr-2" />
+                      {isLoading ? 'Wird gestartet...' : 'Dialog starten'}
+                    </Button>
                   </div>
-                ) : (
-                  <>
-                    {/* Messages Container */}
-                    <div className="flex-1 overflow-y-auto bg-gray-50">
-                      <div className="p-6 space-y-6">
-                        {chatHistory.map((msg, index) => (
-                          <div 
-                            key={index} 
-                            className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                          >
-                            <div className={`max-w-[85%] ${
-                              msg.role === 'user' 
-                                ? 'bg-purple-600 text-white' 
-                                : 'bg-white text-gray-800 shadow-sm border'
-                            } rounded-lg p-4`}>
-                              <div className="text-sm leading-relaxed whitespace-pre-wrap">
-                                {msg.message}
-                              </div>
-                              <div className={`text-xs mt-2 ${
-                                msg.role === 'user' ? 'text-purple-200' : 'text-gray-500'
-                              }`}>
-                                {msg.timestamp.toLocaleTimeString('de-DE', { 
-                                  hour: '2-digit', 
-                                  minute: '2-digit' 
-                                })}
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                        
-                        {isLoading && (
-                          <div className="flex justify-start">
-                            <div className="bg-white p-4 rounded-lg border shadow-sm">
-                              <div className="flex items-center space-x-3">
-                                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-purple-600"></div>
-                                <span className="text-sm text-gray-600">KI-Assistent antwortet...</span>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                        
-                        <div ref={messagesEndRef} />
-                      </div>
-                    </div>
+                </CardContent>
+              </Card>
+            )}
 
-                    {/* Message Input */}
-                    <div className="border-t bg-white p-4">
-                      <div className="space-y-3">
-                        <Textarea
-                          value={userMessage}
-                          onChange={(e) => setUserMessage(e.target.value)}
-                          placeholder={isCompleted ? "Dialog abgeschlossen. Klicken Sie auf 'Speichern & weiter'." : "Ihre Antwort eingeben... (oder '?' für Hilfe)"}
-                          rows={3}
-                          className="resize-none border-gray-300 focus:border-purple-500 focus:ring-purple-500"
-                          disabled={isCompleted || isLoading}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter' && !e.shiftKey) {
-                              e.preventDefault()
-                              handleSendMessage()
-                            }
-                          }}
-                        />
-                        <div className="flex space-x-2">
-                          <Button 
-                            onClick={handleSendMessage}
-                            disabled={!userMessage.trim() || isLoading || isCompleted}
-                            className="flex-1 bg-purple-600 hover:bg-purple-700"
-                          >
-                            <Send className="w-4 h-4 mr-2" />
-                            {isCompleted ? 'Dialog beendet' : 'Antwort senden'}
-                          </Button>
-                          <Button 
-                            onClick={() => setUserMessage('?')}
-                            variant="outline"
-                            disabled={isCompleted || isLoading}
-                            className="px-4 border-purple-300 text-purple-600 hover:bg-purple-50"
-                          >
-                            ?
-                          </Button>
+            {/* Chat Interface */}
+            {isDialogStarted && (
+              <Card className="h-[600px] flex flex-col">
+                <CardHeader className="border-b">
+                  <CardTitle className="flex items-center gap-2">
+                    <MessageCircle className="w-5 h-5" />
+                    KI-Energieberater
+                    {isCompleted && <CheckCircle className="w-5 h-5 text-green-500" />}
+                  </CardTitle>
+                </CardHeader>
+                
+                {/* Chat Messages */}
+                <CardContent className="flex-1 p-4 overflow-y-auto">
+                  <div className="space-y-4">
+                    {chatHistory.map((msg, index) => (
+                      <div
+                        key={index}
+                        className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                      >
+                        <div
+                          className={`max-w-[80%] rounded-lg p-3 ${
+                            msg.role === 'user'
+                              ? 'bg-purple-600 text-white'
+                              : 'bg-gray-100 text-gray-900'
+                          }`}
+                        >
+                          <div className="whitespace-pre-wrap text-sm">
+                            {msg.message}
+                          </div>
+                          <div className={`text-xs mt-1 ${
+                            msg.role === 'user' ? 'text-purple-100' : 'text-gray-500'
+                          }`}>
+                            {msg.timestamp.toLocaleTimeString('de-DE', { 
+                              hour: '2-digit', 
+                              minute: '2-digit' 
+                            })}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </>
-                )}
-              </CardContent>
-            </Card>
+                    ))}
+                    
+                    {isLoading && (
+                      <div className="flex justify-start">
+                        <div className="bg-gray-100 rounded-lg p-3">
+                          <div className="flex items-center space-x-2">
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-purple-600"></div>
+                            <span className="text-sm text-gray-600">KI-Assistent tippt...</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+                
+                {/* Chat Input */}
+                <div className="border-t p-4">
+                  <div className="flex gap-2">
+                    <Textarea
+                      value={userMessage}
+                      onChange={(e) => setUserMessage(e.target.value)}
+                      onKeyDown={handleKeyPress}
+                      placeholder="Ihre Antwort eingeben... (oder '?' für Hilfe)"
+                      className="flex-1 min-h-[60px] resize-none"
+                      disabled={isLoading || isCompleted}
+                    />
+                    <Button
+                      onClick={handleSendMessage}
+                      disabled={!userMessage.trim() || isLoading || isCompleted}
+                      className="h-[60px] px-4"
+                    >
+                      <Send className="w-4 h-4" />
+                    </Button>
+                  </div>
+                  <div className="flex items-center justify-between mt-2 text-xs text-gray-500">
+                    <span>
+                      Enter = Senden • Shift+Enter = Neue Zeile
+                    </span>
+                    <span>
+                      {userMessage.length}/500
+                    </span>
+                  </div>
+                </div>
+              </Card>
+            )}
           </div>
 
-          {/* Sidebar - Takes 1/4 of space */}
-          <div className="space-y-6">
+          {/* Status Panel (1/3) */}
+          <div className="space-y-4">
+            
             {/* Progress Card */}
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg flex items-center">
-                  📊 Fortschritt
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Clock className="w-5 h-5" />
+                  Fortschritt
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <div className="flex justify-between text-sm mb-2">
-                    <span>Beantwortet</span>
-                    <span>{Object.keys(answers).length}/{totalQuestions}</span>
+              <CardContent>
+                <div className="space-y-4">
+                  <div>
+                    <div className="flex justify-between text-sm mb-1">
+                      <span>Fragen beantwortet</span>
+                      <span>{Object.keys(answers).length}/{dialogQuestions.length}</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div
+                        className="bg-purple-600 h-2 rounded-full transition-all duration-300"
+                        style={{ width: `${progress}%` }}
+                      ></div>
+                    </div>
                   </div>
-                  <div className="bg-gray-200 rounded-full h-3">
-                    <div 
-                      className="bg-purple-600 h-3 rounded-full transition-all duration-500"
-                      style={{ width: `${calculateCompletionRate()}%` }}
-                    ></div>
-                  </div>
-                  <div className="text-xs text-gray-500 mt-1">
-                    {calculateCompletionRate()}% abgeschlossen
+                  
+                  {/* Question Status */}
+                  <div className="space-y-2">
+                    {dialogQuestions.map((q, index) => (
+                      <div
+                        key={q.id}
+                        className={`p-2 rounded text-xs ${
+                          answers[`question_${index + 1}`]
+                            ? 'bg-green-100 text-green-800'
+                            : index === currentQuestionIndex
+                            ? 'bg-purple-100 text-purple-800'
+                            : 'bg-gray-100 text-gray-600'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          {answers[`question_${index + 1}`] ? (
+                            <CheckCircle className="w-3 h-3" />
+                          ) : index === currentQuestionIndex ? (
+                            <Clock className="w-3 h-3" />
+                          ) : (
+                            <div className="w-3 h-3 rounded-full border border-gray-300" />
+                          )}
+                          <span className="font-medium">Frage {index + 1}</span>
+                        </div>
+                        <div className="mt-1 text-xs opacity-75">
+                          {q.question.length > 60 ? q.question.substring(0, 60) + '...' : q.question}
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
-                
-                {isCompleted && (
-                  <div className="flex items-center text-green-600 text-sm bg-green-50 p-2 rounded">
-                    <CheckCircle className="w-4 h-4 mr-2" />
-                    Dialog abgeschlossen!
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Save Card */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center">
-                  💾 Speichern
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <p className="text-sm text-gray-600">
-                  Sie können jederzeit speichern und zur nächsten Phase weitergehen.
-                </p>
-                
-                <Button 
-                  onClick={handleSave}
-                  disabled={isLoading || Object.keys(answers).length === 0}
-                  className="w-full bg-green-600 hover:bg-green-700"
-                >
-                  <Save className="w-4 h-4 mr-2" />
-                  Speichern & weiter
-                </Button>
-
-                {Object.keys(answers).length === 0 && (
-                  <p className="text-xs text-gray-500">
-                    Beantworten Sie mindestens eine Frage zum Speichern.
-                  </p>
-                )}
               </CardContent>
             </Card>
 
             {/* Help Card */}
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg flex items-center">
-                  💡 Hilfe
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <HelpCircle className="w-5 h-5" />
+                  Hilfe
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-sm text-gray-600 space-y-2">
-                  <p><strong>"?"</strong> - Hilfe zur aktuellen Frage</p>
-                  <p><strong>Enter</strong> - Nachricht senden</p>
-                  <p><strong>Shift + Enter</strong> - Neue Zeile</p>
+                <div className="space-y-3 text-sm">
+                  <div className="bg-blue-50 p-3 rounded border border-blue-200">
+                    <h4 className="font-semibold text-blue-800 mb-1">💡 Tipps</h4>
+                    <ul className="text-blue-700 space-y-1 text-xs">
+                      <li>• Antworten Sie natürlich und ausführlich</li>
+                      <li>• Bei Unsicherheit: "?" eingeben</li>
+                      <li>• Nutzen Sie das Szenario als Orientierung</li>
+                    </ul>
+                  </div>
+                  
+                  <div className="bg-gray-50 p-3 rounded border">
+                    <h4 className="font-semibold text-gray-800 mb-1">🏠 Ihr Szenario</h4>
+                    <p className="text-xs text-gray-600">
+                      Mehrfamilienhaus (Baujahr 1965), WDVS-Sanierung 
+                      Eingangsfassade Südseite, 140mm Mineralwolle
+                    </p>
+                  </div>
+                  
+                  <div className="bg-yellow-50 p-3 rounded border border-yellow-200">
+                    <h4 className="font-semibold text-yellow-800 mb-1">⚠️ Technische Hilfe</h4>
+                    <p className="text-xs text-yellow-700">
+                      Bei Problemen: Seite neu laden (Strg+F5)
+                    </p>
+                  </div>
                 </div>
               </CardContent>
             </Card>
+
+            {/* Save Button */}
+            {isCompleted && (
+              <Card>
+                <CardContent className="p-4">
+                  <Button
+                    onClick={handleSave}
+                    disabled={isLoading}
+                    className="w-full bg-green-600 hover:bg-green-700"
+                    size="lg"
+                  >
+                    <Save className="w-4 h-4 mr-2" />
+                    {isLoading ? 'Wird gespeichert...' : 'Ergebnisse speichern'}
+                  </Button>
+                  
+                  {isStudy && (
+                    <p className="text-xs text-gray-500 mt-2 text-center">
+                      Nach dem Speichern gelangen Sie automatisch zum Fragebogen.
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            )}
           </div>
         </div>
       </div>
