@@ -93,74 +93,71 @@ export default function VariantB({ onComplete, startTime }: VariantBProps) {
   }
 }
 
+  // src/components/VariantB.tsx - Verbesserte Fehlerbehandlung
   const handleSendMessage = async () => {
-  if (!userMessage.trim()) return
-  
-  const currentMessage = userMessage.trim()
-  setUserMessage('')
-  setIsLoading(true)
-  
-  // Add user message
-  setChatHistory(prev => [...prev, {
-    role: 'user',
-    message: currentMessage,
-    timestamp: new Date()
-  }])
-  
-  try {
-    const response = await fetch('/api/dialog/message', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-        message: currentMessage,
-        session_id: sessionId,
-        questionIndex: currentQuestionIndex
-      })
-    })
+    if (!userMessage.trim()) return
     
-    if (response.ok) {
-      const data = await response.json()
+    const currentMessage = userMessage.trim()
+    setUserMessage('')
+    setIsLoading(true)
+    
+    // Add user message immediately
+    setChatHistory(prev => [...prev, {
+      role: 'user',
+      message: currentMessage,
+      timestamp: new Date()
+    }])
+    
+    try {
+      const response = await fetch('/api/dialog/message', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          message: currentMessage,
+          session_id: sessionId,
+          questionIndex: currentQuestionIndex
+        })
+      })
       
-      // Add API response
-      setChatHistory(prev => [...prev, {
-        role: 'assistant',
-        message: data.response,
-        timestamp: new Date()
-      }])
-      
-      // Save answer if it's not a help request
-      if (!data.is_help) {
-        setAnswers(prev => ({
-          ...prev,
-          [`question_${currentQuestionIndex + 1}`]: currentMessage
-        }))
+      if (response.ok) {
+        const data = await response.json()
         
-        // Move to next question
-        if (data.question_index) {
+        // Add LLM response
+        setChatHistory(prev => [...prev, {
+          role: 'assistant',
+          message: data.response,
+          timestamp: new Date()
+        }])
+        
+        // Update session state
+        if (data.answers_collected) {
+          setAnswers(data.answers_collected)
+        }
+        
+        if (data.question_index !== undefined) {
           setCurrentQuestionIndex(data.question_index)
         }
         
-        // Check if dialog is complete
         if (data.dialog_complete) {
           setIsCompleted(true)
+          console.log('🎉 Dialog completed! Answers:', data.answers_collected)
         }
+        
+      } else {
+        throw new Error(`Dialog API failed: ${response.status}`)
       }
       
-    } else {
-      throw new Error('Dialog API failed')
+    } catch (error) {
+      console.error('Error sending message:', error)
+      setChatHistory(prev => [...prev, {
+        role: 'assistant',
+        message: 'Entschuldigung, es gab einen technischen Fehler. Das LLM-System ist möglicherweise nicht verfügbar. Bitte versuchen Sie es erneut.',
+        timestamp: new Date()
+      }])
+    } finally {
+      setIsLoading(false)
     }
-    
-  } catch (error) {
-    console.error('Error sending message:', error)
-    setChatHistory(prev => [...prev, {
-      role: 'assistant',
-      message: 'Entschuldigung, es gab einen Fehler. Können Sie Ihre Antwort wiederholen?',
-      timestamp: new Date()
-    }])
-  } finally {
-    setIsLoading(false)
   }
-}
 
   const handleSave = async () => {
   // DEBUG LOGGING  

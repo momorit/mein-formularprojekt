@@ -1,80 +1,92 @@
+// src/app/api/dialog/message/route.ts - MIT LLM-INTEGRATION
 import { NextRequest, NextResponse } from 'next/server'
+import { callLLM } from '@/lib/llm'
+
+interface DialogSession {
+  sessionId: string
+  questions: string[]
+  answers: Record<string, string>
+  currentQuestionIndex: number
+  context: string
+}
+
+// Session Storage (in production: Redis/Database)
+const sessions = new Map<string, DialogSession>()
 
 export async function POST(request: NextRequest) {
   try {
     const { message, session_id, questionIndex } = await request.json()
     
-    const lowerMessage = message.toLowerCase()
-    const currentQuestionNum = questionIndex || 0
-    
-    // Hilfe-Anfragen erkennen
-    if (message.includes('?') && message.length < 5) {
-      let helpText = ''
-      
-      if (currentQuestionNum === 0) {
-        helpText = `**Gerne helfe ich Ihnen!**
-
-Zur aktuellen Frage: Laut Ihrem Szenario wird die **Eingangsfassade zur Straße (Südseite)** saniert.
-
-Sie können antworten:
-- "Eingangsfassade" 
-- "Straßenseite"
-- "Südseite"
-
-**Tipp:** Diese Information steht bereits in Ihrem Szenario!`
-      } else if (currentQuestionNum === 1) {
-        helpText = `**Gerne helfe ich Ihnen!**
-
-Zur aktuellen Frage: Laut Ihrem Szenario ist **140mm Mineralwolle** vorgesehen.
-
-Sie können antworten:
-- "Mineralwolle"
-- "140mm Mineralwolle"`
-      } else {
-        helpText = `**Gerne helfe ich Ihnen!**
-
-Schauen Sie in Ihrem Szenario nach - dort finden Sie die Antwort auf die aktuelle Frage!`
-      }
-      
-      return NextResponse.json({
-        response: helpText,
-        session_id: session_id,
-        is_help: true
-      })
+    // Session abrufen oder erstellen
+    let session = sessions.get(session_id) || {
+      sessionId: session_id,
+      questions: [
+        "Welche Gebäudeseite soll hauptsächlich saniert werden?",
+        "Welches Dämmmaterial ist für Ihr Vorhaben vorgesehen?", 
+        "Wurden bereits andere energetische Maßnahmen am Gebäude durchgeführt?",
+        "Handelt es sich um eine freiwillige Modernisierung oder besteht eine gesetzliche Verpflichtung?"
+      ],
+      answers: {},
+      currentQuestionIndex: questionIndex || 0,
+      context: `Sie besitzen ein Mehrfamilienhaus (Baujahr 1965) in der Siedlungsstraße 23. 
+                Es hat eine Rotklinkerfassade und 10 Wohneinheiten. 
+                Sie planen eine WDVS-Sanierung der Eingangsfassade zur Straße (Südseite) mit 140mm Mineralwolle-Dämmung. 
+                Das Gebäude hat eine Ölheizung im Keller. 
+                Sie müssen für eine Mieterin (EG rechts, 57,5m²) die mögliche Mieterhöhung berechnen.`
     }
     
-    // Normale Antworten verarbeiten und nächste Frage stellen
-    let responseText = ''
+    // Antwort zur Session hinzufügen
+    session.answers[`question_${session.currentQuestionIndex + 1}`] = message
     
-    if (currentQuestionNum === 0) {
-      responseText = `Vielen Dank! Ihre Antwort wurde gespeichert.
+    // Kontext für LLM zusammenstellen
+    const conversationContext = `
+GEBÄUDE-KONTEXT: ${session.context}
 
-**Nächste Frage (2/4):** Welches Dämmmaterial ist für Ihr Vorhaben vorgesehen? Der Energieberater hat Mineralwolle empfohlen.`
-    } else if (currentQuestionNum === 1) {
-      responseText = `Vielen Dank! Ihre Antwort wurde gespeichert.
+BISHERIGE ANTWORTEN:
+${Object.entries(session.answers).map(([key, value]) => `${key}: ${value}`).join('\n')}
 
-**Nächste Frage (3/4):** Wurden bereits andere energetische Maßnahmen am Gebäude durchgeführt (Dach, Keller, Fenster)?`
-    } else if (currentQuestionNum === 2) {
-      responseText = `Vielen Dank! Ihre Antwort wurde gespeichert.
+AKTUELLE FRAGE: ${session.questions[session.currentQuestionIndex] || 'Alle Fragen beantwortet'}
+NUTZER ANTWORT: ${message}
 
-**Letzte Frage (4/4):** Handelt es sich um eine freiwillige Modernisierung oder besteht eine gesetzliche Verpflichtung nach dem Gebäudeenergiegesetz (GEG)?`
-    } else {
-      responseText = `🎉 Ausgezeichnet! Sie haben alle Fragen beantwortet.
+AUFGABE: 
+1. Bestätige die Antwort des Nutzers
+2. Wenn noch Fragen offen sind: Stelle die nächste Frage aus der Liste
+3. Wenn alle Fragen beantwortet: Bedanke dich und fasse die wichtigsten Punkte zusammen
+4. Sei hilfreich, freundlich und professionell
+5. Antworte auf Deutsch
+    `
 
-**Zusammenfassung Ihrer Angaben:**
-- GEBÄUDESEITE_SANIERUNG: ${message}
-- DÄMMSTOFF_TYP: [Ihre vorherigen Antworten]  
-- VORHERIGE_MODERNISIERUNG: [Ihre vorherigen Antworten]
-- MASSNAHMEN_KATEGORIE: [Ihre vorherigen Antworten]
-
-Ihre Daten wurden erfasst und können nun gespeichert werden.`
+    // LLM-Antwort generieren
+    let llmResponse: string
+    try {
+      llmResponse = await callLLM(
+        `Führe das Energieberatungs-Gespräch fort basierend auf der Nutzer-Antwort: "${message}"`,
+        conversationContext,
+        true // dialogMode = true
+      )
+    } catch (error) {
+      console.error('LLM call failed:', error)
+      // Fallback bei LLM-Ausfall
+      llmResponse = `Vielen Dank für Ihre Antwort! ${
+        session.currentQuestionIndex < session.questions.length - 1 
+          ? `\n\n**Nächste Frage:** ${session.questions[session.currentQuestionIndex + 1]}`
+          : '\n\n🎉 Alle Fragen sind beantwortet! Ihre Daten wurden erfasst.'
+      }`
     }
+    
+    // Session aktualisieren
+    session.currentQuestionIndex++
+    sessions.set(session_id, session)
+    
+    // Prüfen ob Dialog komplett
+    const isDialogComplete = session.currentQuestionIndex >= session.questions.length
     
     return NextResponse.json({
-      response: responseText,
+      response: llmResponse,
       session_id: session_id,
-      question_index: currentQuestionNum + 1,
-      dialog_complete: currentQuestionNum >= 3
+      question_index: session.currentQuestionIndex,
+      dialog_complete: isDialogComplete,
+      answers_collected: session.answers
     })
     
   } catch (error) {
@@ -82,6 +94,6 @@ Ihre Daten wurden erfasst und können nun gespeichert werden.`
     return NextResponse.json({
       response: "Entschuldigung, es gab einen Fehler. Können Sie Ihre Antwort wiederholen?",
       session_id: "error"
-    }, { status: 200 })
+    }, { status: 500 })
   }
 }
