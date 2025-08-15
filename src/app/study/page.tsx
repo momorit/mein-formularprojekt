@@ -221,8 +221,10 @@ function StudyContent() {
                 <h3 className="text-xl font-semibold text-green-800 mb-3">📋 Ihr Testszenario</h3>
                 <p className="text-green-900">
                   Sie besitzen ein Mehrfamilienhaus (Baujahr 1965) in der Siedlungsstraße 23. 
-                  Es hat eine Rotklinkerfassade und 10 Wohneinheiten. Sie planen eine WDVS-Sanierung
-                  und müssen für einen Mieter (EG rechts, 57,5m²) die Mieterhöhung berechnen.
+                  Es hat eine Rotklinkerfassade und 10 Wohneinheiten. Sie planen eine WDVS-Sanierung 
+                  der Eingangsfassade zur Straße (Südseite) mit 140mm Mineralwolle-Dämmung. 
+                  Das Gebäude hat eine Ölheizung im Keller. Sie müssen für eine Mieterin 
+                  (EG rechts, 57,5m²) die mögliche Mieterhöhung berechnen.
                 </p>
               </div>
 
@@ -414,8 +416,10 @@ function StudyContent() {
                   <h4 className="font-semibold text-blue-800 mb-2">🏢 Ihr Gebäudeszenario</h4>
                   <p className="text-blue-900 mb-3">
                     Sie besitzen ein Mehrfamilienhaus (Baujahr 1965) in der Siedlungsstraße 23. 
-                    Es hat eine Rotklinkerfassade und 10 Wohneinheiten. Sie planen eine WDVS-Sanierung
-                    und müssen für einen Mieter (EG rechts, 57,5m²) die Mieterhöhung berechnen.
+                    Es hat eine Rotklinkerfassade und 10 Wohneinheiten. Sie planen eine WDVS-Sanierung 
+                    der Eingangsfassade zur Straße (Südseite) mit 140mm Mineralwolle-Dämmung. 
+                    Das Gebäude hat eine Ölheizung im Keller. Sie müssen für eine Mieterin 
+                    (EG rechts, 57,5m²) die mögliche Mieterhöhung berechnen.
                   </p>
                 </div>
 
@@ -521,8 +525,10 @@ function StudyContent() {
                   <h4 className="font-semibold text-gray-800 mb-2">📋 Gleiches Szenario</h4>
                   <p className="text-blue-900 mb-3">
                     Sie besitzen ein Mehrfamilienhaus (Baujahr 1965) in der Siedlungsstraße 23. 
-                    Es hat eine Rotklinkerfassade und 10 Wohneinheiten. Sie planen eine WDVS-Sanierung
-                    und müssen für einen Mieter (EG rechts, 57,5m²) die Mieterhöhung berechnen.
+                    Es hat eine Rotklinkerfassade und 10 Wohneinheiten. Sie planen eine WDVS-Sanierung 
+                    der Eingangsfassade zur Straße (Südseite) mit 140mm Mineralwolle-Dämmung. 
+                    Das Gebäude hat eine Ölheizung im Keller. Sie müssen für eine Mieterin 
+                    (EG rechts, 57,5m²) die mögliche Mieterhöhung berechnen.
                   </p>
                 </div>
 

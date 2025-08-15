@@ -59,7 +59,7 @@ export default function VariantA({ onComplete, startTime }: VariantAProps) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          context: 'Siedlungsstraße 23, Großstadt: 10 WE, Rotklinkerfassade 1965, WDVS-Sanierung Mieter EG' 
+          context: 'Mehrfamilienhaus Baujahr 1965, Eingangsfassade Südseite, WDVS-Sanierung 140mm Mineralwolle, Ölheizung, Mieterin EG rechts 57.5m²',
         })
       })
       
@@ -81,9 +81,11 @@ export default function VariantA({ onComplete, startTime }: VariantAProps) {
 
 Das Formular ist jetzt bereit und enthält Hinweise zu jedem Feld. Bei schwierigen Feldern (markiert mit ⚠️) können Sie mich gerne um detaillierte Hilfe bitten.
 
-Ihr Szenario:   Sie besitzen ein Mehrfamilienhaus (Baujahr 1965) in der Siedlungsstraße 23. 
-  Es hat eine Rotklinkerfassade und 10 Wohneinheiten. Sie planen eine WDVS-Sanierung 
-  und müssen für einen Mieter (EG rechts, 57,5m²) die Mieterhöhung berechnen.
+Ihr Szenario: Sie besitzen ein Mehrfamilienhaus (Baujahr 1965) in der Siedlungsstraße 23. 
+Es hat eine Rotklinkerfassade und 10 Wohneinheiten. Sie planen eine WDVS-Sanierung 
+der Eingangsfassade zur Straße (Südseite) mit 140mm Mineralwolle-Dämmung. 
+Das Gebäude hat eine Ölheizung im Keller. Sie müssen für eine Mieterin 
+(EG rechts, 57,5m²) die mögliche Mieterhöhung berechnen.
 
 Beginnen Sie einfach mit dem Ausfüllen und fragen Sie bei Unsicherheiten!`,
         timestamp: new Date()
@@ -123,7 +125,7 @@ Beginnen Sie einfach mit dem Ausfüllen und fragen Sie bei Unsicherheiten!`,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
         message: currentMessage,
-        context: 'Mehrfamilienhaus Baujahr 1965, WDVS-Sanierung, Miriam Mieterin EG rechts',
+        context: 'Mehrfamilienhaus Baujahr 1965, Eingangsfassade Südseite, WDVS-Sanierung 140mm Mineralwolle, Ölheizung, Mieterin EG rechts 57.5m²',
         formValues: formValues // Aktueller Formular-Zustand
       })
     })
@@ -313,7 +315,9 @@ const handleSubmit = async (e: React.FormEvent) => {
                 <p className="text-blue-900 mb-3">
                   Sie besitzen ein Mehrfamilienhaus (Baujahr 1965) in der Siedlungsstraße 23. 
                   Es hat eine Rotklinkerfassade und 10 Wohneinheiten. Sie planen eine WDVS-Sanierung 
-                  und müssen für einen Mieter (EG rechts, 57,5m²) die Mieterhöhung berechnen.
+                  der Eingangsfassade zur Straße (Südseite) mit 140mm Mineralwolle-Dämmung. 
+                  Das Gebäude hat eine Ölheizung im Keller. Sie müssen für eine Mieterin 
+                  (EG rechts, 57,5m²) die mögliche Mieterhöhung berechnen.
                 </p>
                 <p className="text-blue-800 text-sm">
                   <strong>Ziel:</strong> Erfassung der Gebäudedaten für eine Energieberatung zur Berechnung 

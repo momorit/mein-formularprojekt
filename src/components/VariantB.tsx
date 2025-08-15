@@ -58,7 +58,7 @@ export default function VariantB({ onComplete, startTime }: VariantBProps) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          context: 'Siedlungsstraße 23, Großstadt: 10 WE, Rotklinkerfassade 1965, WDVS-Sanierung Mieter EG'
+          context: 'Mehrfamilienhaus Baujahr 1965, Eingangsfassade Südseite, WDVS-Sanierung 140mm Mineralwolle, Ölheizung, Mieterin EG rechts 57.5m²',
         })
       })
       
@@ -76,8 +76,10 @@ export default function VariantB({ onComplete, startTime }: VariantBProps) {
 Ich führe Sie Schritt für Schritt durch die Erfassung Ihrer Gebäudedaten für die geplante Fassadensanierung.
 
 Ihr Szenario: Sie besitzen ein Mehrfamilienhaus (Baujahr 1965) in der Siedlungsstraße 23. 
-  Es hat eine Rotklinkerfassade und 10 Wohneinheiten. Sie planen eine WDVS-Sanierung 
-  und müssen für einen Mieter (EG rechts, 57,5m²) die Mieterhöhung berechnen.
+Es hat eine Rotklinkerfassade und 10 Wohneinheiten. Sie planen eine WDVS-Sanierung 
+der Eingangsfassade zur Straße (Südseite) mit 140mm Mineralwolle-Dämmung. 
+Das Gebäude hat eine Ölheizung im Keller. Sie müssen für eine Mieterin 
+(EG rechts, 57,5m²) die mögliche Mieterhöhung berechnen.
 
 Lassen Sie uns beginnen! Ich stelle Ihnen nacheinander ${data.questions.length} Fragen. Bei Unklarheiten können Sie gerne nachfragen.
 
@@ -159,106 +161,60 @@ ${fallbackQuestions[0].question}`,
     }])
     
     try {
-      const currentQuestion = questions[currentQuestionIndex]
-      
       // Check if it's a help request
-      // Erweiterte Nachfrage-Erkennung
       const isHelpRequest = currentMessage.includes('?') || 
                           currentMessage.toLowerCase().includes('hilfe') || 
                           currentMessage.toLowerCase().includes('help') ||
                           currentMessage.toLowerCase().includes('erklär') ||
                           currentMessage.toLowerCase().includes('was bedeutet') ||
                           currentMessage.toLowerCase().includes('verstehe nicht') ||
-                          currentMessage.toLowerCase().includes('was ist') ||
-                          currentMessage.toLowerCase().includes('wie') ||
-                          currentMessage.toLowerCase().includes('warum')
+                          currentMessage.toLowerCase().includes('was ist')
 
-      if (isHelpRequest) {
-        const response = await fetch('/api/dialog/message', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            message: currentMessage,
-            session_id: sessionId,
-            currentQuestion: currentQuestion,
-            questionIndex: currentQuestionIndex,
-            isHelpRequest: true // Neuer Flag
-          })
+      // Send to LLM
+      const response = await fetch('/api/dialog/message', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          message: currentMessage,
+          session_id: sessionId,
+          currentQuestion: { question: "Aktuelle Frage im LLM-Dialog" },
+          questionIndex: Object.keys(answers).length,
+          isHelpRequest: isHelpRequest
         })
-        
-        if (response.ok) {
-          const data = await response.json()
-          setChatHistory(prev => [...prev, {
-            role: 'assistant',
-            message: data.response,
-            timestamp: new Date()
-          }])
-        } else {
-          // Fallback-Hilfe wenn API nicht verfügbar
-          setChatHistory(prev => [...prev, {
-            role: 'assistant',
-            message: `**Gerne helfe ich Ihnen!**\n\nSie können jederzeit nachfragen, wenn Sie etwas nicht verstehen. Stellen Sie einfach eine spezifische Frage zu dem, was unklar ist.\n\n**Aktuelle Frage:** ${currentQuestion?.question || 'Keine Frage verfügbar'}`,
-            timestamp: new Date()
-          }])
-        }
-        
-        setIsLoading(false)
-        return // Wichtig: Stoppe hier, keine weitere Verarbeitung
-      }
+      })
       
-      // Process answer
-      if (currentQuestion) {
-        // Save answer
-        setAnswers(prev => ({
-          ...prev,
-          [currentQuestion.id]: currentMessage
-        }))
+      if (response.ok) {
+        const data = await response.json()
         
-        // Move to next question or complete
-        if (currentQuestionIndex < questions.length - 1) {
-          const nextIndex = currentQuestionIndex + 1
-          const nextQuestion = questions[nextIndex]
+        // Add LLM response
+        setChatHistory(prev => [...prev, {
+          role: 'assistant',
+          message: data.response,
+          timestamp: new Date()
+        }])
+        
+        // Save answer if it's not a help request
+        if (!isHelpRequest) {
+          setAnswers(prev => ({
+            ...prev,
+            [`question_${Object.keys(answers).length + 1}`]: currentMessage
+          }))
           
-          const response = `Vielen Dank! Ihre Antwort wurde gespeichert.
-
-**Nächste Frage (${nextIndex + 1}/${questions.length}):**
-
-${nextQuestion.question}`
-
-          setChatHistory(prev => [...prev, {
-            role: 'assistant',
-            message: response,
-            timestamp: new Date()
-          }])
-          
-          setCurrentQuestionIndex(nextIndex)
-        } else {
-          // Dialog completed
-          const completionMessage = `🎉 Ausgezeichnet! Sie haben alle Fragen beantwortet.
-
-**Zusammenfassung Ihrer Angaben:**
-${questions.map((q, i) => {
-            const answer = answers[q.id] || (i === currentQuestionIndex ? currentMessage : 'Nicht beantwortet')
-            return `• ${q.field}: ${answer}`
-          }).join('\n')}
-
-Ihre Daten wurden erfasst und können nun gespeichert werden.`
-
-          setChatHistory(prev => [...prev, {
-            role: 'assistant',
-            message: completionMessage,
-            timestamp: new Date()
-          }])
-          
-          setIsCompleted(true)
+          // Check if dialog should complete (after 4 questions)
+          if (Object.keys(answers).length >= 3) {
+            setIsCompleted(true)
+          }
         }
+        
+      } else {
+        throw new Error('Dialog API failed')
       }
       
     } catch (error) {
-      console.error('Error processing message:', error)
+      console.error('Error sending message:', error)
       setChatHistory(prev => [...prev, {
         role: 'assistant',
-        message: 'Entschuldigung, es gab einen Fehler bei der Verarbeitung. Können Sie Ihre Antwort wiederholen?',
+        message: 'Entschuldigung, es gab einen Fehler. Können Sie Ihre Antwort wiederholen?',
         timestamp: new Date()
       }])
     } finally {
@@ -372,7 +328,9 @@ Ihre Daten wurden erfasst und können nun gespeichert werden.`
                 <p className="text-blue-900 mb-3">
                   Sie besitzen ein Mehrfamilienhaus (Baujahr 1965) in der Siedlungsstraße 23. 
                   Es hat eine Rotklinkerfassade und 10 Wohneinheiten. Sie planen eine WDVS-Sanierung 
-                  und müssen für einen Mieter (EG rechts, 57,5m²) die Mieterhöhung berechnen.
+                  der Eingangsfassade zur Straße (Südseite) mit 140mm Mineralwolle-Dämmung. 
+                  Das Gebäude hat eine Ölheizung im Keller. Sie müssen für eine Mieterin 
+                  (EG rechts, 57,5m²) die mögliche Mieterhöhung berechnen.
                 </p>
                 <p className="text-blue-800 text-sm">
                   <strong>Ziel:</strong> Erfassung der Gebäudedaten für eine Energieberatung zur Berechnung 

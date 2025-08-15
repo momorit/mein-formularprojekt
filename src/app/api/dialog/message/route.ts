@@ -1,48 +1,80 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { callLLM } from '@/lib/llm'
 
 export async function POST(request: NextRequest) {
   try {
     const { message, session_id, currentQuestion, questionIndex, isHelpRequest } = await request.json()
     
-    if (isHelpRequest) {
-      const helpResponse = generateContextualHelp(message, currentQuestion)
-      return NextResponse.json({
-        response: helpResponse,
-        isHelpResponse: true
-      })
-    }
+    // Kontext für LLM aufbauen
+    const szenario = `GEBÄUDE-ENERGIEBERATUNG DIALOG-SYSTEM
+
+SZENARIO:
+Sie besitzen ein Mehrfamilienhaus (Baujahr 1965) in der Siedlungsstraße 23. 
+Es hat eine Rotklinkerfassade und 10 Wohneinheiten. Sie planen eine WDVS-Sanierung 
+der Eingangsfassade zur Straße (Südseite) mit 140mm Mineralwolle-Dämmung. 
+Das Gebäude hat eine Ölheizung im Keller. Sie müssen für eine Mieterin 
+(EG rechts, 57,5m²) die mögliche Mieterhöhung berechnen.
+
+AKTUELLE FRAGE: ${currentQuestion?.question || 'Keine aktuelle Frage'}
+FRAGE ${questionIndex + 1} von 4
+
+NUTZER-NACHRICHT: ${message}`
+
+    let prompt = ''
     
-    // Normale Antwortverarbeitung...
+    if (isHelpRequest) {
+      // Hilfe-Anfrage
+      prompt = `${szenario}
+
+AUFGABE: Der Nutzer hat eine Hilfe-Anfrage gestellt. Erkläre als Energieberatungs-Experte die aktuelle Frage verständlich. Gib konkrete Hilfe basierend auf dem Szenario. Nutze deutsche Sprache und formatiere übersichtlich.
+
+WICHTIG: 
+- Beziehe dich auf das konkrete Szenario (Baujahr 1965, Eingangsfassade Südseite, etc.)
+- Gib praktische Antwortmöglichkeiten
+- Bleibe bei der aktuellen Frage`
+
+    } else {
+      // Antwort bewerten und nächste Frage vorbereiten
+      prompt = `${szenario}
+
+AUFGABE: 
+1. Bewerte die Nutzer-Antwort zur aktuellen Frage
+2. Bestätige kurz die Antwort
+3. Stelle die nächste relevante Frage zur Gebäude-Energieberatung
+
+WICHTIG:
+- Stelle nur EINE neue Frage
+- Beziehe dich auf das Szenario
+- Frage nach konkreten Gebäudedaten für die Energieberatung
+- Nutze deutsche Sprache`
+    }
+
+    // LLM aufrufen
+    const llmResponse = await callLLM(prompt, szenario, true) // dialogMode = true
+    
     return NextResponse.json({
-      response: "Antwort verarbeitet",
-      nextQuestion: questionIndex < 3 // Beispiel
+      response: llmResponse,
+      session_id: session_id,
+      question_index: questionIndex,
+      is_help_response: isHelpRequest,
+      llm_used: true
     })
     
   } catch (error) {
     console.error('Dialog message error:', error)
-    return NextResponse.json(
-      { error: 'Message processing failed' },
-      { status: 500 }
-    )
+    
+    // Fallback-Antworten
+    const fallbackResponse = isHelpRequest 
+      ? `**Gerne helfe ich Ihnen!**\n\nZur aktuellen Frage: ${currentQuestion?.question || 'Keine Frage verfügbar'}\n\nBitte formulieren Sie eine spezifische Frage, dann kann ich Ihnen besser helfen.\n\n**Tipp:** Sie können auch einfach antworten und wir gehen zur nächsten Frage über.`
+      : `Vielen Dank für Ihre Antwort!\n\nLeider ist der KI-Assistent momentan nicht verfügbar. Ihre Antwort wurde trotzdem gespeichert.\n\nMöchten Sie mit der nächsten Frage fortfahren?`
+    
+    return NextResponse.json({
+      response: fallbackResponse,
+      session_id: session_id,
+      question_index: questionIndex,
+      is_help_response: isHelpRequest,
+      llm_used: false,
+      error: error.message
+    }, { status: 200 })
   }
-}
-
-function generateContextualHelp(message: string, currentQuestion: any): string {
-  const questionField = currentQuestion?.field || ''
-  const lowerMessage = message.toLowerCase()
-  
-  // Kontextuelle Hilfe basierend auf aktueller Frage
-  if (questionField.includes('WOHNFLÄCHE') && lowerMessage.includes('?')) {
-    return `**Wohnfläche-Hilfe:**\n\nLaut Ihrem Szenario:\n• **Gesamtwohnfläche:** 634 m²\n• **Anzahl Wohneinheiten:** 10\n• **Miriam's Wohnung:** 57,5 m²\n\nTragen Sie "634" für die Gesamtwohnfläche ein.`
-  }
-  
-  if (questionField.includes('WOHNEINHEITEN') && lowerMessage.includes('?')) {
-    return `**Anzahl Wohneinheiten:**\n\nIhr Mehrfamilienhaus hat:\n• **Insgesamt:** 10 Wohneinheiten\n• **Pro Eingang:** 5 Wohnungen\n• **Aufteilung:** 2 Eingänge, 3 Etagen\n\nAntwort: "10 Wohneinheiten"`
-  }
-  
-  if (questionField.includes('DÄMMUNG') && lowerMessage.includes('?')) {
-    return `**Dämmungsmaßnahmen im Detail:**\n\n**Empfehlung Ihres Energieberaters:**\n• **System:** WDVS (Wärmedämmverbundsystem)\n• **Material:** 140mm Mineralwolle\n• **Eingangsfassade:** Mit Spaltklinker-Verkleidung\n• **Hoffassade:** Weiß verputzt\n• **Flächen:** 345,40 m² (Eingang) + 182,10 m² (Hof)`
-  }
-  
-  return `**Gerne erkläre ich das!**\n\nZu Ihrer Frage "${message}":\n\nKönnen Sie spezifizieren, welchen Teil Sie nicht verstehen? Ich kann Ihnen mit allen Begriffen rund um die Gebäudesanierung helfen!`
 }
