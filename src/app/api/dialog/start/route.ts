@@ -14,24 +14,7 @@ export async function POST(request: NextRequest) {
         type: 'number',
         difficulty: 'easy',
         required: true
-      }
-    ]
-    
-    const sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-    
-    return NextResponse.json({
-      session_id: sessionId,
-      questions,
-      welcome_message: `Hallo! Ich führe Sie durch ${questions.length} Fragen zur Gebäude-Energieberatung.`
-    })
-  } catch (error) {
-    console.error('Error starting dialog:', error)
-    return NextResponse.json(
-      { error: 'Failed to start dialog' },
-      { status: 500 }
-    )
-  }
-},
+      },
       {
         id: 'total_units',
         question: 'Wie viele Wohneinheiten befinden sich in Ihrem Gebäude?',
@@ -72,3 +55,20 @@ export async function POST(request: NextRequest) {
         difficulty: 'hard',
         required: true
       }
+    ]
+    
+    const sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+    
+    return NextResponse.json({
+      session_id: sessionId,
+      questions,
+      welcome_message: `Hallo! Ich führe Sie durch ${questions.length} Fragen zur Gebäude-Energieberatung.`
+    })
+  } catch (error) {
+    console.error('Error starting dialog:', error)
+    return NextResponse.json(
+      { error: 'Failed to start dialog' },
+      { status: 500 }
+    )
+  }
+}
