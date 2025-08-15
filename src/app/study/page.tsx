@@ -220,9 +220,9 @@ function StudyContent() {
               <div className="bg-green-50 p-6 rounded-lg">
                 <h3 className="text-xl font-semibold text-green-800 mb-3">📋 Ihr Testszenario</h3>
                 <p className="text-green-900">
-                  Sie sind Eigentümer:in eines Mehrfamilienhauses (Baujahr 1965) in ruhiger Lage und planen eine 
-                  energetische Modernisierung der Fassade mit Wärmedämmverbundsystem. 
-                  Für die Beratung benötigen Sie eine digitale Erfassung der Gebäudedaten zur Mieterhöhungsberechnung nach der geplanten Sanierung.
+                  Sie besitzen ein <strong>Mehrfamilienhaus (Baujahr 1965)</strong> in der Siedlungsstraße 23. 
+                  Es hat eine Rotklinkerfassade und 10 Wohneinheiten. Sie planen eine <strong>WDVS-Sanierung</strong> 
+                  und müssen für einen Mieter (EG rechts, 57,5m²) die Mieterhöhung berechnen.
                 </p>
               </div>
 

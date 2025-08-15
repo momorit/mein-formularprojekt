@@ -59,7 +59,11 @@ export default function VariantA({ onComplete, startTime }: VariantAProps) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          context: 'Mehrfamilienhaus Baujahr 1965, 10 Wohneinheiten, 634m² Wohnfläche, Fassadensanierung geplant' 
+          <p className="text-blue-900 mb-3">
+            Sie besitzen ein <strong>Mehrfamilienhaus (Baujahr 1965)</strong> in der Siedlungsstraße 23. 
+            Es hat eine Rotklinkerfassade und 10 Wohneinheiten. Sie planen eine <strong>WDVS-Sanierung</strong> 
+            und müssen für Mieterin Miriam (EG rechts, 57,5m²) die Mieterhöhung berechnen.
+          </p>
         })
       })
       
