@@ -1,28 +1,11 @@
-// src/app/api/dialog/start/route.ts - UPDATED: Angepasste Fragen (einfach + eine schwer)
 import { NextRequest, NextResponse } from 'next/server'
 
 export async function POST(request: NextRequest) {
   try {
     const { context } = await request.json()
     
-    // Optimized questions for Variant B - most are easy, one is hard
+    // Predefined questions for Variant B
     const questions = [
-      {
-        id: 'building_year',
-        question: 'In welchem Jahr wurde Ihr Gebäude erbaut?',
-        field: 'BAUJAHR',
-        type: 'number',
-        difficulty: 'easy',
-        required: true
-      },
-      {
-        id: 'total_units',
-        question: 'Wie viele Wohneinheiten befinden sich in Ihrem Gebäude?',
-        field: 'ANZAHL_WOHNEINHEITEN',
-        type: 'number',
-        difficulty: 'easy',
-        required: true
-      },
       {
         id: 'total_living_space',
         question: 'Wie groß ist die gesamte Wohnfläche Ihres Gebäudes in Quadratmetern?',
@@ -32,25 +15,25 @@ export async function POST(request: NextRequest) {
         required: true
       },
       {
-        id: 'building_address',
-        question: 'Wie lautet die vollständige Adresse Ihres Gebäudes?',
-        field: 'GEBÄUDEADRESSE',
-        type: 'text',
+        id: 'num_units',
+        question: 'Wie viele Wohneinheiten befinden sich in dem Gebäude?',
+        field: 'ANZAHL_WOHNEINHEITEN',
+        type: 'number',
         difficulty: 'easy',
         required: true
       },
       {
-        id: 'insulation_system',
-        question: 'Welches Dämmsystem planen Sie für die Fassadensanierung?',
-        field: 'DÄMMSYSTEM',
-        type: 'text',
-        difficulty: 'easy',
+        id: 'insulation_measures',
+        question: 'Beschreiben Sie detailliert die geplanten Dämmmaßnahmen. Welche Fassaden sollen gedämmt werden und mit welchem System?',
+        field: 'DÄMMUNGSMASSNAHMEN_DETAIL',
+        type: 'textarea',
+        difficulty: 'hard',
         required: true
       },
       {
-        id: 'complex_energy_analysis',
-        question: 'Führen Sie eine detaillierte energetische Bewertung durch: Berechnen Sie die U-Werte vor und nach der Sanierung, den erwarteten Primärenergiebedarf, die CO2-Einsparungen und erstellen Sie eine Wirtschaftlichkeitsberechnung mit Amortisationszeit für die geplante WDVS-Maßnahme.',
-        field: 'ENERGETISCHE_ANALYSE_DETAIL',
+        id: 'cost_calculation',
+        question: 'Wie hoch schätzen Sie die Gesamtkosten der Sanierung ein und wie soll die Finanzierung erfolgen? Bitte geben Sie auch an, welcher Anteil auf die Mieter umgelegt werden soll.',
+        field: 'KOSTEN_FINANZIERUNG',
         type: 'textarea',
         difficulty: 'hard',
         required: true

@@ -1,4 +1,4 @@
-// src/components/VariantB.tsx - UPDATED: Ohne Überspringen, mit Szenario, angepasste Fragen
+// src/components/VariantB.tsx - FLOW FIXED
 'use client'
 
 import React, { useState, useEffect } from 'react'
@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
-import { MessageCircle, Save, Send, Play, CheckCircle, Home } from 'lucide-react'
+import { MessageCircle, Save, Send, Play, CheckCircle } from 'lucide-react'
 
 interface DialogQuestion {
   id: string
@@ -54,24 +54,45 @@ export default function VariantB({ onComplete, startTime }: VariantBProps) {
     setDialogStarted(true)
     
     try {
-      // Predefined optimized questions - most are easy, one is hard
-      const predefinedQuestions: DialogQuestion[] = [
-        {
-          id: 'building_year',
-          question: 'In welchem Jahr wurde Ihr Gebäude erbaut?',
-          field: 'BAUJAHR',
-          type: 'number',
-          difficulty: 'easy',
-          required: true
-        },
-        {
-          id: 'total_units',
-          question: 'Wie viele Wohneinheiten befinden sich in Ihrem Gebäude?',
-          field: 'ANZAHL_WOHNEINHEITEN',
-          type: 'number',
-          difficulty: 'easy',
-          required: true
-        },
+      const response = await fetch('/api/dialog/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          context: 'Mehrfamilienhaus Baujahr 1965, 10 Wohneinheiten, 634m² Wohnfläche, WDVS-Sanierung' 
+        })
+      })
+      
+      if (!response.ok) throw new Error('Failed to start dialog')
+      
+      const data = await response.json()
+      
+      if (data.questions && Array.isArray(data.questions)) {
+        setQuestions(data.questions)
+        setSessionId(data.session_id || `session_${Date.now()}`)
+        setCurrentQuestionIndex(0)
+        
+        const welcomeMessage = `Hallo! Ich bin Ihr KI-Assistent für die Gebäude-Energieberatung. 
+
+Ich führe Sie Schritt für Schritt durch die Erfassung Ihrer Gebäudedaten für die geplante Fassadensanierung.
+
+**Ihr Szenario:** Sie besitzen ein Mehrfamilienhaus (Baujahr 1965) in der Siedlungsstraße 23, Großstadt, und planen eine energetische Modernisierung mit WDVS.
+
+Lassen Sie uns beginnen! Ich stelle Ihnen nacheinander ${data.questions.length} Fragen. Bei Unklarheiten können Sie gerne nachfragen.
+
+${data.questions[0]?.question || 'Erste Frage wird geladen...'}`
+
+        setChatHistory([{
+          role: 'assistant',
+          message: welcomeMessage,
+          timestamp: new Date()
+        }])
+      } else {
+        throw new Error('Invalid dialog response')
+      }
+    } catch (error) {
+      console.error('Failed to start dialog:', error)
+      // Fallback questions
+      const fallbackQuestions: DialogQuestion[] = [
         {
           id: 'total_living_space',
           question: 'Wie groß ist die gesamte Wohnfläche Ihres Gebäudes in Quadratmetern?',
@@ -81,76 +102,25 @@ export default function VariantB({ onComplete, startTime }: VariantBProps) {
           required: true
         },
         {
-          id: 'building_address',
-          question: 'Wie lautet die vollständige Adresse Ihres Gebäudes?',
-          field: 'GEBÄUDEADRESSE',
-          type: 'text',
-          difficulty: 'easy',
-          required: true
-        },
-        {
-          id: 'insulation_system',
-          question: 'Welches Dämmsystem planen Sie für die Fassadensanierung?',
-          field: 'DÄMMSYSTEM',
-          type: 'text',
-          difficulty: 'easy',
-          required: true
-        },
-        {
-          id: 'complex_energy_analysis',
-          question: 'Führen Sie eine detaillierte energetische Bewertung durch: Berechnen Sie die U-Werte vor und nach der Sanierung, den erwarteten Primärenergiebedarf, die CO2-Einsparungen und erstellen Sie eine Wirtschaftlichkeitsberechnung mit Amortisationszeit für die geplante WDVS-Maßnahme.',
-          field: 'ENERGETISCHE_ANALYSE_DETAIL',
-          type: 'textarea',
-          difficulty: 'hard',
-          required: true
-        }
-      ]
-      
-      setQuestions(predefinedQuestions)
-      setSessionId(`session_${Date.now()}`)
-      setCurrentQuestionIndex(0)
-      
-      const welcomeMessage = `Hallo! Ich bin Ihr KI-Assistent für die Gebäude-Energieberatung. 
-
-Ich führe Sie Schritt für Schritt durch die Erfassung Ihrer Gebäudedaten für die geplante Fassadensanierung.
-
-**Ihr Szenario:** Sie besitzen ein Mehrfamilienhaus (Baujahr 1965) in der Siedlungsstraße 23, Großstadt, und planen eine energetische Modernisierung mit WDVS.
-
-Lassen Sie uns beginnen! Ich stelle Ihnen nacheinander ${predefinedQuestions.length} Fragen. Bei Unklarheiten können Sie gerne nachfragen.
-
-**Frage 1 von ${predefinedQuestions.length}:**
-${predefinedQuestions[0]?.question || 'Erste Frage wird geladen...'}`
-
-      setChatHistory([{
-        role: 'assistant',
-        message: welcomeMessage,
-        timestamp: new Date()
-      }])
-      
-    } catch (error) {
-      console.error('Failed to start dialog:', error)
-      // Fallback questions
-      const fallbackQuestions: DialogQuestion[] = [
-        {
-          id: 'building_year',
-          question: 'In welchem Jahr wurde Ihr Gebäude erbaut?',
-          field: 'BAUJAHR',
-          type: 'number',
-          difficulty: 'easy',
-          required: true
-        },
-        {
-          id: 'total_units',
-          question: 'Wie viele Wohneinheiten befinden sich in Ihrem Gebäude?',
+          id: 'num_units',
+          question: 'Wie viele Wohneinheiten befinden sich in dem Gebäude?',
           field: 'ANZAHL_WOHNEINHEITEN',
           type: 'number',
           difficulty: 'easy',
           required: true
         },
         {
-          id: 'complex_energy_analysis',
-          question: 'Führen Sie eine detaillierte energetische Bewertung durch: Berechnen Sie die U-Werte vor und nach der Sanierung, den erwarteten Primärenergiebedarf, die CO2-Einsparungen und erstellen Sie eine Wirtschaftlichkeitsberechnung.',
-          field: 'ENERGETISCHE_ANALYSE_DETAIL',
+          id: 'insulation_measures',
+          question: 'Beschreiben Sie detailliert die geplanten Dämmmaßnahmen. Welche Fassaden sollen gedämmt werden und mit welchem System?',
+          field: 'DÄMMUNGSMASSNAHMEN_DETAIL',
+          type: 'textarea',
+          difficulty: 'hard',
+          required: true
+        },
+        {
+          id: 'cost_calculation',
+          question: 'Wie hoch schätzen Sie die Gesamtkosten der Sanierung ein und wie soll die Finanzierung erfolgen? Bitte geben Sie auch an, welcher Anteil auf die Mieter umgelegt werden soll.',
+          field: 'KOSTEN_FINANZIERUNG',
           type: 'textarea',
           difficulty: 'hard',
           required: true
@@ -190,87 +160,84 @@ ${fallbackQuestions[0].question}`,
       const currentQuestion = questions[currentQuestionIndex]
       
       // Check if it's a help request
-      if (currentMessage === '?' || currentMessage.toLowerCase().includes('hilfe')) {
-        let helpMessage = ''
-        if (currentQuestion?.difficulty === 'hard') {
-          helpMessage = `Das ist eine komplexe Frage. Hier einige Hinweise:
-
-**Für die energetische Bewertung benötigen Sie:**
-• U-Werte vorher: ca. 1,4 W/(m²K) für ungedämmte Wand von 1965
-• U-Werte nachher: ca. 0,24 W/(m²K) mit 140mm WDVS
-• Primärenergiebedarf: Berechnung basierend auf Heizenergieverbrauch
-• CO2-Einsparung: ca. 40-60% durch die Dämmmaßnahme
-• Kosten: ca. 150-200€/m² Fassadenfläche für WDVS
-
-Versuchen Sie eine realistische Schätzung basierend auf diesen Richtwerten.`
-        } else {
-          helpMessage = `Hinweis zu Ihrer Frage: ${currentQuestion?.question}
-
-**Basierend auf Ihrem Szenario:**
-• Gebäude: Mehrfamilienhaus, Baujahr 1965
-• Lage: Siedlungsstraße 23, Großstadt  
-• Details: 10 Wohneinheiten, 634m² Wohnfläche
-• Geplant: WDVS mit 140mm Mineralwolle
-
-Diese Informationen helfen Ihnen bei der Antwort!`
-        }
+      if (currentMessage === '?' || currentMessage.toLowerCase().includes('hilfe') || currentMessage.toLowerCase().includes('help')) {
+        const response = await fetch('/api/dialog/message', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            message: currentMessage,
+            session_id: sessionId,
+            currentQuestion: currentQuestion,
+            questionIndex: currentQuestionIndex
+          })
+        })
         
-        setChatHistory(prev => [...prev, {
-          role: 'assistant',
-          message: helpMessage,
-          timestamp: new Date()
-        }])
+        if (response.ok) {
+          const data = await response.json()
+          setChatHistory(prev => [...prev, {
+            role: 'assistant',
+            message: data.response,
+            timestamp: new Date()
+          }])
+        }
         
         setIsLoading(false)
         return
       }
       
-      // Save answer and move to next question
+      // Process answer
       if (currentQuestion) {
+        // Save answer
         setAnswers(prev => ({
           ...prev,
           [currentQuestion.id]: currentMessage
         }))
         
-        // Check if there are more questions
+        // Move to next question or complete
         if (currentQuestionIndex < questions.length - 1) {
           const nextIndex = currentQuestionIndex + 1
           const nextQuestion = questions[nextIndex]
           
+          const response = `Vielen Dank! Ihre Antwort wurde gespeichert.
+
+**Nächste Frage (${nextIndex + 1}/${questions.length}):**
+
+${nextQuestion.question}`
+
           setChatHistory(prev => [...prev, {
             role: 'assistant',
-            message: `Vielen Dank für Ihre Antwort!
-
-**Frage ${nextIndex + 1} von ${questions.length}:**
-${nextQuestion.question}
-
-${nextQuestion.difficulty === 'hard' ? '⚠️ Diese Frage ist komplex - zögern Sie nicht nachzufragen, wenn Sie Hilfe benötigen!' : ''}`,
+            message: response,
             timestamp: new Date()
           }])
           
           setCurrentQuestionIndex(nextIndex)
         } else {
-          // All questions completed
-          setChatHistory(prev => [...prev, {
-            role: 'assistant',
-            message: `Ausgezeichnet! Sie haben alle ${questions.length} Fragen beantwortet.
-
-Ihre Angaben sind vollständig und können nun gespeichert werden. Klicken Sie auf "Dialog speichern & weiter" um fortzufahren.
+          // Dialog completed
+          const completionMessage = `🎉 Ausgezeichnet! Sie haben alle Fragen beantwortet.
 
 **Zusammenfassung Ihrer Angaben:**
-${Object.entries({...answers, [currentQuestion.id]: currentMessage}).map(([key, value], idx) => 
-  `${idx + 1}. ${questions.find(q => q.id === key)?.question}: ${value}`
-).join('\n')}`,
+${questions.map((q, i) => {
+            const answer = answers[q.id] || (i === currentQuestionIndex ? currentMessage : 'Nicht beantwortet')
+            return `• ${q.field}: ${answer}`
+          }).join('\n')}
+
+Ihre Daten wurden erfasst und können nun gespeichert werden.`
+
+          setChatHistory(prev => [...prev, {
+            role: 'assistant',
+            message: completionMessage,
             timestamp: new Date()
           }])
           
           setIsCompleted(true)
         }
       }
+      
     } catch (error) {
+      console.error('Error processing message:', error)
       setChatHistory(prev => [...prev, {
         role: 'assistant',
-        message: 'Entschuldigung, es gab einen Fehler. Können Sie Ihre Antwort wiederholen?',
+        message: 'Entschuldigung, es gab einen Fehler bei der Verarbeitung. Können Sie Ihre Antwort wiederholen?',
         timestamp: new Date()
       }])
     } finally {
@@ -279,63 +246,80 @@ ${Object.entries({...answers, [currentQuestion.id]: currentMessage}).map(([key, 
   }
 
   const handleSave = async () => {
-    try {
-      setIsLoading(true)
-      
-      // Include current message if dialog isn't completed yet
-      const finalAnswers = { ...answers }
-      if (!isCompleted && userMessage.trim()) {
-        const currentQuestion = questions[currentQuestionIndex]
-        if (currentQuestion) {
-          finalAnswers[currentQuestion.id] = userMessage.trim()
-        }
+  // DEBUG LOGGING  
+  console.log('🐛 DEBUG VariantB handleSave:', {
+    step,
+    isStudy,
+    participantId,
+    variant,
+    searchParams: Object.fromEntries(searchParams.entries())
+  })
+  
+  try {
+    setIsLoading(true)
+    
+    // Include current message if dialog isn't completed yet
+    const finalAnswers = { ...answers }
+    if (!isCompleted && userMessage.trim()) {
+      const currentQuestion = questions[currentQuestionIndex]
+      if (currentQuestion) {
+        finalAnswers[currentQuestion.id] = userMessage.trim()
       }
-      
-      const dialogData = {
-        variant: 'B',
-        participantId: participantId,
-        session_id: sessionId,
-        questions: questions,
-        answers: finalAnswers,
-        chatHistory: chatHistory,
-        timestamp: new Date().toISOString(),
-        metadata: {
-          completion_rate: calculateCompletionRate(finalAnswers),
-          total_questions: questions.length,
-          answered_questions: Object.keys(finalAnswers).length,
-          is_completed: isCompleted
-        }
+    }
+    
+    const dialogData = {
+      variant: 'B',
+      participantId: participantId,
+      session_id: sessionId,
+      questions: questions,
+      answers: finalAnswers,
+      chatHistory: chatHistory,
+      timestamp: new Date().toISOString(),
+      metadata: {
+        completion_rate: calculateCompletionRate(finalAnswers),
+        total_questions: questions.length,
+        answered_questions: Object.keys(finalAnswers).length,
+        is_completed: isCompleted
       }
+    }
+    
+    const response = await fetch('/api/dialog/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(dialogData)
+    })
+    
+    if (!response.ok) throw new Error('Save failed')
+    
+    if (isStudy) {
+      // NAVIGATION LOGIC WITH DEBUG
+      const nextStep = step === '2' ? 'variant1_survey' : 'variant2_survey'
       
-      const response = await fetch('/api/dialog/save', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(dialogData)
+      console.log('🔄 DEBUG VariantB Navigation:', {
+        currentStep: step,
+        nextStep,
+        participantId,
+        url: `/study?step=${nextStep}&participant=${participantId}`
       })
       
-      if (!response.ok) throw new Error('Save failed')
-      
-      if (isStudy) {
-        // Navigation logic
-        const nextStep = step === '2' ? 'variant1_survey' : 'variant2_survey'
-        router.push(`/study?step=${nextStep}&participant=${participantId}`)
-      } else {
-        alert('Daten erfolgreich gespeichert!')
-        if (onComplete) onComplete(dialogData)
-      }
-      
-    } catch (error) {
-      console.error('Save error:', error)
-      alert('Fehler beim Speichern. Versuchen Sie es erneut.')
-    } finally {
-      setIsLoading(false)
+      router.push(`/study?step=${nextStep}&participant=${participantId}`)
+    } else {
+      alert('Daten erfolgreich gespeichert!')
+      if (onComplete) onComplete(dialogData)
     }
+    
+  } catch (error) {
+    console.error('❌ VariantB Save error:', error)
+    alert('Fehler beim Speichern. Versuchen Sie es erneut.')
+  } finally {
+    setIsLoading(false)
   }
+}
 
   const calculateCompletionRate = (currentAnswers: Record<string, string>) => {
     const totalQuestions = questions.length
     const answeredQuestions = Object.keys(currentAnswers).length
-    return totalQuestions > 0 ? (answeredQuestions / totalQuestions) * 100 : 0
+    return totalQuestions > 0 ? Math.round((answeredQuestions / totalQuestions) * 100) : 0
   }
 
   if (!dialogStarted) {
@@ -345,7 +329,7 @@ ${Object.entries({...answers, [currentQuestion.id]: currentMessage}).map(([key, 
           {isStudy && (
             <div className="text-center mb-8">
               <h1 className="text-3xl font-bold text-purple-600 mb-2">Variante B: Dialog-System</h1>
-              <p className="text-gray-600">KI-gesteuerter Dialog zur Datenerfassung</p>
+              <p className="text-gray-600">KI-geführte Unterhaltung zur Datenerfassung</p>
               {participantId && (
                 <Badge variant="outline" className="mt-2">Teilnehmer: {participantId}</Badge>
               )}
@@ -359,48 +343,72 @@ ${Object.entries({...answers, [currentQuestion.id]: currentMessage}).map(([key, 
 
           <Card className="max-w-2xl mx-auto">
             <CardHeader>
-              <CardTitle className="text-center">💬 Dialog-System</CardTitle>
+              <CardTitle className="text-center">💬 KI-Dialog für Energieberatung</CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="bg-purple-50 p-6 rounded-lg">
-                <h3 className="text-lg font-semibold text-purple-800 mb-3">💬 So funktioniert der Dialog</h3>
-                <ul className="text-purple-900 space-y-2 text-sm">
-                  <li>• Die KI stellt Ihnen nacheinander Fragen</li>
-                  <li>• Antworten Sie in natürlicher Sprache</li>
-                  <li>• Bei Unklarheiten einfach "?" eingeben</li>
-                  <li>• Der Dialog führt Sie durch alle benötigten Informationen</li>
-                </ul>
-              </div>
-
-              <div className="bg-green-50 p-6 rounded-lg">
-                <h3 className="text-lg font-semibold text-green-800 mb-3">🏢 Ihr Szenario</h3>
-                <p className="text-green-900">
+              <div className="bg-blue-50 p-6 rounded-lg">
+                <h3 className="text-lg font-semibold text-blue-800 mb-3">🏢 Ihr Szenario</h3>
+                <p className="text-blue-900 mb-3">
                   Sie besitzen ein <strong>Mehrfamilienhaus (Baujahr 1965)</strong> in der Siedlungsstraße 23, Großstadt. 
-                  Das Gebäude hat 10 Wohneinheiten mit 634m² Wohnfläche. Sie planen eine 
-                  <strong>energetische Modernisierung der Fassade mit WDVS</strong> (140mm Mineralwolle).
+                  Das Gebäude hat 10 Wohneinheiten mit 634m² Wohnfläche. Sie planen eine energetische Sanierung 
+                  der Fassade mit einem Wärmedämmverbundsystem (WDVS) aus Mineralwolle.
+                </p>
+                <p className="text-blue-800 text-sm">
+                  <strong>Ziel:</strong> Erfassung der Gebäudedaten für eine Energieberatung zur Berechnung 
+                  möglicher Mieterhöhungen nach der geplanten Sanierung.
                 </p>
               </div>
 
-              <div className="text-center">
-                <Button 
-                  onClick={startDialog}
-                  disabled={isLoading}
-                  size="lg"
-                  className="bg-purple-600 hover:bg-purple-700 text-white px-8 py-3"
-                >
-                  {isLoading ? (
-                    <div className="flex items-center">
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                      Dialog wird vorbereitet...
-                    </div>
-                  ) : (
-                    <>
-                      <Play className="w-5 h-5 mr-2" />
-                      Dialog starten
-                    </>
-                  )}
-                </Button>
+              <div className="bg-purple-50 p-6 rounded-lg">
+                <h3 className="text-lg font-semibold text-purple-800 mb-3">🤖 So funktioniert Variante B</h3>
+                <ul className="space-y-2 text-purple-700">
+                  <li className="flex items-start space-x-2">
+                    <span className="text-purple-600 mt-1">•</span>
+                    <span>Ein KI-Assistent führt Sie durch einen strukturierten Dialog</span>
+                  </li>
+                  <li className="flex items-start space-x-2">
+                    <span className="text-purple-600 mt-1">•</span>
+                    <span>Sie beantworten 4 gezielte Fragen nacheinander</span>
+                  </li>
+                  <li className="flex items-start space-x-2">
+                    <span className="text-purple-600 mt-1">•</span>
+                    <span>Bei Unklarheiten einfach <strong>"?"</strong> eingeben für Hilfe</span>
+                  </li>
+                  <li className="flex items-start space-x-2">
+                    <span className="text-purple-600 mt-1">•</span>
+                    <span>Antworten Sie natürlich und ausführlich</span>
+                  </li>
+                </ul>
               </div>
+
+              <div className="bg-yellow-50 p-4 rounded-lg">
+                <h4 className="font-semibold text-yellow-800 mb-2">💡 Hilfe-Tipps</h4>
+                <ul className="text-yellow-700 text-sm space-y-1">
+                  <li>• Geben Sie <strong>"?"</strong> ein, wenn Sie Hilfe zu einer Frage brauchen</li>
+                  <li>• Der Assistent kennt alle Details zu Ihrem Gebäude</li>
+                  <li>• Sie können jederzeit nachfragen oder um Erklärungen bitten</li>
+                  <li>• Antworten müssen nicht perfekt formuliert sein</li>
+                </ul>
+              </div>
+
+              <Button 
+                onClick={startDialog}
+                disabled={isLoading}
+                className="w-full bg-purple-600 hover:bg-purple-700 text-white py-3 text-lg"
+                size="lg"
+              >
+                {isLoading ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    KI-Assistent wird gestartet...
+                  </>
+                ) : (
+                  <>
+                    <Play className="w-5 h-5 mr-2" />
+                    Dialog mit KI-Assistent starten
+                  </>
+                )}
+              </Button>
             </CardContent>
           </Card>
         </div>
@@ -410,11 +418,11 @@ ${Object.entries({...answers, [currentQuestion.id]: currentMessage}).map(([key, 
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">
-      <div className="container mx-auto px-4 max-w-5xl">
+      <div className="container mx-auto px-4 max-w-4xl">
         {isStudy && (
-          <div className="text-center mb-8">
+          <div className="text-center mb-6">
             <h1 className="text-3xl font-bold text-purple-600 mb-2">Variante B: Dialog-System</h1>
-            <p className="text-gray-600">KI-gesteuerter Dialog zur Datenerfassung</p>
+            <p className="text-gray-600">KI-geführte Unterhaltung zur Datenerfassung</p>
             {participantId && (
               <Badge variant="outline" className="mt-2">Teilnehmer: {participantId}</Badge>
             )}
@@ -426,47 +434,28 @@ ${Object.entries({...answers, [currentQuestion.id]: currentMessage}).map(([key, 
           </div>
         )}
 
-        {/* Scenario Display - Always visible */}
-        <div className="mb-6">
-          <Card>
-            <CardContent className="p-4">
-              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                <div className="flex items-center mb-2">
-                  <Home className="w-5 h-5 text-green-600 mr-2" />
-                  <h3 className="text-lg font-semibold text-green-800">🏢 Ihr Szenario</h3>
-                </div>
-                <p className="text-green-900 text-sm">
-                  <strong>Mehrfamilienhaus, Baujahr 1965</strong> • Siedlungsstraße 23, Großstadt • 
-                  <strong>10 Wohneinheiten, 634m² Wohnfläche</strong> • 
-                  Geplante Sanierung: <strong>WDVS mit 140mm Mineralwolle</strong>
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        <div className="grid lg:grid-cols-3 gap-8">
-          {/* Dialog */}
+        <div className="grid lg:grid-cols-3 gap-8 max-w-6xl mx-auto">
+          {/* Chat Interface */}
           <div className="lg:col-span-2">
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center justify-between">
-                  <span className="flex items-center">
-                    <MessageCircle className="w-6 h-6 mr-2 text-purple-600" />
-                    KI-Dialog
-                  </span>
-                  <div className="flex items-center space-x-3">
-                    <Badge variant="outline" className="text-purple-600">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-xl flex items-center">
+                    <MessageCircle className="w-5 h-5 mr-2 text-purple-600" />
+                    KI-Assistent Dialog
+                  </CardTitle>
+                  <div className="flex items-center space-x-2">
+                    <Badge variant="outline" className="bg-purple-50 text-purple-700">
                       Frage {Math.min(currentQuestionIndex + 1, questions.length)} von {questions.length}
                     </Badge>
                     {isCompleted && (
-                      <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
-                        <CheckCircle className="w-4 h-4 mr-1" />
-                        Vollständig
+                      <Badge className="bg-green-100 text-green-800">
+                        <CheckCircle className="w-3 h-3 mr-1" />
+                        Abgeschlossen
                       </Badge>
                     )}
                   </div>
-                </CardTitle>
+                </div>
               </CardHeader>
               <CardContent>
                 {/* Chat History */}
@@ -474,150 +463,175 @@ ${Object.entries({...answers, [currentQuestion.id]: currentMessage}).map(([key, 
                   {chatHistory.map((msg, index) => (
                     <div key={index} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                       <div className={`max-w-[80%] p-3 rounded-lg ${
-                        msg.role === 'user'
-                          ? 'bg-purple-100 text-purple-900'
+                        msg.role === 'user' 
+                          ? 'bg-purple-100 text-purple-900' 
                           : 'bg-white text-gray-800 border border-gray-200'
                       }`}>
-                        <p className="text-sm whitespace-pre-wrap">{msg.message}</p>
-                        <span className="text-xs text-gray-500 mt-1 block">
+                        <div className="text-sm whitespace-pre-wrap">{msg.message}</div>
+                        <div className={`text-xs mt-1 ${msg.role === 'user' ? 'text-purple-600' : 'text-gray-500'}`}>
                           {msg.timestamp.toLocaleTimeString()}
-                        </span>
+                        </div>
                       </div>
                     </div>
                   ))}
                   {isLoading && (
                     <div className="flex justify-start">
-                      <div className="bg-white text-gray-800 border border-gray-200 p-3 rounded-lg">
+                      <div className="bg-white p-3 rounded-lg border border-gray-200">
                         <div className="flex items-center space-x-2">
                           <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-purple-600"></div>
-                          <span className="text-sm">KI denkt nach...</span>
+                          <span className="text-sm text-gray-500">KI-Assistent antwortet...</span>
                         </div>
                       </div>
                     </div>
                   )}
                 </div>
 
-                {/* User Input */}
-                <div className="space-y-4">
-                  <div className="flex space-x-3">
-                    <Textarea
-                      value={userMessage}
-                      onChange={(e) => setUserMessage(e.target.value)}
-                      placeholder={isCompleted ? "Dialog abgeschlossen - Sie können speichern" : "Ihre Antwort hier eingeben... (oder '?' für Hilfe)"}
-                      className="flex-1 min-h-[80px] max-h-[150px]"
-                      disabled={isLoading}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && !e.shiftKey) {
-                          e.preventDefault()
-                          if (!isCompleted) handleSendMessage()
-                        }
-                      }}
-                    />
-                    <div className="flex flex-col space-y-2">
-                      <Button 
-                        onClick={handleSendMessage}
-                        disabled={isLoading || !userMessage.trim() || isCompleted}
-                        className="bg-purple-600 hover:bg-purple-700 px-4 py-2"
-                      >
-                        <Send className="w-4 h-4" />
-                      </Button>
-                      {!isCompleted && (
-                        <Button 
-                          variant="outline"
-                          onClick={() => setUserMessage('?')}
-                          disabled={isLoading}
-                          className="px-4 py-2 text-xs"
-                        >
-                          ?
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="flex justify-center">
+                {/* Message Input */}
+                <div className="space-y-3">
+                  <Textarea
+                    value={userMessage}
+                    onChange={(e) => setUserMessage(e.target.value)}
+                    placeholder={isCompleted ? "Dialog abgeschlossen. Sie können die Daten jetzt speichern." : "Ihre Antwort eingeben... (oder '?' für Hilfe)"}
+                    rows={3}
+                    className="resize-none"
+                    disabled={isCompleted}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault()
+                        handleSendMessage()
+                      }
+                    }}
+                  />
+                  <div className="flex space-x-2">
                     <Button 
-                      onClick={handleSave}
-                      disabled={isLoading}
-                      className="bg-purple-600 hover:bg-purple-700 text-white px-8 py-3"
+                      onClick={handleSendMessage}
+                      disabled={!userMessage.trim() || isLoading || isCompleted}
+                      className="flex-1 bg-purple-600 hover:bg-purple-700"
                     >
-                      {isLoading ? (
-                        <div className="flex items-center">
-                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                          Speichert...
-                        </div>
-                      ) : (
-                        <>
-                          <Save className="w-5 h-5 mr-2" />
-                          {isStudy ? 'Dialog speichern & weiter' : 'Dialog speichern'}
-                        </>
-                      )}
+                      <Send className="w-4 h-4 mr-2" />
+                      {isCompleted ? 'Dialog beendet' : 'Antwort senden'}
                     </Button>
-                    {/* REMOVED: Überspringen Button */}
+                    <Button 
+                      onClick={() => setUserMessage('?')}
+                      variant="outline"
+                      disabled={isCompleted}
+                      className="px-3"
+                    >
+                      ?
+                    </Button>
                   </div>
                 </div>
               </CardContent>
             </Card>
           </div>
 
-          {/* Progress & Help */}
-          <div className="lg:col-span-1 space-y-6">
-            {/* Progress Card */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">📊 Fortschritt</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div>
-                    <div className="flex justify-between text-sm mb-2">
-                      <span>Beantwortete Fragen</span>
-                      <span>{Object.keys(answers).length} / {questions.length}</span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div 
-                        className="bg-purple-600 h-2 rounded-full transition-all duration-300"
-                        style={{ width: `${calculateCompletionRate(answers)}%` }}
-                      />
-                    </div>
-                  </div>
-                  
-                  <div className="text-sm space-y-2">
-                    {questions.map((q, index) => (
-                      <div key={q.id} className={`flex items-center space-x-2 ${
-                        index === currentQuestionIndex ? 'font-semibold text-purple-600' : 
-                        answers[q.id] ? 'text-green-600' : 'text-gray-400'
-                      }`}>
-                        <div className={`w-2 h-2 rounded-full ${
-                          answers[q.id] ? 'bg-green-500' : 
-                          index === currentQuestionIndex ? 'bg-purple-500' : 'bg-gray-300'
-                        }`} />
-                        <span className="truncate">
-                          {q.difficulty === 'hard' ? '⚠️ ' : ''}
-                          Frage {index + 1}
-                        </span>
+          {/* Progress & Save */}
+          <div className="lg:col-span-1">
+            <div className="space-y-6">
+              {/* Progress Card */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">📊 Fortschritt</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <div>
+                      <div className="flex justify-between text-sm mb-2">
+                        <span>Beantwortet</span>
+                        <span>{Object.keys(answers).length}/{questions.length}</span>
                       </div>
-                    ))}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div 
+                          className="bg-purple-600 h-2 rounded-full transition-all duration-300"
+                          style={{ width: `${calculateCompletionRate(answers)}%` }}
+                        ></div>
+                      </div>
+                    </div>
 
-            {/* Help Card */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">💡 Hilfe</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-sm space-y-2 text-gray-600">
-                  <p><strong>"?"</strong> - Hilfe zur aktuellen Frage</p>
-                  <p><strong>Enter</strong> - Nachricht senden</p>
-                  <p><strong>Shift+Enter</strong> - Neue Zeile</p>
-                  <p className="text-orange-600 mt-3">
-                    <strong>⚠️ Komplexe Fragen:</strong> Zögern Sie nicht nachzufragen!
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
+                    <div className="space-y-2">
+                      {questions.map((q, index) => {
+                        const isAnswered = answers[q.id]
+                        const isCurrent = index === currentQuestionIndex
+                        return (
+                          <div key={q.id} className={`text-xs p-2 rounded flex items-center space-x-2 ${
+                            isAnswered ? 'bg-green-50 text-green-800' :
+                            isCurrent ? 'bg-purple-50 text-purple-800' :
+                            'bg-gray-50 text-gray-600'
+                          }`}>
+                            <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                              isAnswered ? 'bg-green-500 border-green-500' :
+                              isCurrent ? 'border-purple-500' :
+                              'border-gray-300'
+                            }`}>
+                              {isAnswered && <CheckCircle className="w-3 h-3 text-white" />}
+                              {isCurrent && !isAnswered && <div className="w-2 h-2 bg-purple-500 rounded-full"></div>}
+                            </div>
+                            <span className="flex-1 truncate">{q.field}</span>
+                            {q.difficulty === 'hard' && (
+                              <Badge variant="outline" className="text-xs">⚠️</Badge>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Save Card */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">💾 Speichern</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <div className="text-sm text-gray-600">
+                      {isCompleted ? (
+                        <p className="text-green-700">✅ Alle Fragen beantwortet! Sie können jetzt speichern.</p>
+                      ) : (
+                        <p>Sie können jederzeit zwischenspeichern oder den Dialog fortsetzen.</p>
+                      )}
+                    </div>
+
+                    <Button 
+                      onClick={handleSave}
+                      disabled={isLoading}
+                      className="w-full bg-green-600 hover:bg-green-700 text-white"
+                    >
+                      <Save className="w-4 h-4 mr-2" />
+                      {isStudy ? 'Speichern & weiter' : 'Dialog speichern'}
+                    </Button>
+
+                    {isStudy && (
+                      <Button 
+                        variant="outline"
+                        onClick={() => {
+                          const nextStep = step === '2' ? 'variant1_survey' : 'variant2_survey'
+                          router.push(`/study?step=${nextStep}&participant=${participantId}`)
+                        }}
+                        className="w-full"
+                      >
+                        Überspringen
+                      </Button>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Help Card */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">💡 Hilfe</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-sm space-y-2 text-gray-600">
+                    <p><strong>"?"</strong> - Hilfe zur aktuellen Frage</p>
+                    <p><strong>Enter</strong> - Nachricht senden</p>
+                    <p><strong>Shift+Enter</strong> - Neue Zeile</p>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
           </div>
         </div>
       </div>
