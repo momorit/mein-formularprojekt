@@ -162,7 +162,18 @@ ${fallbackQuestions[0].question}`,
       const currentQuestion = questions[currentQuestionIndex]
       
       // Check if it's a help request
-      if (currentMessage === '?' || currentMessage.toLowerCase().includes('hilfe') || currentMessage.toLowerCase().includes('help')) {
+      // Erweiterte Nachfrage-Erkennung
+      const isHelpRequest = currentMessage.includes('?') || 
+                          currentMessage.toLowerCase().includes('hilfe') || 
+                          currentMessage.toLowerCase().includes('help') ||
+                          currentMessage.toLowerCase().includes('erklär') ||
+                          currentMessage.toLowerCase().includes('was bedeutet') ||
+                          currentMessage.toLowerCase().includes('verstehe nicht') ||
+                          currentMessage.toLowerCase().includes('was ist') ||
+                          currentMessage.toLowerCase().includes('wie') ||
+                          currentMessage.toLowerCase().includes('warum')
+
+      if (isHelpRequest) {
         const response = await fetch('/api/dialog/message', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -170,7 +181,8 @@ ${fallbackQuestions[0].question}`,
             message: currentMessage,
             session_id: sessionId,
             currentQuestion: currentQuestion,
-            questionIndex: currentQuestionIndex
+            questionIndex: currentQuestionIndex,
+            isHelpRequest: true // Neuer Flag
           })
         })
         
@@ -181,10 +193,17 @@ ${fallbackQuestions[0].question}`,
             message: data.response,
             timestamp: new Date()
           }])
+        } else {
+          // Fallback-Hilfe wenn API nicht verfügbar
+          setChatHistory(prev => [...prev, {
+            role: 'assistant',
+            message: `**Gerne helfe ich Ihnen!**\n\nSie können jederzeit nachfragen, wenn Sie etwas nicht verstehen. Stellen Sie einfach eine spezifische Frage zu dem, was unklar ist.\n\n**Aktuelle Frage:** ${currentQuestion?.question || 'Keine Frage verfügbar'}`,
+            timestamp: new Date()
+          }])
         }
         
         setIsLoading(false)
-        return
+        return // Wichtig: Stoppe hier, keine weitere Verarbeitung
       }
       
       // Process answer

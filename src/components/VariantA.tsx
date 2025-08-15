@@ -104,48 +104,51 @@ Beginnen Sie einfach mit dem Ausfüllen und fragen Sie bei Unsicherheiten!`,
   }
 
   const handleChatMessage = async () => {
-    if (!chatMessage.trim()) return
+  if (!chatMessage.trim()) return
+  
+  const currentMessage = chatMessage.trim()
+  setChatMessage('')
+  setIsChatLoading(true)
+  
+  // User message hinzufügen
+  setChatHistory(prev => [...prev, {
+    role: 'user',
+    message: currentMessage,
+    timestamp: new Date()
+  }])
+  
+  try {
+    const response = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        message: currentMessage,
+        context: 'Mehrfamilienhaus Baujahr 1965, WDVS-Sanierung, Miriam Mieterin EG rechts',
+        formValues: formValues // Aktueller Formular-Zustand
+      })
+    })
     
-    setIsChatLoading(true)
-    const userMsg = chatMessage
-    setChatMessage('')
+    if (!response.ok) throw new Error('Chat API failed')
     
-    // Add user message
+    const data = await response.json()
+    
     setChatHistory(prev => [...prev, {
-      role: 'user',
-      message: userMsg,
+      role: 'assistant',
+      message: data.response,
       timestamp: new Date()
     }])
     
-    try {
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          message: userMsg, 
-          context: 'Siedlungsstraße 23, Großstadt: 10 WE, Rotklinkerfassade 1965, WDVS-Sanierung Mieter EG'
-        })
-      })
-      
-      if (!response.ok) throw new Error('Chat request failed')
-      
-      const data = await response.json()
-      setChatHistory(prev => [...prev, {
-        role: 'assistant', 
-        message: data.response,
-        timestamp: new Date()
-      }])
-      
-    } catch (error) {
-      setChatHistory(prev => [...prev, {
-        role: 'assistant',
-        message: 'Entschuldigung, der Chat-Service ist momentan nicht verfügbar.',
-        timestamp: new Date()
-      }])
-    } finally {
-      setIsChatLoading(false)
-    }
+  } catch (error) {
+    console.error('Chat error:', error)
+    setChatHistory(prev => [...prev, {
+      role: 'assistant',
+      message: 'Entschuldigung, die Chat-Hilfe ist momentan nicht verfügbar. Versuchen Sie es später erneut.',
+      timestamp: new Date()
+    }])
+  } finally {
+    setIsChatLoading(false)
   }
+}
 
 const handleSubmit = async (e: React.FormEvent) => {
   e.preventDefault()

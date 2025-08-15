@@ -1,77 +1,48 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-function generateHelpResponse(questionId: string): string {
-  switch (questionId) {
-    case 'total_living_space':
-      return `**Hilfe zur Wohnfläche:**
-
-Für Ihr Mehrfamilienhaus beträgt die Gesamtwohnfläche **634 m²** (laut Ihren Unterlagen).
-
-Die Wohnflächenberechnung erfolgt nach WoFlV und umfasst alle beheizten Räume ohne Keller, Dachboden oder Nebenräume.
-
-Antworten Sie einfach mit der Zahl: **634**`
-
-    case 'num_units':
-      return `**Hilfe zur Anzahl Wohneinheiten:**
-
-Ihr Gebäude hat **10 Wohneinheiten** aufgeteilt auf:
-- 2 Eingänge mit je 5 Wohnungen
-- Hochparterre & Obergeschoss: je 1 Drei-Zimmer + 1 Zwei-Zimmer-Wohnung
-- Dachgeschoss: 2 Drei-Zimmer-Wohnungen
-
-Antworten Sie einfach: **10**`
-
-    case 'insulation_measures':
-      return `**Hilfe zu den Dämmmaßnahmen:**
-
-Basierend auf der Empfehlung Ihres Energieberaters:
-
-**Geplante Maßnahmen:**
-- **Material:** 140mm Mineralwolle WDVS (nicht rückbaubar)
-- **Eingangsfassade + Seitenfassaden:** Spaltklinker-Verkleidung (345,40 m²)
-- **Hoffassade:** Weißer Putz (182,10 m²)
-- **Gesamtfläche:** ca. 527,50 m²
-
-**Beispielantwort:** "Fassadendämmung mit 140mm Mineralwolle WDVS. Eingangsfassade und Giebel mit Spaltklinker-Riemchen (345 m²), Hoffassade weiß verputzt (182 m²). Nicht rückbaubar."`
-
-    case 'cost_calculation':
-      return `**Hilfe zur Kostenplanung:**
-
-**Kostenschätzung für WDVS-Dämmung:**
-- Eingangsfassade mit Riemchen: ca. 180-220 €/m²
-- Hoffassade mit Putz: ca. 120-150 €/m²
-- **Gesamtkosten:** ca. 85.000-115.000 €
-
-**Mieterhöhung nach § 559 BGB:**
-- Max. 8% der Kosten jährlich umlegbar
-- Bei 100.000 € = max. 8.000 €/Jahr auf alle Mieter
-
-**Beispielantwort:** "Geschätzte Kosten: 100.000 €. Finanzierung über Eigenkapital und KfW-Förderung. Mieterhöhung: ca. 67 €/Monat pro Wohnung (8% p.a. der Kosten)."`
-
-    default:
-      return `Gerne helfe ich Ihnen bei dieser Frage! Können Sie spezifizieren, wobei Sie Unterstützung benötigen?`
-  }
-}
-
 export async function POST(request: NextRequest) {
   try {
-    const { message, session_id, currentQuestion, questionIndex } = await request.json()
+    const { message, session_id, currentQuestion, questionIndex, isHelpRequest } = await request.json()
     
-    // Check for help request
-    if (message === '?' || message.toLowerCase().includes('hilfe')) {
-      const helpResponse = generateHelpResponse(currentQuestion?.id || '')
-      return NextResponse.json({ response: helpResponse })
+    if (isHelpRequest) {
+      const helpResponse = generateContextualHelp(message, currentQuestion)
+      return NextResponse.json({
+        response: helpResponse,
+        isHelpResponse: true
+      })
     }
     
-    // Process normal message
-    const response = `Vielen Dank für Ihre Antwort: "${message}". Ich habe das notiert.`
+    // Normale Antwortverarbeitung...
+    return NextResponse.json({
+      response: "Antwort verarbeitet",
+      nextQuestion: questionIndex < 3 // Beispiel
+    })
     
-    return NextResponse.json({ response })
   } catch (error) {
-    console.error('Error processing dialog message:', error)
+    console.error('Dialog message error:', error)
     return NextResponse.json(
-      { error: 'Failed to process message' },
+      { error: 'Message processing failed' },
       { status: 500 }
     )
   }
+}
+
+function generateContextualHelp(message: string, currentQuestion: any): string {
+  const questionField = currentQuestion?.field || ''
+  const lowerMessage = message.toLowerCase()
+  
+  // Kontextuelle Hilfe basierend auf aktueller Frage
+  if (questionField.includes('WOHNFLÄCHE') && lowerMessage.includes('?')) {
+    return `**Wohnfläche-Hilfe:**\n\nLaut Ihrem Szenario:\n• **Gesamtwohnfläche:** 634 m²\n• **Anzahl Wohneinheiten:** 10\n• **Miriam's Wohnung:** 57,5 m²\n\nTragen Sie "634" für die Gesamtwohnfläche ein.`
+  }
+  
+  if (questionField.includes('WOHNEINHEITEN') && lowerMessage.includes('?')) {
+    return `**Anzahl Wohneinheiten:**\n\nIhr Mehrfamilienhaus hat:\n• **Insgesamt:** 10 Wohneinheiten\n• **Pro Eingang:** 5 Wohnungen\n• **Aufteilung:** 2 Eingänge, 3 Etagen\n\nAntwort: "10 Wohneinheiten"`
+  }
+  
+  if (questionField.includes('DÄMMUNG') && lowerMessage.includes('?')) {
+    return `**Dämmungsmaßnahmen im Detail:**\n\n**Empfehlung Ihres Energieberaters:**\n• **System:** WDVS (Wärmedämmverbundsystem)\n• **Material:** 140mm Mineralwolle\n• **Eingangsfassade:** Mit Spaltklinker-Verkleidung\n• **Hoffassade:** Weiß verputzt\n• **Flächen:** 345,40 m² (Eingang) + 182,10 m² (Hof)`
+  }
+  
+  return `**Gerne erkläre ich das!**\n\nZu Ihrer Frage "${message}":\n\nKönnen Sie spezifizieren, welchen Teil Sie nicht verstehen? Ich kann Ihnen mit allen Begriffen rund um die Gebäudesanierung helfen!`
 }

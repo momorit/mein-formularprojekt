@@ -7,33 +7,36 @@ export async function POST(request: NextRequest) {
     // Predefined questions for Variant B
     const questions = [
       {
-        id: 'total_living_space',
-        question: 'Wie groß ist die gesamte Wohnfläche Ihres Gebäudes in Quadratmetern?',
-        field: 'WOHNFLÄCHE_GESAMT',
-        type: 'number',
+        id: 'building_side',
+        question: 'Welche Gebäudeseite soll hauptsächlich saniert werden? Eingangsfassade zur Straße oder die ruhigere Hoffassade?',
+        field: 'GEBÄUDESEITE_SANIERUNG',
+        type: 'select',
+        options: ['Eingangsfassade', 'Hoffassade', 'Beide Seiten', 'Seitenfassaden'],
         difficulty: 'easy',
         required: true
       },
       {
-        id: 'num_units',
-        question: 'Wie viele Wohneinheiten befinden sich in dem Gebäude?',
-        field: 'ANZAHL_WOHNEINHEITEN',
-        type: 'number',
-        difficulty: 'easy',
+        id: 'insulation_material',
+        question: 'Welches Dämmmaterial ist für Ihr Vorhaben vorgesehen? Der Energieberater hat Mineralwolle empfohlen.',
+        field: 'DÄMMSTOFF_TYP',
+        type: 'select',
+        options: ['Mineralwolle', 'Polystyrol (EPS)', 'Polyurethan (PUR)', 'Naturdämmstoff', 'Noch unentschieden'],
+        difficulty: 'medium',
         required: true
       },
       {
-        id: 'insulation_measures',
-        question: 'Beschreiben Sie detailliert die geplanten Dämmmaßnahmen. Welche Fassaden sollen gedämmt werden und mit welchem System?',
-        field: 'DÄMMUNGSMASSNAHMEN_DETAIL',
-        type: 'textarea',
-        difficulty: 'hard',
+        id: 'renovation_status',
+        question: 'Wurden bereits andere energetische Maßnahmen am Gebäude durchgeführt (Dach, Keller, Fenster)?',
+        field: 'VORHERIGE_MODERNISIERUNG',
+        type: 'select',
+        options: ['Ja, Dach gedämmt', 'Ja, Fenster erneuert', 'Ja, mehrere Maßnahmen', 'Nein, erste Maßnahme', 'Teilweise'],
+        difficulty: 'medium',
         required: true
       },
       {
-        id: 'cost_calculation',
-        question: 'Wie hoch schätzen Sie die Gesamtkosten der Sanierung ein und wie soll die Finanzierung erfolgen? Bitte geben Sie auch an, welcher Anteil auf die Mieter umgelegt werden soll.',
-        field: 'KOSTEN_FINANZIERUNG',
+        id: 'measure_type',
+        question: 'Handelt es sich um eine freiwillige Modernisierung oder besteht eine gesetzliche Verpflichtung nach dem Gebäudeenergiegesetz (GEG)?',
+        field: 'MASSNAHMEN_KATEGORIE',
         type: 'textarea',
         difficulty: 'hard',
         required: true
