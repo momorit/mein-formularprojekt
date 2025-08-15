@@ -407,18 +407,6 @@ const handleSubmit = async (e: React.FormEvent) => {
                       <Save className="w-4 h-4 mr-2" />
                       {isStudy ? 'Daten speichern & weiter' : 'Formular speichern'}
                     </Button>
-                    {isStudy && (
-                      <Button 
-                        type="button"
-                        variant="outline"
-                        onClick={() => {
-                          const nextStep = step === '2' ? 'variant1_survey' : 'variant2_survey'
-                          router.push(`/study?step=${nextStep}&participant=${participantId}`)
-                        }}
-                      >
-                        Überspringen
-                      </Button>
-                    )}
                   </div>
                 </form>
               </CardContent>

@@ -604,18 +604,6 @@ Ihre Daten wurden erfasst und können nun gespeichert werden.`
                       {isStudy ? 'Speichern & weiter' : 'Dialog speichern'}
                     </Button>
 
-                    {isStudy && (
-                      <Button 
-                        variant="outline"
-                        onClick={() => {
-                          const nextStep = step === '2' ? 'variant1_survey' : 'variant2_survey'
-                          router.push(`/study?step=${nextStep}&participant=${participantId}`)
-                        }}
-                        className="w-full"
-                      >
-                        Überspringen
-                      </Button>
-                    )}
                   </div>
                 </CardContent>
               </Card>
