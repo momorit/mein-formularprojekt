@@ -30,13 +30,21 @@ AUFGABE: Beantworte die Frage als Experte für Gebäude-Energieberatung. Gib kon
   } catch (error) {
     console.error('Chat API error:', error)
     
-    // Fallback bei LLM-Ausfall
+    // Fallback bei LLM-Ausfall - message wird hier neu definiert
+    let userMessage = 'Unbekannte Frage'
+    try {
+      const { message: msg } = await request.json()
+      userMessage = msg || 'Unbekannte Frage'
+    } catch (parseError) {
+      console.error('Could not parse request in fallback:', parseError)
+    }
+    
     return NextResponse.json({
       response: `Entschuldigung, der KI-Assistent ist momentan nicht verfügbar. 
 
 **Ihr Szenario:** Mehrfamilienhaus (1965), Eingangsfassade Südseite, WDVS mit 140mm Mineralwolle, Ölheizung.
 
-**Ihre Frage:** ${message}
+**Ihre Frage:** ${userMessage}
 
 Bitte versuchen Sie es später erneut oder wenden Sie sich an den Support.`,
       context_understanding: "Fallback-Antwort (LLM nicht verfügbar)",
