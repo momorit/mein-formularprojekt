@@ -1,4 +1,4 @@
-// src/components/VariantA.tsx - FLOW FIXED
+// src/components/VariantA.tsx - UPDATED: Ohne Überspringen, mit Szenario, angepasste Fragen
 'use client'
 
 import React, { useState, useEffect } from 'react'
@@ -9,17 +9,17 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
-import { MessageCircle, Save, Lightbulb, HelpCircle, Play } from 'lucide-react'
+import { MessageCircle, Save, Send, Play, CheckCircle, Lightbulb, Home } from 'lucide-react'
 
 interface FormField {
   id: string
   label: string
   type: 'text' | 'number' | 'select' | 'textarea'
-  options?: string[]
-  required: boolean
-  difficulty: 'easy' | 'hard'
-  hint: string
   placeholder: string
+  hint: string
+  difficulty: 'easy' | 'hard'
+  required: boolean
+  options?: string[]
 }
 
 interface ChatMessage {
@@ -42,42 +42,100 @@ export default function VariantA({ onComplete, startTime }: VariantAProps) {
   const step = searchParams.get('step') // '2' for first variant, '4' for second variant
 
   // Form state
+  const [isFormGenerated, setIsFormGenerated] = useState(false)
+  const [isGenerating, setIsGenerating] = useState(false)
+  const [formFields, setFormFields] = useState<FormField[]>([])
   const [formValues, setFormValues] = useState<Record<string, string>>({})
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([])
   const [chatMessage, setChatMessage] = useState('')
-  const [isGenerating, setIsGenerating] = useState(false)
   const [isChatLoading, setIsChatLoading] = useState(false)
-  const [isFormGenerated, setIsFormGenerated] = useState(false)
-  const [formFields, setFormFields] = useState<FormField[]>([])
+  const [isSaving, setIsSaving] = useState(false)
 
-  const generateFormInstructions = async () => {
+  useEffect(() => {
+    if (!isFormGenerated && !isGenerating) {
+      generateFormFields()
+    }
+  }, [isFormGenerated, isGenerating])
+
+  // Predefined optimized form fields - most are easy, one is hard
+  const generateFormFields = async () => {
     setIsGenerating(true)
-    setIsFormGenerated(false)
     
     try {
-      const response = await fetch('/api/generate-instructions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          context: 'Mehrfamilienhaus Baujahr 1965, 10 Wohneinheiten, 634m² Wohnfläche, Fassadensanierung geplant' 
-        })
-      })
+      // Predefined fields optimized for the scenario
+      const predefinedFields: FormField[] = [
+        {
+          id: 'building_year',
+          label: 'Baujahr des Gebäudes',
+          type: 'number',
+          placeholder: '1965',
+          hint: 'Laut Szenario: Baujahr 1965',
+          difficulty: 'easy',
+          required: true
+        },
+        {
+          id: 'total_units',
+          label: 'Anzahl Wohneinheiten',
+          type: 'number',
+          placeholder: '10',
+          hint: 'Laut Szenario: 10 Wohneinheiten',
+          difficulty: 'easy',
+          required: true
+        },
+        {
+          id: 'total_living_space',
+          label: 'Gesamte Wohnfläche (m²)',
+          type: 'number',
+          placeholder: '634',
+          hint: 'Laut Szenario: 634m² Wohnfläche',
+          difficulty: 'easy',
+          required: true
+        },
+        {
+          id: 'building_address',
+          label: 'Gebäudeadresse',
+          type: 'text',
+          placeholder: 'Siedlungsstraße 23, Großstadt',
+          hint: 'Laut Szenario: Siedlungsstraße 23, Großstadt',
+          difficulty: 'easy',
+          required: true
+        },
+        {
+          id: 'insulation_system',
+          label: 'Geplantes Dämmsystem',
+          type: 'select',
+          placeholder: 'Bitte wählen',
+          hint: 'Laut Szenario: WDVS mit 140mm Mineralwolle',
+          difficulty: 'easy',
+          required: true,
+          options: ['WDVS mit Mineralwolle', 'WDVS mit Polystyrol', 'Vorhangfassade', 'Innendämmung']
+        },
+        {
+          id: 'insulation_thickness',
+          label: 'Dämmstärke (mm)',
+          type: 'number',
+          placeholder: '140',
+          hint: 'Laut Szenario: 140mm Mineralwolle-Dämmung',
+          difficulty: 'easy',
+          required: true
+        },
+        {
+          id: 'detailed_energy_analysis',
+          label: 'Detaillierte energetische Bewertung und Berechnung der erwarteten Energieeinsparungen',
+          type: 'textarea',
+          placeholder: 'Bitte beschreiben Sie die erwarteten U-Werte vor/nach Sanierung, Primärenergiebedarf, CO2-Einsparungen und Wirtschaftlichkeitsberechnung...',
+          hint: '⚠️ Komplex: Hier ist eine detaillierte Analyse nötig. Schätzen Sie die energetischen Verbesserungen und fragen Sie bei Unsicherheiten nach!',
+          difficulty: 'hard',
+          required: true
+        }
+      ]
       
-      if (!response.ok) throw new Error('Failed to generate instructions')
+      setFormFields(predefinedFields)
       
-      const data = await response.json()
-      setFormFields(data.fields)
-      
-      // Initialize form values
-      const initialValues: Record<string, string> = {}
-      data.fields.forEach((field: FormField) => {
-        initialValues[field.id] = ''
-      })
-      setFormValues(initialValues)
-      
+      // Welcome message
       setChatHistory([{
         role: 'assistant',
-        message: `Willkommen! Ich helfe Ihnen beim Ausfüllen des Formulars für Ihre Gebäude-Energieberatung.
+        message: `Ich helfe Ihnen beim Ausfüllen des Formulars für Ihre Gebäude-Energieberatung.
 
 Das Formular ist jetzt bereit und enthält Hinweise zu jedem Feld. Bei schwierigen Feldern (markiert mit ⚠️) können Sie mich gerne um detaillierte Hilfe bitten.
 
@@ -137,7 +195,7 @@ Beginnen Sie einfach mit dem Ausfüllen und fragen Sie bei Unsicherheiten!`,
     } catch (error) {
       setChatHistory(prev => [...prev, {
         role: 'assistant',
-        message: 'Entschuldigung, der Chat-Service ist momentan nicht verfügbar.',
+        message: 'Entschuldigung, der Chat-Service ist momentan nicht verfügbar. Versuchen Sie es später erneut.',
         timestamp: new Date()
       }])
     } finally {
@@ -145,92 +203,69 @@ Beginnen Sie einfach mit dem Ausfüllen und fragen Sie bei Unsicherheiten!`,
     }
   }
 
-const handleSubmit = async (e: React.FormEvent) => {
-  e.preventDefault()
-  
-  // DEBUG LOGGING
-  console.log('🐛 DEBUG VariantA handleSubmit:', {
-    step,
-    isStudy,
-    participantId,
-    variant,
-    searchParams: Object.fromEntries(searchParams.entries())
-  })
-  
-  try {
-    // Validate required fields
-    const missingFields = formFields
-      .filter(field => field.required && !formValues[field.id]?.trim())
-      .map(field => field.label)
+  const handleFormSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setIsSaving(true)
     
-    if (missingFields.length > 0) {
-      alert(`Bitte füllen Sie folgende Pflichtfelder aus: ${missingFields.join(', ')}`)
-      return
-    }
-    
-    // Save data
-    const formData = {
-      variant: 'A',
-      participantId: participantId,
-      formValues: formValues,
-      chatHistory: chatHistory,
-      timestamp: new Date().toISOString(),
-      metadata: {
-        completion_rate: calculateCompletionRate(),
-        total_fields: formFields.length,
-        filled_fields: Object.keys(formValues).filter(key => formValues[key]?.trim()).length
+    try {
+      const formData = {
+        variant: 'A',
+        participantId: participantId,
+        instructions: formFields,
+        values: formValues,
+        chatHistory: chatHistory,
+        timestamp: new Date().toISOString(),
+        metadata: {
+          completion_rate: calculateCompletionRate(),
+          total_fields: formFields.length,
+          filled_fields: Object.keys(formValues).filter(key => formValues[key]?.trim()).length
+        }
       }
-    }
-    
-    const response = await fetch('/api/save', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(formData)
-    })
-    
-    if (!response.ok) throw new Error('Save failed')
-    
-    if (isStudy) {
-      // NAVIGATION LOGIC WITH DEBUG
-      const nextStep = step === '2' ? 'variant1_survey' : 'variant2_survey'
       
-      console.log('🔄 DEBUG VariantA Navigation:', {
-        currentStep: step,
-        nextStep,
-        participantId,
-        url: `/study?step=${nextStep}&participant=${participantId}`
+      const response = await fetch('/api/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData)
       })
       
-      router.push(`/study?step=${nextStep}&participant=${participantId}`)
-    } else {
-      alert('Daten erfolgreich gespeichert!')
-      if (onComplete) onComplete(formData)
+      if (!response.ok) throw new Error('Save failed')
+      
+      if (isStudy) {
+        // Navigation to next step
+        const nextStep = step === '2' ? 'variant1_survey' : 'variant2_survey'
+        router.push(`/study?step=${nextStep}&participant=${participantId}`)
+      } else {
+        alert('Daten erfolgreich gespeichert!')
+        if (onComplete) onComplete(formData)
+      }
+      
+    } catch (error) {
+      console.error('Save error:', error)
+      alert('Fehler beim Speichern. Versuchen Sie es erneut.')
+    } finally {
+      setIsSaving(false)
     }
-    
-  } catch (error) {
-    console.error('❌ VariantA Save error:', error)
-    alert('Fehler beim Speichern. Versuchen Sie es erneut.')
   }
-}
-
 
   const calculateCompletionRate = () => {
     const totalFields = formFields.length
     const filledFields = Object.keys(formValues).filter(key => formValues[key]?.trim()).length
-    return totalFields > 0 ? Math.round((filledFields / totalFields) * 100) : 0
+    return totalFields > 0 ? (filledFields / totalFields) * 100 : 0
   }
 
-  const renderFormField = (field: FormField) => {
-    const value = formValues[field.id] || ''
+  const renderField = (field: FormField) => {
     const isHard = field.difficulty === 'hard'
-    
     const commonProps = {
       id: field.id,
-      value: value,
+      value: formValues[field.id] || '',
       onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => 
         setFormValues(prev => ({ ...prev, [field.id]: e.target.value })),
-      className: `w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-        field.required && !value.trim() ? 'border-red-300' : ''
+      className: `w-full p-3 border rounded-lg transition-colors ${
+        formValues[field.id] && formValues[field.id].trim() 
+          ? 'border-green-300 bg-green-50' 
+          : isHard && field.required 
+            ? 'border-orange-300' 
+            : 'border-gray-300'
       }`,
       required: field.required
     }
@@ -307,55 +342,18 @@ const handleSubmit = async (e: React.FormEvent) => {
                 <h3 className="text-lg font-semibold text-blue-800 mb-3">📋 Ihr Szenario</h3>
                 <p className="text-blue-900 mb-3">
                   Sie besitzen ein <strong>Mehrfamilienhaus (Baujahr 1965)</strong> in der Siedlungsstraße 23, Großstadt. 
-                  Das Gebäude hat 10 Wohneinheiten mit 634m² Wohnfläche. Sie planen eine energetische Sanierung 
-                  der Fassade mit einem Wärmedämmverbundsystem (WDVS) aus Mineralwolle.
+                  Das Gebäude hat 10 Wohneinheiten mit 634m² Wohnfläche.
                 </p>
-                <p className="text-blue-800 text-sm">
-                  <strong>Ziel:</strong> Erfassung der Gebäudedaten für eine Energieberatung zur Berechnung 
-                  möglicher Mieterhöhungen nach der geplanten Sanierung.
+                <p className="text-blue-900">
+                  Sie planen eine <strong>energetische Modernisierung der Fassade mit WDVS</strong> (140mm Mineralwolle) 
+                  und benötigen eine Energieberatung für die Mieterhöhungsberechnung.
                 </p>
               </div>
 
-              <div className="bg-green-50 p-6 rounded-lg">
-                <h3 className="text-lg font-semibold text-green-800 mb-3">💡 So funktioniert Variante A</h3>
-                <ul className="space-y-2 text-green-700">
-                  <li className="flex items-start space-x-2">
-                    <span className="text-green-600 mt-1">•</span>
-                    <span>Sie sehen alle Formularfelder gleichzeitig</span>
-                  </li>
-                  <li className="flex items-start space-x-2">
-                    <span className="text-green-600 mt-1">•</span>
-                    <span>Jedes Feld hat Ausfüllhinweise</span>
-                  </li>
-                  <li className="flex items-start space-x-2">
-                    <span className="text-green-600 mt-1">•</span>
-                    <span>Schwierige Felder sind markiert (⚠️)</span>
-                  </li>
-                  <li className="flex items-start space-x-2">
-                    <span className="text-green-600 mt-1">•</span>
-                    <span>KI-Chat-Assistent hilft bei Fragen</span>
-                  </li>
-                </ul>
+              <div className="text-center">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                <p className="text-gray-600">Formular wird vorbereitet...</p>
               </div>
-
-              <Button 
-                onClick={generateFormInstructions}
-                disabled={isGenerating}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 text-lg"
-                size="lg"
-              >
-                {isGenerating ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                    Formular wird vorbereitet...
-                  </>
-                ) : (
-                  <>
-                    <Play className="w-5 h-5 mr-2" />
-                    Formular starten & KI-Hilfe aktivieren
-                  </>
-                )}
-              </Button>
             </CardContent>
           </Card>
         </div>
@@ -365,9 +363,9 @@ const handleSubmit = async (e: React.FormEvent) => {
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">
-      <div className="container mx-auto px-4">
+      <div className="container mx-auto px-4 max-w-7xl">
         {isStudy && (
-          <div className="text-center mb-6">
+          <div className="text-center mb-8">
             <h1 className="text-3xl font-bold text-blue-600 mb-2">Variante A: Sichtbares Formular</h1>
             <p className="text-gray-600">Alle Felder sind sichtbar, KI-Chat verfügbar</p>
             {participantId && (
@@ -381,42 +379,63 @@ const handleSubmit = async (e: React.FormEvent) => {
           </div>
         )}
 
-        <div className="grid lg:grid-cols-3 gap-8 max-w-7xl mx-auto">
-          {/* Formular */}
+        {/* Scenario Display - Always visible */}
+        <div className="mb-6">
+          <Card>
+            <CardContent className="p-4">
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                <div className="flex items-center mb-2">
+                  <Home className="w-5 h-5 text-green-600 mr-2" />
+                  <h3 className="text-lg font-semibold text-green-800">🏢 Ihr Szenario</h3>
+                </div>
+                <p className="text-green-900 text-sm">
+                  <strong>Mehrfamilienhaus, Baujahr 1965</strong> • Siedlungsstraße 23, Großstadt • 
+                  <strong>10 Wohneinheiten, 634m² Wohnfläche</strong> • 
+                  Geplante Sanierung: <strong>WDVS mit 140mm Mineralwolle</strong>
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="grid lg:grid-cols-3 gap-8">
+          {/* Form */}
           <div className="lg:col-span-2">
             <Card>
               <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-xl">📋 Gebäude-Energieberatung Formular</CardTitle>
-                  <Badge variant="outline" className="bg-green-50 text-green-700">
-                    {calculateCompletionRate()}% ausgefüllt
+                <CardTitle className="text-xl">🏢 Gebäude-Energieberatung Formular</CardTitle>
+                <div className="flex justify-between items-center">
+                  <p className="text-sm text-gray-600">
+                    Ausgefüllt: {Object.keys(formValues).filter(key => formValues[key]?.trim()).length} von {formFields.length} Feldern
+                  </p>
+                  <Badge variant="outline" className="text-blue-600">
+                    {Math.round(calculateCompletionRate())}% vollständig
                   </Badge>
                 </div>
               </CardHeader>
               <CardContent>
-                <form onSubmit={handleSubmit}>
-                  {formFields.map(field => renderFormField(field))}
-
-                  <div className="flex items-center space-x-4 pt-6 border-t">
+                <form onSubmit={handleFormSubmit} className="space-y-6">
+                  {formFields.map(renderField)}
+                  
+                  <div className="flex flex-col space-y-3 pt-6 border-t">
                     <Button 
                       type="submit"
-                      className="flex-1 bg-green-600 hover:bg-green-700 text-white py-3"
+                      disabled={isSaving}
+                      className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3"
                     >
-                      <Save className="w-4 h-4 mr-2" />
-                      {isStudy ? 'Daten speichern & weiter' : 'Formular speichern'}
+                      {isSaving ? (
+                        <div className="flex items-center">
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                          Speichert...
+                        </div>
+                      ) : (
+                        <>
+                          <Save className="w-5 h-5 mr-2" />
+                          {isStudy ? 'Daten speichern & weiter' : 'Formular speichern'}
+                        </>
+                      )}
                     </Button>
-                    {isStudy && (
-                      <Button 
-                        type="button"
-                        variant="outline"
-                        onClick={() => {
-                          const nextStep = step === '2' ? 'variant1_survey' : 'variant2_survey'
-                          router.push(`/study?step=${nextStep}&participant=${participantId}`)
-                        }}
-                      >
-                        Überspringen
-                      </Button>
-                    )}
+                    {/* REMOVED: Überspringen Button */}
                   </div>
                 </form>
               </CardContent>
@@ -440,29 +459,31 @@ const handleSubmit = async (e: React.FormEvent) => {
                       <div key={index} className={`p-3 rounded-lg ${
                         msg.role === 'user' 
                           ? 'bg-blue-100 text-blue-900 ml-4' 
-                          : 'bg-white text-gray-800 mr-4 border'
+                          : 'bg-white text-gray-800 mr-4'
                       }`}>
-                        <div className="text-sm whitespace-pre-wrap">{msg.message}</div>
+                        <p className="text-sm whitespace-pre-wrap">{msg.message}</p>
+                        <span className="text-xs text-gray-500 mt-1 block">
+                          {msg.timestamp.toLocaleTimeString()}
+                        </span>
                       </div>
                     ))}
                     {isChatLoading && (
-                      <div className="bg-white p-3 rounded-lg mr-4 border">
+                      <div className="bg-white text-gray-800 mr-4 p-3 rounded-lg">
                         <div className="flex items-center space-x-2">
                           <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
-                          <span className="text-sm text-gray-500">Assistent antwortet...</span>
+                          <span className="text-sm">KI denkt nach...</span>
                         </div>
                       </div>
                     )}
                   </div>
 
                   {/* Chat Input */}
-                  <div className="space-y-2">
+                  <div className="flex space-x-2">
                     <Textarea
                       value={chatMessage}
                       onChange={(e) => setChatMessage(e.target.value)}
-                      placeholder="Fragen Sie den Assistenten..."
-                      rows={2}
-                      className="resize-none"
+                      placeholder="Fragen Sie die KI... (oder '?' für Hilfe)"
+                      className="flex-1 min-h-[60px] max-h-[120px]"
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' && !e.shiftKey) {
                           e.preventDefault()
@@ -472,17 +493,16 @@ const handleSubmit = async (e: React.FormEvent) => {
                     />
                     <Button 
                       onClick={handleChatMessage}
-                      disabled={!chatMessage.trim() || isChatLoading}
-                      className="w-full bg-blue-600 hover:bg-blue-700"
+                      disabled={isChatLoading || !chatMessage.trim()}
+                      className="bg-blue-600 hover:bg-blue-700 px-4"
                     >
-                      <HelpCircle className="w-4 h-4 mr-2" />
-                      Frage stellen
+                      <Send className="w-4 h-4" />
                     </Button>
                   </div>
 
-                  <div className="text-xs text-gray-500 bg-yellow-50 p-2 rounded border">
-                    💡 <strong>Tipp:</strong> Fragen Sie z.B. "Wie berechne ich die Fassadenfläche?" 
-                    oder "Was bedeutet WDVS?"
+                  <div className="text-xs text-gray-500 space-y-1">
+                    <p>💡 <strong>Tipp:</strong> "?" für kontextuelle Hilfe</p>
+                    <p>⌨️ <strong>Enter:</strong> Senden, <strong>Shift+Enter:</strong> Neue Zeile</p>
                   </div>
                 </div>
               </CardContent>

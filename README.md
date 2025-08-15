@@ -1,193 +1,142 @@
-# FormularIQ - LLM-gestützte Formularbearbeitung
+# 🏢 FormularIQ - KI-gestützte Formularbearbeitung
 
-## 📋 Projektbeschreibung
+> **Innovatives Forschungsprojekt an der HAW Hamburg**  
+> Vergleich von sichtbaren Formularen vs. Dialog-Systemen mit Large Language Models
 
-**FormularIQ** ist eine wissenschaftliche Studie zur Untersuchung der Benutzerfreundlichkeit von LLM-gestützten Formularsystemen. Das Projekt vergleicht zwei Ansätze zur intelligenten Formularbearbeitung:
+[![Next.js](https://img.shields.io/badge/Next.js-15.4.1-black)](https://nextjs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue)](https://typescriptlang.org/)
+[![Tailwind](https://img.shields.io/badge/Tailwind-3.4-38bdf8)](https://tailwindcss.com/)
+[![License](https://img.shields.io/badge/License-Research-green)](LICENSE)
 
-- **Variante A**: Klassisches sichtbares Formular mit KI-Chat-Unterstützung
-- **Variante B**: Interaktives Dialog-System mit konversationeller Datenerfassung
+---
 
-### 🎓 Akademischer Kontext
-- **Institution**: HAW Hamburg
-- **Fakultät**: Technik und Informatik, Department Informatik  
-- **Projekt**: Masterarbeit - Wintersemester 2024/25
-- **Forscher**: Moritz Treu
+## 🎯 Projektziel
+
+FormularIQ erforscht innovative Ansätze zur **KI-gestützten Formularbearbeitung** und vergleicht zwei Interaktionsparadigmen:
+
+- **📋 Variante A**: Klassisches sichtbares Formular mit KI-Chat-Unterstützung
+- **💬 Variante B**: Konversationelle Datenerfassung durch Dialog-System
+
+**Anwendungsfall:** Gebäude-Energieberatung für Mehrfamilienhäuser mit komplexen Förderanträgen.
+
+---
+
+## 🚀 Quick Start
+
+### Voraussetzungen
+- **Node.js** ≥ 18.0.0
+- **npm** oder **yarn**
+- **Git**
+
+### Installation
+
+```bash
+# Repository klonen
+git clone https://github.com/your-username/formulariq.git
+cd formulariq
+
+# Dependencies installieren
+npm install
+
+# Development Server starten
+npm run dev
+```
+
+✅ **Anwendung läuft auf**: http://localhost:3000
 
 ---
 
 ## 🏗️ Systemarchitektur
 
+### Tech Stack
+```
+Frontend:    Next.js 15 + TypeScript + Tailwind CSS + shadcn/ui
+Backend:     Next.js API Routes (Serverless Functions)
+Deployment:  Vercel (Full-Stack)
+Storage:     Vercel Logging + JSON Export
+State:       React State (keine Browser Storage APIs)
+```
+
+### Projektstruktur
 ```
 FormularIQ/
-├── backend/                 # FastAPI Backend
-│   ├── main.py             # Hauptserver mit API-Endpunkten
-│   ├── requirements.txt    # Python-Dependencies
-│   └── service-account-key.json  # Google Drive Credentials
-├── src/                    # Next.js Frontend
-│   ├── app/               
-│   │   ├── page.tsx       # Homepage
-│   │   ├── form-a/        # Variante A (Sichtbares Formular)
-│   │   └── form-b/        # Variante B (Dialog-System)
-│   ├── lib/
-│   │   ├── api.ts         # API-Client
-│   │   └── types.ts       # TypeScript-Interfaces
-│   └── components/        # Wiederverwendbare Komponenten
-└── LLM Output/            # Lokale Datenspeicherung (Fallback)
+├── src/app/
+│   ├── page.tsx                    # Landing & Redirect
+│   ├── study/page.tsx              # Haupt-Studienablauf
+│   ├── form-a/page.tsx             # Variante A Wrapper
+│   ├── form-b/page.tsx             # Variante B Wrapper
+│   └── api/                        # Backend API Routes
+│       ├── save/route.ts           # Variante A Daten
+│       ├── dialog/save/route.ts    # Variante B Daten
+│       ├── questionnaire/save/route.ts # Fragebogen-Daten
+│       └── study/complete/route.ts # Studie-Abschluss
+├── src/components/
+│   ├── VariantA.tsx                # Sichtbares Formular
+│   ├── VariantB.tsx                # Dialog-System
+│   ├── LoadingStates.tsx           # UI Loading Components
+│   ├── ui/                         # shadcn/ui Komponenten
+│   └── Questionnaire/              # Fragebogen-System
+│       ├── EnhancedQuestionnaire.tsx # Haupt-Fragebogen
+│       ├── TrustQuestionnaire.tsx  # Vertrauen (5-Punkt Likert)
+│       ├── SUSQuestionnaire.tsx    # System Usability Scale
+│       └── PreferenceQuestionnaire.tsx # Nutzerpräferenz
+└── public/                         # Statische Assets
 ```
-
-### 🔧 Technologie-Stack
-
-#### Backend
-- **FastAPI** - Moderne Python Web-API
-- **Ollama + LLaMA3** - Large Language Model
-- **Google Drive API** - Cloud-Datenspeicherung
-- **Pydantic** - Datenvalidierung
-
-#### Frontend  
-- **Next.js 14** - React-Framework mit App Router
-- **TypeScript** - Typsicherheit
-- **Tailwind CSS** - Utility-First CSS
 
 ---
 
-## 🚀 Installation & Setup
+## 📊 Studiendesign
 
-### Voraussetzungen
-
-- **Node.js** (≥ 18.0.0)
-- **Python** (≥ 3.8)
-- **Ollama** mit LLaMA3-Modell
-- **Google Cloud Account** (für Drive-Integration)
-
-### 1. Repository klonen
-
-```bash
-git clone [repository-url]
-cd FormularIQ
+### Ablauf (6 Schritte)
+```
+1. intro → 2. demographics → 3. variant1_intro → [Variante] → 4. variant1_survey → 
+5. variant2_intro → [Variante] → 6. variant2_survey → 7. final_comparison → 8. complete
 ```
 
-### 2. Backend Setup
+### Randomisierung
+- **Deterministische Zuordnung** basierend auf Teilnehmer-ID
+- **Balancierte A-B / B-A Reihenfolge** über alle Sessions
+- **Konsistente Navigation** mit URL-Parametern
 
-#### 2.1 Python-Umgebung vorbereiten
+### Messgrößen
+- **Bearbeitungszeiten** (automatische Timestamps)
+- **Vollständigkeitsraten** (Completion Rates)
+- **Vertrauen in KI-Systeme** (5-Item Likert-Skala)
+- **System Usability Scale** (SUS, 10 Items)
+- **Nutzerpräferenzen** (Direktvergleich & Empfehlungen)
 
-```bash
-cd backend
+---
 
-# Virtual Environment erstellen
-python -m venv venv
+## 🔧 Entwicklung
 
-# Aktivieren
-# Windows:
-venv\Scripts\activate
-# macOS/Linux:
-source venv/bin/activate
-
-# Dependencies installieren
-pip install -r requirements.txt
-```
-
-#### 2.2 Ollama & LLaMA3 Setup
+### Lokaler Development
 
 ```bash
-# Ollama installieren (macOS/Linux)
-curl -fsSL https://ollama.ai/install.sh | sh
-
-# Windows: Download von https://ollama.ai
-
-# LLaMA3 Modell herunterladen
-ollama pull llama3
-
-# Ollama-Service starten
-ollama serve
-```
-
-#### 2.3 Google Drive API konfigurieren
-
-1. **Google Cloud Console** öffnen: https://console.cloud.google.com/
-2. **Neues Projekt erstellen** oder existierendes auswählen
-3. **Google Drive API aktivieren**:
-   - Navigation → "APIs & Services" → "Library" 
-   - Nach "Google Drive API" suchen → "Enable"
-4. **Service Account erstellen**:
-   - "APIs & Services" → "Credentials" → "Create Credentials" → "Service account"
-   - Name: `formulariq-storage`
-   - Role: `Editor`
-5. **JSON-Key generieren**:
-   - Service Account auswählen → "Keys" → "Add Key" → "Create new key" → JSON
-   - Datei als `service-account-key.json` ins `backend/`-Verzeichnis speichern
-
-#### 2.4 Backend starten
-
-```bash
-python main.py
-```
-
-✅ **Backend läuft auf**: http://localhost:8000
-
-### 3. Frontend Setup
-
-#### 3.1 Node.js-Dependencies installieren
-
-```bash
-cd .. # zurück ins Hauptverzeichnis
-npm install
-```
-
-#### 3.2 Development-Server starten
-
-```bash
+# Development Server
 npm run dev
+
+# Type Checking
+npm run type-check
+
+# Production Build
+npm run build
+
+# Preview Production Build
+npm run start
 ```
 
-✅ **Frontend läuft auf**: http://localhost:3000
+### API Endpoints
 
----
+| Endpoint | Methode | Beschreibung |
+|----------|---------|--------------|
+| `/api/health` | GET | System Health Check |
+| `/api/save` | POST | Variante A Formulardaten |
+| `/api/dialog/save` | POST | Variante B Dialogdaten |
+| `/api/questionnaire/save` | POST | Fragebogen-Antworten |
+| `/api/study/complete` | POST | Studie-Abschluss |
 
-## 🔍 System-Verifikation
+### Datenstruktur (Export)
 
-### Backend Health-Check
-```bash
-curl http://localhost:8000/health
-```
-
-**Erwartete Antwort:**
-```json
-{
-  "status": "healthy",
-  "services": {
-    "google_drive": "connected",
-    "llm_ollama": "online"
-  },
-  "timestamp": "2024-XX-XXTXX:XX:XX"
-}
-```
-
-### Frontend-Test
-1. Browser öffnen: http://localhost:3000
-2. System-Status-Indikator sollte "online" anzeigen
-3. Beide Varianten-Buttons sollten funktionsfähig sein
-
----
-
-## 🎯 Nutzung
-
-### Für Studienteilnehmer
-
-1. **Homepage** besuchen: http://localhost:3000
-2. **Instruktionen** lesen und Systemanforderungen prüfen
-3. **Variante A** oder **B** starten (beliebige Reihenfolge)
-4. **Gebäudeformular** entsprechend der gewählten Variante ausfüllen
-5. **Daten automatisch speichern** lassen
-6. **Zweite Variante** testen
-7. **Beide Varianten vergleichen** (optional)
-
-### Für Forscher/Administratoren
-
-#### Datenzugriff
-- **Google Drive**: Ordner `FormularIQ_Studiendata`
-- **Lokaler Fallback**: `LLM Output/`-Verzeichnis
-
-#### Datenstruktur
 ```json
 {
   "variant": "A_sichtbares_formular" | "B_dialog_system",
@@ -210,145 +159,315 @@ curl http://localhost:8000/health
 
 ---
 
-## 🛠️ Entwicklung & Debugging
+## 🎮 Nutzung
 
-### Häufige Probleme
+### Für Studienteilnehmer
 
-#### 1. Ollama nicht erreichbar
+1. **Homepage** besuchen → Instruktionen lesen
+2. **Demografische Daten** eingeben (Schritt 1)
+3. **Erste Variante** testen (A oder B, randomisiert)
+4. **Fragebogen** zu Variante 1 ausfüllen
+5. **Zweite Variante** testen
+6. **Fragebogen** zu Variante 2 ausfüllen  
+7. **Vergleich & Präferenzen** bewerten
+8. **Abschluss** - Daten gespeichert
+
+### Für Forscher/Administratoren
+
+#### Datenzugriff
+- **Vercel Dashboard**: Echtzeit-Logs und Analytics
+- **JSON Export**: Strukturierte Datenexporte
+- **Anonymisierung**: Automatische Teilnehmer-ID Generation
+
+#### Monitoring
 ```bash
-# Status prüfen
-ollama list
+# System Status prüfen
+curl https://mein-formularprojekt.vercel.app/api/health
 
-# Neustart
-ollama serve
-
-# Modell testen
-ollama run llama3 "Test"
-```
-
-#### 2. Google Drive API-Fehler
-- **Credentials prüfen**: `service-account-key.json` korrekt platziert?
-- **API aktiviert**: Drive API in Google Cloud Console aktiviert?
-- **Berechtigungen**: Service Account hat Editor-Rolle?
-
-#### 3. CORS-Probleme
-- **Beide Services laufen**: Backend (8000) + Frontend (3000)
-- **URLs korrekt**: Keine Proxy/VPN-Konflikte
-
-#### 4. TypeScript-Fehler
-```bash
-# Type-Check
-npm run type-check
-
-# Build-Test
-npm run build
-```
-
-### Logging & Monitoring
-
-#### Backend-Logs
-```bash
-# Detaillierte Ausgabe im Terminal beim Start
-python main.py
-```
-
-#### Frontend-Logs
-```bash
-# Browser Developer Console (F12)
-# Network-Tab für API-Requests
+# Expected Response:
+{
+  "status": "healthy",
+  "timestamp": "2024-XX-XXTXX:XX:XX",
+  "version": "2.0.0"
+}
 ```
 
 ---
 
-## 📊 Datenanalyse
+## 🛠️ Deployment
 
-### Exportierte Datenfelder
+### Vercel (Empfohlen)
 
-#### Variante A (Formular)
-- `instructions`: Generierte Formularfelder
-- `values`: Benutzer-Eingaben  
-- `metadata.completion_rate`: Ausfüllungsgrad
-- `metadata.filled_fields`: Anzahl ausgefüllter Felder
-
-#### Variante B (Dialog)
-- `questions`: Dialog-Fragenkatalog
-- `answers`: Benutzer-Antworten
-- `chatHistory`: Vollständiger Gesprächsverlauf
-- `metadata.chat_interactions`: Anzahl Nachrichten
-
-### Analysemöglichkeiten
-- **Bearbeitungszeiten** (Timestamps)
-- **Vollständigkeitsraten** (Completion Rates) 
-- **Interaktionsmuster** (Chat-Verläufe)
-- **Hilfeanfragen** ("?"-Eingaben)
-- **Systemnutzung** (Field-Types, Error-Rates)
-
----
-
-## 🔒 Sicherheit & Datenschutz
-
-### Implementierte Maßnahmen
-- ✅ **Vollständige Anonymisierung** der Teilnehmerdaten
-- ✅ **DSGVO-konforme Speicherung** in europäischen Rechenzonen  
-- ✅ **Verschlüsselte Übertragung** (HTTPS in Production)
-- ✅ **Minimale Datensammlung** (nur studienrelevante Informationen)
-- ✅ **Automatische Metadaten-Ergänzung** für wissenschaftliche Zuordnung
-
-### Service Account Sicherheit
 ```bash
-# Niemals in Versionskontrolle committen
-echo "service-account-key.json" >> .gitignore
+# Vercel CLI installieren
+npm i -g vercel
 
-# Berechtigungen minimal halten
-# Nur Google Drive File-Access, keine Admin-Rechte
-```
+# Projekt deployen
+vercel
 
----
-
-## 🚀 Deployment (Production)
-
-### Frontend (Vercel/Netlify)
-```bash
-npm run build
-npm run start
-```
-
-### Backend (Railway/Heroku)
-```bash
-# Dockerfile oder requirements.txt für Container-Deployment
-# Umgebungsvariablen für Google Service Account
+# Domain konfigurieren
+vercel --prod
 ```
 
 ### Umgebungsvariablen
-```bash
-# Frontend
-NEXT_PUBLIC_API_URL=https://your-backend-url.com
 
-# Backend  
-PORT=8000
-GOOGLE_SERVICE_ACCOUNT_KEY=base64-encoded-key
+```env
+# Vercel Dashboard → Settings → Environment Variables
+NEXT_PUBLIC_SITE_URL=https://mein-formularprojekt.vercel.app
+NODE_ENV=production
+```
+
+### Custom Domain Setup
+
+```bash
+# Domain hinzufügen
+vercel domains add beispiel-studie.de
+
+# SSL automatisch konfiguriert ✅
 ```
 
 ---
 
-## 📞 Support & Kontakt
+## 📈 Monitoring & Analytics
 
-### Technische Issues
-- **GitHub Issues**: Für Bug-Reports und Feature-Requests
-- **Entwickler**: Moritz Treu - HAW Hamburg
+### Performance Monitoring
+- **Vercel Analytics**: Automatische Performance-Metriken
+- **Core Web Vitals**: LCP, FID, CLS Tracking
+- **Error Tracking**: Echtzeit-Fehlermeldungen
 
-### Wissenschaftliche Fragen
-- **Betreuer**: Prof. Dr. [Name]
-- **Fakultät**: Technik und Informatik, HAW Hamburg
-
-### Systemstatus
-- **Health-Check**: http://localhost:8000/health
-- **API-Dokumentation**: http://localhost:8000/docs (automatisch generiert)
+### Nutzerdaten (Anonymisiert)
+- **Session-Längen** und **Completion-Raten**
+- **Device/Browser-Verteilung**  
+- **Geografische Verteilung** (Land-Ebene)
 
 ---
 
-## 📜 Lizenz
+## 🔒 Datenschutz & Sicherheit
 
-Dieses Projekt wurde für wissenschaftliche Zwecke im Rahmen einer Masterarbeit an der HAW Hamburg entwickelt. Alle Rechte vorbehalten.
+### DSGVO-Compliance
+- ✅ **Vollständige Anonymisierung** aller Teilnehmerdaten
+- ✅ **Minimale Datensammlung** (nur studienrelevant)
+- ✅ **Europäische Server** (Vercel EU-Region)
+- ✅ **Verschlüsselte Übertragung** (TLS 1.3)
+- ✅ **Keine persistente User-Tracking**
 
-**Copyright © 2024 HAW Hamburg - FormularIQ Studie**
+### Sicherheitsmaßnahmen
+- **Content Security Policy** (CSP) Headers
+- **HTTPS-Only** in Production
+- **Input Validation** auf Client- und Server-Seite
+- **Rate Limiting** für API-Endpoints
+
+---
+
+## 🧪 Testing
+
+### Unit Tests
+```bash
+npm run test
+```
+
+### End-to-End Tests
+```bash
+npm run test:e2e
+```
+
+### Browser Testing
+- **Chrome/Edge**: Vollständig unterstützt
+- **Firefox**: Vollständig unterstützt  
+- **Safari**: Vollständig unterstützt
+- **Mobile**: Responsive Design getestet
+
+---
+
+## 📚 Wissenschaftlicher Hintergrund
+
+### Forschungsfragen
+1. **Effizienz**: Welche Variante ermöglicht schnellere Formularbearbeitung?
+2. **Benutzerfreundlichkeit**: Welche Interaktionsform wird als intuitiver empfunden?
+3. **Vertrauen**: Wie unterscheidet sich das Vertrauen in beide KI-Unterstützungsformen?
+4. **Präferenz**: Welche Faktoren beeinflussen die Nutzerpräferenz?
+
+### Methodologie
+- **Within-Subject Design**: Alle Teilnehmer testen beide Varianten
+- **Randomisierte Reihenfolge**: Ausgleich von Lerneffekten
+- **Standardisierte Fragebögen**: SUS, Trust Scale, demografische Daten
+- **Quantitative + Qualitative Daten**: Metriken + offenes Feedback
+
+### Zielpublikation
+- **Konferenz**: HCI, CHI, UIST, oder ähnliche
+- **Journal**: Computers in Human Behavior, IJHCI
+- **Fokus**: Human-AI Interaction, Form Design, Conversational UI
+
+---
+
+## 🤝 Beitragen
+
+### Development Guidelines
+```bash
+# Branch erstellen
+git checkout -b feature/neue-funktion
+
+# Commits mit Convention
+git commit -m "feat: neue Fragebogen-Komponente hinzugefügt"
+
+# Pull Request erstellen
+```
+
+### Code Style
+- **TypeScript**: Strikte Typisierung
+- **ESLint**: Automatische Code-Qualität
+- **Prettier**: Einheitliche Formatierung
+- **Komponenten**: Funktionale React Components mit Hooks
+
+### Testing Requirements
+- **Unit Tests**: Für alle Utilities und Helpers
+- **Component Tests**: Für UI-Komponenten
+- **Integration Tests**: Für API-Endpoints
+- **E2E Tests**: Für kritische User Journeys
+
+---
+
+## 🐛 Troubleshooting
+
+### Häufige Probleme
+
+#### 1. Build-Fehler
+```bash
+# Cache leeren
+npm run clean
+rm -rf .next node_modules
+npm install
+
+# Type-Check
+npm run type-check
+```
+
+#### 2. Styling-Probleme
+```bash
+# Tailwind CSS regenerieren
+npm run build:css
+
+# shadcn/ui Komponenten updaten
+npx shadcn-ui@latest add button
+```
+
+#### 3. API-Fehler
+```bash
+# Logs prüfen (Development)
+npm run dev
+
+# Logs prüfen (Production)
+vercel logs
+```
+
+#### 4. Performance-Issues
+```bash
+# Bundle Analyzer
+npm run analyze
+
+# Performance Audit
+npm run lighthouse
+```
+
+### Support Kanäle
+- **GitHub Issues**: Bug Reports & Feature Requests
+- **Diskussionen**: GitHub Discussions für Fragen
+- **Email**: Bei kritischen Problemen
+
+---
+
+## 📄 Lizenz & Rechte
+
+### Akademische Nutzung
+Dieses Projekt wurde für wissenschaftliche Zwecke im Rahmen eines Forschungsprojekts an der **HAW Hamburg** entwickelt.
+
+### Rechteinhaber
+- **Institution**: Hochschule für Angewandte Wissenschaften Hamburg
+- **Forscher**: Moritz Treu
+- **Betreuer**: Prof. Dr. [Name]
+- **Fakultät**: Technik und Informatik
+
+### Nutzungsrechte
+- ✅ **Akademische Forschung**: Frei nutzbar für Bildungszwecke
+- ✅ **Open Source**: Code ist öffentlich einsehbar
+- ❌ **Kommerzielle Nutzung**: Nicht ohne Genehmigung gestattet
+- ❌ **Datenverwendung**: Studiendaten sind nicht öffentlich
+
+---
+
+## 🔗 Links & Ressourcen
+
+### Live Demo
+- **Production**: [https://mein-formularprojekt.vercel.app](https://mein-formularprojekt.vercel.app)
+- **Staging**: [https://formulariq-staging.vercel.app](https://formulariq-staging.vercel.app)
+
+### Dokumentation
+- **API Docs**: [/api-documentation](https://mein-formularprojekt.vercel.app/api-documentation)
+- **Component Library**: [/components](https://mein-formularprojekt.vercel.app/components)
+- **Research Protocol**: [docs/research-protocol.md](docs/research-protocol.md)
+
+### Externe Ressourcen
+- **Next.js Docs**: [https://nextjs.org/docs](https://nextjs.org/docs)
+- **Tailwind CSS**: [https://tailwindcss.com/docs](https://tailwindcss.com/docs)
+- **shadcn/ui**: [https://ui.shadcn.com](https://ui.shadcn.com)
+- **HAW Hamburg**: [https://www.haw-hamburg.de](https://www.haw-hamburg.de)
+
+---
+
+## 📊 Projektstatistiken
+
+### Entwicklung
+- **Entwicklungszeit**: ~6 Monate
+- **Code Lines**: ~15,000 LOC
+- **Komponenten**: 25+ React Components
+- **API Endpoints**: 8 REST APIs
+
+### Forschung
+- **Ziel-Teilnehmer**: 100-200 Personen
+- **Studiendauer**: ~20-25 Minuten pro Person
+- **Datenfelder**: 50+ gemessene Variablen
+- **Varianten**: 2 Hauptvarianten + 3 Fragebögen
+
+---
+
+## 🏆 Danksagungen
+
+### Team
+- **Hauptentwickler**: Moritz Treu
+- **Wissenschaftliche Betreuung**: Prof. Dr. [Name], HAW Hamburg
+- **UI/UX Consulting**: [Name], falls zutreffend
+- **Beta-Tester**: Studierende und Fakultätsmitglieder der HAW
+
+### Technologien
+Besonderer Dank an die Open-Source-Community für:
+- **Vercel** - Hosting & Deployment Platform
+- **Next.js Team** - React Framework
+- **Tailwind Labs** - CSS Framework  
+- **shadcn** - UI Component Library
+- **TypeScript Team** - Type Safety
+
+---
+
+## 📞 Kontakt
+
+### Forscher
+**Moritz Treu**  
+Hochschule für Angewandte Wissenschaften Hamburg  
+Fakultät Technik und Informatik  
+📧 [moritz.treu@haw-hamburg.de](mailto:moritz.treu@haw-hamburg.de)
+
+### Institution
+**HAW Hamburg**  
+Berliner Tor 7  
+20099 Hamburg, Deutschland  
+🌐 [www.haw-hamburg.de](https://www.haw-hamburg.de)
+
+### Projektrepository
+🔗 **GitHub**: [github.com/your-username/formulariq](https://github.com/your-username/formulariq)  
+📖 **Dokumentation**: [formulariq.vercel.app/docs](https://formulariq.vercel.app/docs)
+
+---
+
+**Copyright © 2024 HAW Hamburg - FormularIQ Forschungsprojekt**
+
+*Entwickelt für wissenschaftliche Zwecke im Bereich Human-Computer Interaction und KI-gestützte Benutzerschnittstellen.*
