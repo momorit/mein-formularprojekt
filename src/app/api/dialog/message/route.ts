@@ -5,7 +5,7 @@ import { callLLM } from '@/lib/llm'
 interface DialogSession {
   sessionId: string
   questions: string[]
-  answers: { [key: string]: string } // Explizit für dynamische Keys
+  answers: { [key: string]: string } // Nur noch dieser Typ, kein Union mehr
   currentQuestionIndex: number
   context: string
 }
@@ -18,21 +18,25 @@ export async function POST(request: NextRequest) {
     const { message, session_id, questionIndex } = await request.json()
     
     // Session abrufen oder erstellen
-    let session = sessions.get(session_id) || {
-      sessionId: session_id,
-      questions: [
-        "Welche Gebäudeseite soll hauptsächlich saniert werden?",
-        "Welches Dämmmaterial ist für Ihr Vorhaben vorgesehen?", 
-        "Wurden bereits andere energetische Maßnahmen am Gebäude durchgeführt?",
-        "Handelt es sich um eine freiwillige Modernisierung oder besteht eine gesetzliche Verpflichtung?"
-      ],
-      answers: {},
-      currentQuestionIndex: questionIndex || 0,
-      context: `Sie besitzen ein Mehrfamilienhaus (Baujahr 1965) in der Siedlungsstraße 23. 
-                Es hat eine Rotklinkerfassade und 10 Wohneinheiten. 
-                Sie planen eine WDVS-Sanierung der Eingangsfassade zur Straße (Südseite) mit 140mm Mineralwolle-Dämmung. 
-                Das Gebäude hat eine Ölheizung im Keller. 
-                Sie müssen für eine Mieterin (EG rechts, 57,5m²) die mögliche Mieterhöhung berechnen.`
+    let session = sessions.get(session_id)
+    
+    if (!session) {
+      session = {
+        sessionId: session_id,
+        questions: [
+          "Welche Gebäudeseite soll hauptsächlich saniert werden?",
+          "Welches Dämmmaterial ist für Ihr Vorhaben vorgesehen?", 
+          "Wurden bereits andere energetische Maßnahmen am Gebäude durchgeführt?",
+          "Handelt es sich um eine freiwillige Modernisierung oder besteht eine gesetzliche Verpflichtung?"
+        ],
+        answers: {} as { [key: string]: string }, // Explizit typisiert
+        currentQuestionIndex: questionIndex || 0,
+        context: `Sie besitzen ein Mehrfamilienhaus (Baujahr 1965) in der Siedlungsstraße 23. 
+                  Es hat eine Rotklinkerfassade und 10 Wohneinheiten. 
+                  Sie planen eine WDVS-Sanierung der Eingangsfassade zur Straße (Südseite) mit 140mm Mineralwolle-Dämmung. 
+                  Das Gebäude hat eine Ölheizung im Keller. 
+                  Sie müssen für eine Mieterin (EG rechts, 57,5m²) die mögliche Mieterhöhung berechnen.`
+      }
     }
     
     // Antwort zur Session hinzufügen
