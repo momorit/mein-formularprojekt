@@ -220,8 +220,8 @@ function StudyContent() {
               <div className="bg-green-50 p-6 rounded-lg">
                 <h3 className="text-xl font-semibold text-green-800 mb-3">📋 Ihr Testszenario</h3>
                 <p className="text-green-900">
-                  Sie besitzen ein <strong>Mehrfamilienhaus (Baujahr 1965)</strong> in der Siedlungsstraße 23. 
-                  Es hat eine Rotklinkerfassade und 10 Wohneinheiten. Sie planen eine <strong>WDVS-Sanierung</strong> 
+                  Sie besitzen ein Mehrfamilienhaus (Baujahr 1965) in der Siedlungsstraße 23. 
+                  Es hat eine Rotklinkerfassade und 10 Wohneinheiten. Sie planen eine WDVS-Sanierung
                   und müssen für einen Mieter (EG rechts, 57,5m²) die Mieterhöhung berechnen.
                 </p>
               </div>
@@ -412,9 +412,10 @@ function StudyContent() {
 
                 <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
                   <h4 className="font-semibold text-blue-800 mb-2">🏢 Ihr Gebäudeszenario</h4>
-                  <p className="text-blue-700 text-sm">
-                    Mehrfamilienhaus, Baujahr 1965, Siedlungsstraße 23, 10 Wohneinheiten, 634m² Wohnfläche.
-                    Geplante Sanierung: Wärmedämmverbundsystem (WDVS) aus Mineralwolle.
+                  <p className="text-blue-900 mb-3">
+                    Sie besitzen ein Mehrfamilienhaus (Baujahr 1965) in der Siedlungsstraße 23. 
+                    Es hat eine Rotklinkerfassade und 10 Wohneinheiten. Sie planen eine WDVS-Sanierung
+                    und müssen für einen Mieter (EG rechts, 57,5m²) die Mieterhöhung berechnen.
                   </p>
                 </div>
 
@@ -518,8 +519,10 @@ function StudyContent() {
 
                 <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
                   <h4 className="font-semibold text-gray-800 mb-2">📋 Gleiches Szenario</h4>
-                  <p className="text-gray-700 text-sm">
-                    Das Gebäudeszenario bleibt gleich: Mehrfamilienhaus, Baujahr 1965, geplante WDVS-Sanierung.
+                  <p className="text-blue-900 mb-3">
+                    Sie besitzen ein Mehrfamilienhaus (Baujahr 1965) in der Siedlungsstraße 23. 
+                    Es hat eine Rotklinkerfassade und 10 Wohneinheiten. Sie planen eine WDVS-Sanierung
+                    und müssen für einen Mieter (EG rechts, 57,5m²) die Mieterhöhung berechnen.
                   </p>
                 </div>
 

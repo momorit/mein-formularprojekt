@@ -81,9 +81,9 @@ export default function VariantA({ onComplete, startTime }: VariantAProps) {
 
 Das Formular ist jetzt bereit und enthält Hinweise zu jedem Feld. Bei schwierigen Feldern (markiert mit ⚠️) können Sie mich gerne um detaillierte Hilfe bitten.
 
-**Ihr Szenario:**   Sie besitzen ein <strong>Mehrfamilienhaus (Baujahr 1965)</strong> in der Siedlungsstraße 23. 
-  Es hat eine Rotklinkerfassade und 10 Wohneinheiten. Sie planen eine <strong>WDVS-Sanierung</strong> 
-  und müssen für Mieterin Miriam (EG rechts, 57,5m²) die Mieterhöhung berechnen.
+Ihr Szenario:   Sie besitzen ein Mehrfamilienhaus (Baujahr 1965) in der Siedlungsstraße 23. 
+  Es hat eine Rotklinkerfassade und 10 Wohneinheiten. Sie planen eine WDVS-Sanierung 
+  und müssen für einen Mieter (EG rechts, 57,5m²) die Mieterhöhung berechnen.
 
 Beginnen Sie einfach mit dem Ausfüllen und fragen Sie bei Unsicherheiten!`,
         timestamp: new Date()
@@ -308,9 +308,9 @@ const handleSubmit = async (e: React.FormEvent) => {
               <div className="bg-blue-50 p-6 rounded-lg">
                 <h3 className="text-lg font-semibold text-blue-800 mb-3">📋 Ihr Szenario</h3>
                 <p className="text-blue-900 mb-3">
-                  Sie besitzen ein <strong>Mehrfamilienhaus (Baujahr 1965)</strong> in der Siedlungsstraße 23. 
-                  Es hat eine Rotklinkerfassade und 10 Wohneinheiten. Sie planen eine <strong>WDVS-Sanierung</strong> 
-                  und müssen für Mieterin Miriam (EG rechts, 57,5m²) die Mieterhöhung berechnen.
+                  Sie besitzen ein Mehrfamilienhaus (Baujahr 1965) in der Siedlungsstraße 23. 
+                  Es hat eine Rotklinkerfassade und 10 Wohneinheiten. Sie planen eine WDVS-Sanierung 
+                  und müssen für einen Mieter (EG rechts, 57,5m²) die Mieterhöhung berechnen.
                 </p>
                 <p className="text-blue-800 text-sm">
                   <strong>Ziel:</strong> Erfassung der Gebäudedaten für eine Energieberatung zur Berechnung 

@@ -75,9 +75,9 @@ export default function VariantB({ onComplete, startTime }: VariantBProps) {
 
 Ich führe Sie Schritt für Schritt durch die Erfassung Ihrer Gebäudedaten für die geplante Fassadensanierung.
 
-**Ihr Szenario:** Sie besitzen ein <strong>Mehrfamilienhaus (Baujahr 1965)</strong> in der Siedlungsstraße 23. 
-  Es hat eine Rotklinkerfassade und 10 Wohneinheiten. Sie planen eine <strong>WDVS-Sanierung</strong> 
-  und müssen für Mieterin Miriam (EG rechts, 57,5m²) die Mieterhöhung berechnen.
+Ihr Szenario: Sie besitzen ein Mehrfamilienhaus (Baujahr 1965) in der Siedlungsstraße 23. 
+  Es hat eine Rotklinkerfassade und 10 Wohneinheiten. Sie planen eine WDVS-Sanierung 
+  und müssen für einen Mieter (EG rechts, 57,5m²) die Mieterhöhung berechnen.
 
 Lassen Sie uns beginnen! Ich stelle Ihnen nacheinander ${data.questions.length} Fragen. Bei Unklarheiten können Sie gerne nachfragen.
 
@@ -351,9 +351,9 @@ Ihre Daten wurden erfasst und können nun gespeichert werden.`
               <div className="bg-blue-50 p-6 rounded-lg">
                 <h3 className="text-lg font-semibold text-blue-800 mb-3">🏢 Ihr Szenario</h3>
                 <p className="text-blue-900 mb-3">
-                  Sie besitzen ein <strong>Mehrfamilienhaus (Baujahr 1965)</strong> in der Siedlungsstraße 23. 
-                  Es hat eine Rotklinkerfassade und 10 Wohneinheiten. Sie planen eine <strong>WDVS-Sanierung</strong> 
-                  und müssen für Mieterin Miriam (EG rechts, 57,5m²) die Mieterhöhung berechnen.
+                  Sie besitzen ein Mehrfamilienhaus (Baujahr 1965) in der Siedlungsstraße 23. 
+                  Es hat eine Rotklinkerfassade und 10 Wohneinheiten. Sie planen eine WDVS-Sanierung 
+                  und müssen für einen Mieter (EG rechts, 57,5m²) die Mieterhöhung berechnen.
                 </p>
                 <p className="text-blue-800 text-sm">
                   <strong>Ziel:</strong> Erfassung der Gebäudedaten für eine Energieberatung zur Berechnung 
