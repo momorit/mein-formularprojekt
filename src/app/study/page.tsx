@@ -365,16 +365,13 @@ export default function StudyPage() {
   }
 
   if (step === 'variant1_survey' || step === 'variant2_survey') {
-    const variantName = step === 'variant1_survey' ? 
-      `Variante ${getFirstVariant()} (${getFirstVariant() === 'A' ? 'Sichtbares Formular' : 'Dialog-System'})` :
-      `Variante ${getSecondVariant()} (${getSecondVariant() === 'A' ? 'Sichtbares Formular' : 'Dialog-System'})`
+    const currentVariant = step === 'variant1_survey' ? getFirstVariant() : getSecondVariant()
     
     return (
       <EnhancedQuestionnaire
-        variantName={variantName}
+        variant={currentVariant as 'A' | 'B'}
         onComplete={handleNext}
         participantId={participantId}
-        step={step}
       />
     )
   }
@@ -382,11 +379,9 @@ export default function StudyPage() {
   if (step === 'final_comparison') {
     return (
       <EnhancedQuestionnaire
-        variantName="Abschließender Vergleich"
+        variant="comparison"
         onComplete={handleNext}
         participantId={participantId}
-        step={step}
-        isComparison={true}
       />
     )
   }
