@@ -25,7 +25,15 @@ function StudyPageContent() {
   const getVariantOrder = (id: string) => {
     const hash = id.split('').reduce((a, b) => a + b.charCodeAt(0), 0)
     return hash % 2 === 0 ? ['A', 'B'] : ['B', 'A']
-  }
+  // Steps array AFTER function definitions
+  const studySteps = [
+    { num: 1, text: 'Demografische Angaben', time: '2 Min.' },
+    { num: 2, text: `Erste Variante testen (${getFirstVariant()})`, time: '5-8 Min.' },
+    { num: 3, text: 'Fragebogen zur ersten Variante (Vertrauen & Usability)', time: '3-4 Min.' },
+    { num: 4, text: `Zweite Variante testen (${getSecondVariant()})`, time: '5-8 Min.' },
+    { num: 5, text: 'Fragebogen zur zweiten Variante (Vertrauen & Usability)', time: '3-4 Min.' },
+    { num: 6, text: 'Abschließender Vergleich & Präferenzen', time: '3-4 Min.' }
+  ]
 
   // Render different steps
   if (step === 'intro') {
