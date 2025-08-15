@@ -80,14 +80,7 @@ function StudyPageContent() {
               <div>
                 <h3 className="text-xl font-semibold text-gray-800 mb-3">🔄 Studienablauf (ca. 20-25 Minuten)</h3>
                 <div className="space-y-3">
-                  {[
-                    { num: 1, text: 'Demografische Angaben', time: '2 Min.' },
-                    { num: 2, text: `Erste Variante testen (${getFirstVariant()})`, time: '5-8 Min.' },
-                    { num: 3, text: 'Fragebogen zur ersten Variante (Vertrauen & Usability)', time: '3-4 Min.' },
-                    { num: 4, text: `Zweite Variante testen (${getSecondVariant()})`, time: '5-8 Min.' },
-                    { num: 5, text: 'Fragebogen zur zweiten Variante (Vertrauen & Usability)', time: '3-4 Min.' },
-                    { num: 6, text: 'Abschließender Vergleich & Präferenzen', time: '3-4 Min.' }
-                  ].map((stepInfo) => (
+                  {studySteps.map((stepInfo) => (
                     <div key={stepInfo.num} className="flex items-center p-3 bg-white rounded-lg border">
                       <div className="w-8 h-8 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center font-semibold text-sm mr-4">
                         {stepInfo.num}
@@ -443,6 +436,16 @@ function StudyPageContent() {
       handleNext(demographics) // Continue even if save fails
     }
   }
+
+  // Steps array AFTER function definitions
+  const studySteps = [
+    { num: 1, text: 'Demografische Angaben', time: '2 Min.' },
+    { num: 2, text: `Erste Variante testen (${getFirstVariant()})`, time: '5-8 Min.' },
+    { num: 3, text: 'Fragebogen zur ersten Variante (Vertrauen & Usability)', time: '3-4 Min.' },
+    { num: 4, text: `Zweite Variante testen (${getSecondVariant()})`, time: '5-8 Min.' },
+    { num: 5, text: 'Fragebogen zur zweiten Variante (Vertrauen & Usability)', time: '3-4 Min.' },
+    { num: 6, text: 'Abschließender Vergleich & Präferenzen', time: '3-4 Min.' }
+  ]
 
   // Render different steps
   if (step === 'intro') {
