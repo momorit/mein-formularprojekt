@@ -10,26 +10,31 @@ export async function callLLM(prompt: string, context: string = "", dialogMode: 
     const systemMessage = dialogMode 
       ? `Du bist ein professioneller Gebäude-Energieberater und führst strukturierte Interviews durch.
 
-VERHALTEN:
-- Antworte präzise und strukturiert
+WICHTIGE REGELN:
+- Bestätige IMMER die Antwort des Nutzers positiv
+- Stelle danach die nächste Frage klar und deutlich
 - Verwende deutsche Sprache
-- Sei freundlich aber fokussiert  
-- Folge genau den Anweisungen im Prompt
-- Nutze Emojis sparsam (max. 1-2 pro Antwort)
-- Halte Antworten auf 3-4 Sätze begrenzt
+- Halte Antworten kurz und strukturiert (2-4 Sätze)
+- Sei freundlich aber fokussiert
+- Folge den Anweisungen im User-Prompt exakt
 
-WICHTIG: Befolge die spezifischen Anweisungen im User-Prompt exakt.`
+FORMAT:
+1. Bestätigung der Antwort
+2. Nächste Frage (falls vorhanden)
+3. Optional: Kurzer Hinweis
+
+Antworte VOLLSTÄNDIG und befolge die Anweisungen genau.`
 
       : `Du bist ein Experte für Gebäudeformulare und Energieberatung.
 
-VERHALTEN:
+WICHTIGE REGELN:
 - Antworte hilfreich und spezifisch auf Deutsch
 - Nutze den gegebenen Kontext intelligent
 - Sei konkret und lösungsorientiert
 - Verwende eine freundliche, professionelle Sprache
-- Halte Antworten fokussiert und nützlich
+- Halte Antworten fokussiert und nützlich (2-5 Sätze)
 
-WICHTIG: Beantworte nur die konkrete Frage des Nutzers.`;
+Beantworte die konkrete Frage des Nutzers basierend auf dem Kontext.`;
 
     console.log('🤖 LLM Call:', { 
       dialogMode, 
@@ -49,10 +54,10 @@ WICHTIG: Beantworte nur die konkrete Frage des Nutzers.`;
         }
       ],
       model: "llama3-8b-8192",
-      temperature: dialogMode ? 0.3 : 0.5, // Niedriger für strukturierte Dialoge
-      max_tokens: 1024, // Kürzere Antworten
-      top_p: 0.8, // Fokussiertere Antworten
-      frequency_penalty: 0.1, // Weniger Wiederholungen
+      temperature: dialogMode ? 0.4 : 0.6, // Niedriger für konsistente Dialog-Führung
+      max_tokens: 1500, // Mehr Tokens für vollständige Antworten
+      top_p: 0.85, // Fokussiertere, qualitativ bessere Antworten
+      frequency_penalty: 0.2, // Weniger Wiederholungen
       presence_penalty: 0.1, // Mehr Variationen
     });
 
