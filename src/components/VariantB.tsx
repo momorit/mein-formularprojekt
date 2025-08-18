@@ -67,20 +67,24 @@ export default function VariantB({ onComplete, startTime }: VariantBProps) {
       // Direkte Willkommensnachricht ohne API-Call
       const welcomeMessage: ChatMessage = {
         role: 'assistant',
-        message: `👋 **Willkommen zum flexiblen Dialog-System!**
+        message: `👋 Willkommen zum flexiblen Dialog-System!
 
-Ich bin Ihr KI-Assistent für die Gebäude-Energieberatung und führe Sie durch **4 wichtige Hauptfragen**.
+Ich bin Ihr KI-Assistent für die Gebäude-Energieberatung und führe Sie durch 4 wichtige Hauptfragen.
 
-**🏠 Ihr Szenario:** 
-Mehrfamilienhaus (Baujahr 1965), WDVS-Sanierung der Eingangsfassade zur Straße (Südseite) mit 140mm Mineralwolle-Dämmung.
+🏠 Ihr Szenario: 
+Sie besitzen ein Mehrfamilienhaus (Baujahr 1965) in der Siedlungsstraße 23. 
+Es hat eine Rotklinkerfassade und 10 Wohneinheiten. Sie planen eine WDVS-Sanierung 
+der Eingangsfassade zur Straße (Südseite) mit 140mm Mineralwolle-Dämmung. 
+Das Gebäude hat eine Ölheizung im Keller. Sie müssen für eine Mieterin 
+(EG rechts, 57,5m²) die mögliche Mieterhöhung berechnen.
 
-**💡 So funktioniert's:**
+💡 So funktioniert's:
 • Ich stelle Ihnen eine Hauptfrage
-• Sie können **beliebig viele Nachfragen** stellen
+• Sie können beliebig viele Nachfragen stellen
 • Wenn Sie bereit sind: Antworten und "weiter" sagen
 • Oder einfach nur Ihre Antwort geben
 
-**📋 Erste Hauptfrage (1/4):** 
+📋 Erste Hauptfrage (1/4): 
 Welche Gebäudeseite soll hauptsächlich saniert werden?
 
 *Bei Unklarheiten fragen Sie gerne nach! Zum Beispiel: "Was bedeutet WDVS?" oder "Welche Optionen gibt es?"*`,
@@ -178,14 +182,14 @@ Welche Gebäudeseite soll hauptsächlich saniert werden?
       // Fallback response
       const fallbackMessage: ChatMessage = {
         role: 'assistant',
-        message: `❌ **Entschuldigung, technischer Fehler.**
+        message: `❌ Entschuldigung, technischer Fehler.
 
 Bitte versuchen Sie es erneut. Falls das Problem besteht:
 • Seite neu laden (Strg+F5)  
 • Bei Nachfragen: "?" eingeben
 • Oder direkt Ihre Antwort geben
 
-**Tipp:** Auch ohne perfekte Technik können Sie fortfahren - geben Sie einfach Ihre Antwort ein!`,
+Tipp: Auch ohne perfekte Technik können Sie fortfahren - geben Sie einfach Ihre Antwort ein!`,
         timestamp: new Date()
       }
       setChatHistory(prev => [...prev, fallbackMessage])
@@ -314,17 +318,17 @@ Bitte versuchen Sie es erneut. Falls das Problem besteht:
                     </div>
                     <h3 className="text-xl font-semibold">Flexiblen Dialog starten</h3>
                     <p className="text-gray-600 max-w-md mx-auto">
-                      Ein intelligenter Dialog mit **unbegrenzten Nachfragen**. 
+                      Ein intelligenter Dialog mit unbegrenzten Nachfragen. 
                       Fragen Sie nach, bis alles klar ist!
                     </p>
                     
                     <div className="bg-green-50 p-4 rounded-lg border border-green-200">
                       <h4 className="font-semibold text-green-800 mb-2">✨ Neu: Nachfragen möglich!</h4>
                       <ul className="text-sm text-green-700 space-y-1">
-                        <li>• **Beliebig viele Rückfragen** zu jeder Hauptfrage</li>
-                        <li>• **Beispiele** und **Details** auf Nachfrage</li>
-                        <li>• **Flexibler Fortschritt** - Sie bestimmen das Tempo</li>
-                        <li>• Weiter zur nächsten Frage nur wenn **Sie** bereit sind</li>
+                        <li>• Beliebig viele Rückfragen zu jeder Hauptfrage</li>
+                        <li>• Beispiele und Details auf Nachfrage</li>
+                        <li>• Flexibler Fortschritt - Sie bestimmen das Tempo</li>
+                        <li>• Weiter zur nächsten Frage nur wenn Sie bereit sind</li>
                       </ul>
                     </div>
                     
