@@ -12,6 +12,9 @@ interface DialogSession {
   conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }>
 }
 
+const sessions = new Map<string, DialogSession>()
+
+
 // System Prompt
 const systemPrompt = `
 Du bist ein erfahrener Energieberater. Du befindest dich in einem flexiblen Frage-Antwort-Dialog mit einem Nutzer.
@@ -33,6 +36,8 @@ Sprich freundlich, professionell und präzise. Antworte nur basierend auf dem Sz
 Sprich immer **auf Deutsch**.
 Springe NIE automatisch zur nächsten Frage bei einer Nachfrage.
 `
+
+
 
 export async function POST(request: NextRequest) {
   try {
