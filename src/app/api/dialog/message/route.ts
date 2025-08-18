@@ -155,7 +155,10 @@ Bitte:
       { role: 'assistant', content: llmPrompt }
     ]
 
-    const llmResponse = await callLLM(llmMessages)
+    const llmResponse = await callLLM(
+      llmMessages.map(m => `${m.role.toUpperCase()}: ${m.content}`).join('\n\n')
+    )
+    
 
     // Update history with LLM response
     session.conversationHistory.push({ role: 'assistant', content: llmResponse })
