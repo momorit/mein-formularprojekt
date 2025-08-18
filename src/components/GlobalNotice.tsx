@@ -9,7 +9,7 @@ export default function GlobalNotice() {
     >
       <AlertTriangle className="h-4 w-4" aria-hidden="true" />
       <p>
-        Hinweis: Dieses Dialog-Interface befindet sich noch in der Entwicklung. Es können Fehler oder unnatürliche
+        Hinweis: Die LLM-Interaktionen befinden sich noch in der Entwicklung. Es können Fehler oder unnatürliche
         Antworten auftreten.
       </p>
     </div>
