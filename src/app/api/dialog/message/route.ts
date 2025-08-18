@@ -1,4 +1,4 @@
-// src/app/api/dialog/message/route.ts - FLEXIBLER DIALOG MIT NACHFRAGEN
+// src/app/api/dialog/message/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { callLLM } from '@/lib/llm'
 
@@ -9,201 +9,175 @@ interface DialogSession {
   currentMainQuestion: number
   questionStatus: 'asking' | 'clarifying' | 'answered' | 'completed'
   context: string
-  conversationHistory: Array<{
-    question: string
-    userResponse: string
-    followUps: string[]
-  }>
+  conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }>
 }
 
-const sessions = new Map<string, DialogSession>()
+// System Prompt
+const systemPrompt = `
+Du bist ein erfahrener Energieberater. Du befindest dich in einem flexiblen Frage-Antwort-Dialog mit einem Nutzer.
+Sprich freundlich, professionell und präzise. Antworte nur basierend auf dem Szenario und der aktuellen Hauptfrage.
+
+🟢 Wenn der Nutzer eine **Rückfrage** zur aktuellen Hauptfrage stellt (z. B. Fragezeichen, "was bedeutet ...", "warum", "welche Optionen", ...):
+  → beantworte ausschließlich diese Nachfrage.
+  → Stelle am Ende maximal eine kurze Rückfrage wie:
+     "Möchten Sie noch etwas zu dieser Frage wissen, oder können wir mit Ihrer Antwort fortfahren?"
+
+🟡 Wenn der Nutzer **unsicher** oder sein Input unklar ist (z. B. "hallo", "ok", kurzer Satz ohne erkennbaren Inhalt):
+  → frag freundlich nach, ob das eine Rückfrage oder schon eine eigentliche Antwort ist.
+
+🔵 Wenn der Nutzer **klar antwortet** (z. B. "Südseite", "Mineralwolle", "Ja, freiwillige Sanierung"):
+  → bestätige kurz.
+  → gehe danach **zur nächsten Hauptfrage** über.
+  → stelle die nächste Hauptfrage klar und verständlich.
+
+Sprich immer **auf Deutsch**.
+Springe NIE automatisch zur nächsten Frage bei einer Nachfrage.
+`
 
 export async function POST(request: NextRequest) {
   try {
     const { message, session_id } = await request.json()
-    
-    console.log('💬 Flexible Dialog message:', { message, session_id })
-    
+
     // Session abrufen oder erstellen
     let session = sessions.get(session_id)
-    
     if (!session) {
       session = {
         sessionId: session_id,
         mainQuestions: [
           "Welche Gebäudeseite soll hauptsächlich saniert werden?",
-          "Welches Dämmmaterial ist für Ihr Vorhaben vorgesehen?", 
+          "Welches Dämmmaterial ist für Ihr Vorhaben vorgesehen?",
           "Wurden bereits andere energetische Maßnahmen am Gebäude durchgeführt?",
           "Handelt es sich um eine freiwillige Modernisierung oder besteht eine gesetzliche Verpflichtung?"
         ],
         answers: {},
         currentMainQuestion: 0,
         questionStatus: 'asking',
-        context: "Mehrfamilienhaus Baujahr 1965, WDVS-Sanierung Eingangsfassade Südseite, 140mm Mineralwolle, Ölheizung, Mieterin EG rechts 57,5m²",
+        context: "Mehrfamilienhaus Baujahr 1965, WDVS-Sanierung Eingangsfassade Südseite, 140mm Mineralwolle",
         conversationHistory: []
       }
       sessions.set(session_id, session)
     }
 
-    // Nachfrage-Keywords erkennen
-    const isFollowUpQuestion = detectFollowUpQuestion(message)
-    const isReadyToProgress = detectProgressIntent(message)
-    
-    // LLM-Prompt basierend auf Dialog-Status
+    // Add user message to history
+    session.conversationHistory.push({ role: 'user', content: message })
+
+    // Nachfrage- / Progress-Erkennung
+    const isFollowUp = detectFollowUpQuestion(message)
+    const isProgress = detectProgressIntent(message)
+
+    // Bau Prompt anhand Status
     let llmPrompt = ''
-    let shouldProgressToNext = false
-    
+    let shouldProgress = false
+
     if (session.questionStatus === 'completed') {
-      // Alle Fragen beantwortet
-      llmPrompt = `Der Dialog ist abgeschlossen. Der Nutzer sagt: "${message}"
+      llmPrompt = `
+Dialog abgeschlossen. Nutzer sagt: "${message}"
 
-KONTEXT: Alle 4 Hauptfragen wurden beantwortet.
-ANTWORTEN: ${JSON.stringify(session.answers, null, 2)}
+ANTWORTEN:
+${JSON.stringify(session.answers)}
 
-AUFGABE:
-1. Bestätige freundlich
-2. Fasse die gesammelten Daten kurz zusammen  
-3. Sage, dass die Beratung abgeschlossen ist
-4. Erwähne, dass die Daten gespeichert werden können
+Bitte:
+• bestätige freundlich
+• fasse die Antworten zusammen
+• erwähne, dass die Daten gespeichert werden können
+`
+    } 
+    else if (isFollowUp && !isProgress) {
+      // 1️⃣ Nachfrage zur aktuellen Frage
+      const currentQ = session.mainQuestions[session.currentMainQuestion]
+      llmPrompt = `
+Nutzer stellt eine Nachfrage zur aktuellen Hauptfrage.
 
-ANTWORTE auf Deutsch, herzlich und professionell.`
-
-    } else if (isFollowUpQuestion && !isReadyToProgress) {
-      // Nutzer stellt Nachfrage zur aktuellen Hauptfrage
-      const currentQuestion = session.mainQuestions[session.currentMainQuestion]
-      
-      llmPrompt = `Der Nutzer stellt eine Nachfrage zur aktuellen Hauptfrage.
-
-AKTUELLE HAUPTFRAGE: "${currentQuestion}"
-NUTZER-NACHFRAGE: "${message}"
+AKTUELLE FRAGE: "${currentQ}"
+NACHFRAGE: "${message}"
 SZENARIO: ${session.context}
 
-AUFGABE:
-1. Beantworte die Nachfrage detailliert und hilfreich
-2. Bezug auf das Szenario nehmen (Baujahr 1965, WDVS-Sanierung, etc.)
-3. Konkrete Beispiele und Empfehlungen geben
-4. Am Ende fragen: "Haben Sie weitere Fragen zu diesem Punkt, oder können wir mit der Antwort fortfahren?"
+Bitte beantworte NUR diese Nachfrage (kein Fortschritt).
+Erinnere am Ende daran, dass der Nutzer noch weitere Fragen stellen kann oder "weiter" sagen kann.
+`
+    } 
+    else if (isProgress) {
+      // 2️⃣ Nutzer möchte zur nächsten Frage
+      const currentQ = session.mainQuestions[session.currentMainQuestion]
+      session.answers[`frage_${session.currentMainQuestion + 1}`] = message
 
-ANTWORTE auf Deutsch, fachkundig aber verständlich.`
+      const nextIndex = session.currentMainQuestion + 1
+      if (nextIndex < session.mainQuestions.length) {
+        const nextQ = session.mainQuestions[nextIndex]
+        llmPrompt = `
+✅ Antwort erhalten: "${message}"
 
-    } else if (isReadyToProgress || session.questionStatus === 'asking') {
-      // Nutzer beantwortet Hauptfrage oder ist bereit weiterzugehen
-      const currentQuestion = session.mainQuestions[session.currentMainQuestion]
-      
-      // Antwort zur aktuellen Hauptfrage speichern
-      if (!isFollowUpQuestion) {
-        session.answers[`frage_${session.currentMainQuestion + 1}`] = message
-      }
-      
-      // Zur nächsten Hauptfrage oder Abschluss
-      const nextQuestionIndex = session.currentMainQuestion + 1
-      const hasMoreQuestions = nextQuestionIndex < session.mainQuestions.length
-      
-      if (hasMoreQuestions) {
-        const nextQuestion = session.mainQuestions[nextQuestionIndex]
-        
-        llmPrompt = `Der Nutzer hat die Hauptfrage beantwortet: "${message}"
+NÄCHSTE FRAGE (${nextIndex + 1}/${session.mainQuestions.length}):
+${nextQ}
 
-AKTUELLE FRAGE: "${currentQuestion}"
-NÄCHSTE FRAGE: "${nextQuestion}"
-SZENARIO: ${session.context}
-
-AUFGABE:
-1. Bestätige die Antwort positiv und kurz
-2. Optional: Kurzer fachlicher Kommentar zur Antwort
-3. Leite zur nächsten Frage über
-4. Stelle die nächste Hauptfrage klar und deutlich
-5. Erläutere kurz, warum diese Frage wichtig ist
-
-FORMAT:
-"✅ Verstanden: [Bestätigung]
-[Optional: Kurzer Kommentar]
-
-**Nächste Frage (${nextQuestionIndex + 1}/${session.mainQuestions.length}):** [Frage]
-[Kurze Erläuterung]"
-
-ANTWORTE auf Deutsch, strukturiert und freundlich.`
-
-        shouldProgressToNext = true
-        
+Bitte stelle die nächste Frage, kurz begründen warum sie wichtig ist.
+`
+        shouldProgress = true
       } else {
-        // Letzte Frage beantwortet - Dialog abgeschlossen
-        llmPrompt = `Der Nutzer hat die letzte Hauptfrage beantwortet: "${message}"
+        llmPrompt = `
+✅ Letzte Antwort: "${message}"
 
 ALLE ANTWORTEN:
-${Object.entries(session.answers).map(([key, value]) => `${key}: ${value}`).join('\n')}
-LETZTE ANTWORT: ${message}
+${JSON.stringify(session.answers)}
 
-AUFGABE:
-1. Bestätige die letzte Antwort herzlich
-2. Gratuliere zur vollständigen Beratung
-3. Fasse alle 4 Antworten strukturiert zusammen
-4. Gib einen abschließenden fachlichen Hinweis
-5. Sage, dass die Daten jetzt gespeichert werden können
-
-ANTWORTE auf Deutsch, professionell und wertschätzend.`
-
+Bitte:
+• bestätige herzlich
+• fasse alle Antworten zusammen
+• weise darauf hin, dass die Beratung abgeschlossen ist und gespeichert werden kann.
+`
         session.questionStatus = 'completed'
-        session.answers[`frage_${session.currentMainQuestion + 1}`] = message
       }
+    } 
+    else {
+      // 3️⃣ Unklar (weder Follow-Up noch klare Antwort) → Rückfrage stellen
+      const currentQ = session.mainQuestions[session.currentMainQuestion]
+      llmPrompt = `
+Der Nutzer sagt: "${message}"
+Du bist dir nicht sicher, ob es eine Antwort oder eine Rückfrage ist.
+
+AKTUELLE FRAGE: "${currentQ}"
+
+Bitte:
+• frag höflich nach, ob die Eingabe eine Rückfrage zur aktuellen Frage ist oder bereits eine Antwort.
+• gib KEINE neue Hauptfrage aus.
+`
     }
 
-    try {
-      const llmResponse = await callLLM(
-        llmPrompt,
-        '', // Kontext ist bereits im Prompt
-        true // Dialog-Modus
-      )
-      
-      console.log('✅ Flexible Dialog LLM response generated')
-      
-      // Session aktualisieren falls zur nächsten Frage
-      if (shouldProgressToNext) {
-        session.currentMainQuestion = session.currentMainQuestion + 1
-        session.questionStatus = 'asking'
-      }
-      
-      sessions.set(session_id, session)
-      
-      return NextResponse.json({
-        response: llmResponse,
-        session_id: session_id,
-        current_question: session.currentMainQuestion + 1,
-        total_questions: session.mainQuestions.length,
-        dialog_complete: session.questionStatus === 'completed',
-        answers_collected: session.answers,
-        can_ask_followup: session.questionStatus !== 'completed'
-      })
-      
-    } catch (llmError) {
-      console.error('❌ Flexible Dialog LLM failed:', llmError)
-      
-      // Intelligenter Fallback
-      const fallbackResponse = generateFlexibleFallback(
-        message, 
-        session,
-        isFollowUpQuestion
-      )
-      
-      return NextResponse.json({
-        response: fallbackResponse,
-        session_id: session_id,
-        current_question: session.currentMainQuestion + 1,
-        total_questions: session.mainQuestions.length,
-        dialog_complete: session.questionStatus === 'completed',
-        answers_collected: session.answers,
-        can_ask_followup: true
-      })
+    // Conversation History an LLM übergeben
+    const llmMessages = [
+      { role: 'system', content: systemPrompt },
+      ...session.conversationHistory.map(m => ({ role: m.role, content: m.content })),
+      { role: 'assistant', content: llmPrompt }
+    ]
+
+    const llmResponse = await callLLM(llmMessages)
+
+    // Update history with LLM response
+    session.conversationHistory.push({ role: 'assistant', content: llmResponse })
+
+    // Fortschritt aktualisieren
+    if (shouldProgress) {
+      session.currentMainQuestion++
+      session.questionStatus = 'asking'
     }
-    
-  } catch (error) {
-    console.error('❌ Flexible Dialog API error:', error)
+
+    sessions.set(session_id, session)
+
     return NextResponse.json({
-      response: "Entschuldigung, es gab einen Fehler. Können Sie Ihre Nachricht wiederholen?",
-      session_id: "error"
-    }, { status: 500 })
+      response: llmResponse,
+      session_id,
+      current_question: session.currentMainQuestion + 1,
+      total_questions: session.mainQuestions.length,
+      dialog_complete: session.questionStatus === 'completed',
+      answers_collected: session.answers,
+      can_ask_followup: session.questionStatus !== 'completed'
+    })
+  } catch (error) {
+    console.error(error)
+    return NextResponse.json({ response: "Fehler – bitte nochmal versuchen." }, { status: 500 })
   }
 }
+
 
 // Nachfrage-Erkennung
 function detectFollowUpQuestion(message: string): boolean {
@@ -233,52 +207,4 @@ function detectProgressIntent(message: string): boolean {
   }
   
   return progressIndicators.some(indicator => lowerMessage.includes(indicator))
-}
-
-// Flexibler Fallback
-function generateFlexibleFallback(
-  message: string,
-  session: DialogSession,
-  isFollowUp: boolean
-): string {
-  
-  if (session.questionStatus === 'completed') {
-    return `🎉 **Herzlichen Glückwunsch!** Sie haben alle 4 Fragen erfolgreich beantwortet.
-
-**Ihre Angaben im Überblick:**
-${Object.entries(session.answers).map(([key, value], index) => 
-  `${index + 1}. ${session.mainQuestions[index]}\n   ➜ ${value}`
-).join('\n\n')}
-
-✅ **Ihre Beratung ist abgeschlossen.** Die Daten können jetzt gespeichert werden.`
-  }
-  
-  if (isFollowUp) {
-    const currentQuestion = session.mainQuestions[session.currentMainQuestion]
-    return `Gerne helfe ich bei Ihrer Nachfrage zur aktuellen Frage!
-
-**Aktuelle Frage:** ${currentQuestion}
-
-Basierend auf Ihrem Szenario (Mehrfamilienhaus Baujahr 1965, WDVS-Sanierung) kann ich Ihnen detaillierte Informationen geben. 
-
-**Was genau möchten Sie wissen?** Stellen Sie gerne weitere Fragen zu diesem Punkt.`
-  }
-  
-  // Standard Antwort-Bestätigung
-  const nextIndex = session.currentMainQuestion + 1
-  const hasMore = nextIndex < session.mainQuestions.length
-  
-  if (hasMore) {
-    return `✅ **Verstanden:** ${message}
-
-**Nächste Frage (${nextIndex + 1}/${session.mainQuestions.length}):** 
-${session.mainQuestions[nextIndex]}
-
-Bei Fragen zu diesem Punkt können Sie gerne nachfragen!`
-  } else {
-    return `✅ **Perfekt!** Das war die letzte Frage.
-
-**Ihre Beratung ist vollständig abgeschlossen.** 
-Vielen Dank für Ihre Antworten! Die Daten können jetzt gespeichert werden.`
-  }
 }
