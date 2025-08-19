@@ -87,7 +87,7 @@ Das Gebäude hat eine Ölheizung im Keller. Sie müssen für eine Mieterin
 📋 Erste Hauptfrage (1/4): 
 Welche Gebäudeseite soll hauptsächlich saniert werden?
 
-*Bei Unklarheiten fragen Sie gerne nach! Zum Beispiel: "Was bedeutet WDVS?" oder "Welche Optionen gibt es?"*`,
+Bei Unklarheiten fragen Sie gerne nach! Zum Beispiel: "Was bedeutet WDVS?" oder "Welche Optionen gibt es?"`,
         timestamp: new Date()
       }
       
