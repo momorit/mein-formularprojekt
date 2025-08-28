@@ -35,6 +35,7 @@ lerna-debug.log*
 out/
 build/
 dist/
+tsconfig.tsbuildinfo
 
 # === PYTHON ===
 # Virtual environments
