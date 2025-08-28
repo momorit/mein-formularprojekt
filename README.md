@@ -374,6 +374,16 @@ npm run lighthouse
 - **Diskussionen**: GitHub Discussions für Fragen
 - **Email**: Bei kritischen Problemen
 
+## 🔍 RAG Index erstellen
+Das Skript `scripts/rag-index.ts` verarbeitet alle Dateien aus dem Ordner `docs/` (PDF & Markdown),
+zerlegt sie in Chunks von etwa 500 Tokens, berechnet Embeddings mit dem Modell
+`sentence-transformers/all-MiniLM-L6-v2` und speichert Vektoren samt Metadaten mittels **Chroma** unter `data/rag-index`.
+
+```bash
+# Dokumente indexieren
+npm run rag:index
+```
+
 ---
 
 ## 📄 Lizenz & Rechte
