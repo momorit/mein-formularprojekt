@@ -1,13 +1,19 @@
 // src/app/api/chat/route.ts - FIXED MIT LLM
 import { NextRequest, NextResponse } from 'next/server'
 import { callLLM } from '@/lib/llm'
+import { retrieve } from '@/lib/rag'
 
 export async function POST(request: NextRequest) {
   try {
     const { message, context, formValues } = await request.json()
     
     console.log('💬 Chat API called:', { message, hasContext: !!context })
-    
+
+    const ragResults = await retrieve(message)
+    const ragContext = ragResults
+      .map(r => `Quelle: ${r.source}\n${r.text}`)
+      .join('\n\n')
+
     // Kontext für bessere LLM-Antworten aufbauen
     const enhancedContext = `
 FORMULAR-KONTEXT: Gebäude-Energieberatung für Mehrfamilienhaus
@@ -18,6 +24,9 @@ ${formValues ? Object.entries(formValues)
   .filter(([key, value]) => value && String(value).trim())
   .map(([key, value]) => `- ${key}: ${value}`)
   .join('\n') : 'Noch keine Felder ausgefüllt'}
+
+RAG-KONTEXT:
+${ragContext || 'Keine zusätzlichen Informationen gefunden.'}
 
 NUTZER-FRAGE: ${message}
 
