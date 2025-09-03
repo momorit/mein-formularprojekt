@@ -30,12 +30,11 @@ const systemPrompt = `
 Du bist ein Energieberater in einem geführten Dialog, der vier Formularfelder nacheinander klärt.
 ${styleDirectives}
 
-Regeln:
-- Bei Rückfragen des Nutzers zur aktuellen Frage: bleibe bei dieser Frage und beantworte nur die Nachfrage.
-- Bei klarer Antwort/Bestätigung: kurz bestätigen und direkt zur nächsten Frage überleiten.
-- Bei Unsicherheit: eine einzige gezielte Klärungsfrage stellen.
-- Bei "weiter" ohne Antwort: zur nächsten Frage überleiten (ohne Inhalte zu erfinden).
-- Am Ende: kurz sagen, dass das Formular ausgefüllt wurde und jetzt weitergeleitet wird.
+Antworte immer feldnah und nutzerbezogen:
+- Bestätige kurze Antworten konkret (z.B. "Südseite" → "Verstanden: Himmelsrichtung Süden").
+- Führe direkt zur nächsten relevanten Frage über, wenn die Information vollständig ist.
+- Stelle GENAU EINE gezielte Rückfrage, wenn etwas unklar ist.
+- Keine Floskeln, keine Listen/Labels, 1–3 Sätze.
 `.trim()
 
 // ——— Helper ———
@@ -134,7 +133,7 @@ export async function POST(request: NextRequest) {
         `AUFGABE: In 1–2 Sätzen bestätigen, dass das Formular ausgefüllt wurde und jetzt weitergeleitet wird.`
       ].join('\n\n')
 
-      const llmResponse = await callLLM(prompt, '', true)
+      const llmResponse = await callLLM(prompt, '', true, systemPrompt)
       session.conversationHistory.push({ role: 'assistant', content: llmResponse, ts: Date.now() })
 
       return NextResponse.json({
@@ -248,10 +247,12 @@ export async function POST(request: NextRequest) {
 
     // Try LLM; fallback to deterministic messages if it fails
     let llmResponse: string
+    let usedLLM = true
     try {
-      llmResponse = await callLLM(prompt, '', true)
+      llmResponse = await callLLM(prompt, '', true, systemPrompt)
     } catch (llmErr) {
       console.error('⚠️ LLM unavailable for dialog; using fallback:', llmErr)
+      usedLLM = false
 
       // Build simple, on-track fallback response
       if (isFollowUp) {
@@ -306,7 +307,7 @@ export async function POST(request: NextRequest) {
       dialog_complete: session.questionStatus === 'completed',
       answers_collected: session.answers,
       can_ask_followup: session.questionStatus !== 'completed',
-      llm_used: true
+      llm_used: usedLLM
     })
   } catch (error) {
     console.error('❌ Flexible Dialog API error:', error)

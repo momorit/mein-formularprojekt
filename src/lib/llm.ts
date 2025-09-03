@@ -5,9 +5,14 @@ const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY,
 });
 
-export async function callLLM(prompt: string, context: string = "", dialogMode: boolean = false): Promise<string> {
+export async function callLLM(
+  prompt: string,
+  context: string = "",
+  dialogMode: boolean = false,
+  systemOverride?: string
+): Promise<string> {
   try {
-    const systemMessage = dialogMode 
+    const baseSystem = dialogMode 
       ? `Du bist ein professioneller Gebäude-Energieberater und führst strukturierte Interviews durch.
 
 WICHTIGE REGELN:
@@ -35,6 +40,10 @@ WICHTIGE REGELN:
 - Halte Antworten fokussiert und nützlich (2-5 Sätze)
 
 Beantworte die konkrete Frage des Nutzers basierend auf dem Kontext.`;
+
+    const systemMessage = systemOverride
+      ? `${baseSystem}\n\nZUSÄTZLICHE SYSTEMANWEISUNGEN:\n${systemOverride}`
+      : baseSystem
 
     console.log('🤖 LLM Call:', { 
       dialogMode, 

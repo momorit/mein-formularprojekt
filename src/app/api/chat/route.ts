@@ -10,27 +10,41 @@ export async function POST(request: NextRequest) {
     console.log('💬 Chat API called:', { message, hasContext: !!context })
     
     // Kontext für bessere LLM-Antworten aufbauen
+    const filled = formValues ? Object.entries(formValues)
+      .filter(([_, value]) => value && String(value).trim())
+      .map(([key, value]) => `- ${key}: ${value}`)
+      .join('\n') : 'Noch keine Felder ausgefüllt'
+
     const enhancedContext = `
-FORMULAR-KONTEXT: Gebäude-Energieberatung für Mehrfamilienhaus
-SZENARIO: Baujahr 1965, WDVS-Sanierung Eingangsfassade Südseite, 140mm Mineralwolle
+SZENARIO:
+Mehrfamilienhaus, Baujahr 1965, Rotklinkerfassade, 10 WE.
+Geplante Maßnahme: WDVS an der Eingangsfassade (Südseite) mit 140mm Mineralwolle.
+Heizung: Ölheizung im Keller.
+Aufgabe: Gebäude-Energieberatung und korrekte Formularbefüllung.
 
 BEREITS AUSGEFÜLLTE FELDER:
-${formValues ? Object.entries(formValues)
-  .filter(([key, value]) => value && String(value).trim())
-  .map(([key, value]) => `- ${key}: ${value}`)
-  .join('\n') : 'Noch keine Felder ausgefüllt'}
+${filled}
+`
 
-NUTZER-FRAGE: ${message}
+    // Präziser Prompt: konkret, feldnah, deutsch
+    const prompt = `
+Beantworte die NUTZER-FRAGE präzise und feldnah auf Deutsch.
+- Beziehe dich, wo sinnvoll, auf konkrete Formularfelder (mit Bezeichnung).
+- Nenne Einheiten oder typische Wertebereiche, falls relevant (z.B. U-Wert in W/m²·K).
+- Wenn die Frage unklar ist: stelle GENAU EINE gezielte Rückfrage.
+- Kurzer, hilfreicher Stil: 2–5 Sätze. Kein Floskel-Overhead.
 
-AUFGABE: Beantworte die Frage hilfreich und spezifisch. Nutze das Szenario zur Unterstützung.
+NUTZER-FRAGE:
+${message}
+`
+
+    const systemOverride = `
+Wenn der Nutzer nur ein Stichwort liefert (z.B. "Südseite"), interpretiere es fachlich korrekt (z.B. Himmelsrichtung: Süden) und erkläre in 1–2 Sätzen die Relevanz für das Formular.
+Wenn möglich, schlage eine plausible Eintragung oder nächsten Schritt vor (z.B. Feldname + kurzer Hinweis).
 `
 
     try {
-      const llmResponse = await callLLM(
-        message,
-        enhancedContext,
-        false // Chat-Modus, nicht Dialog-Modus
-      )
+      const llmResponse = await callLLM(prompt, enhancedContext, false, systemOverride)
       
       console.log('✅ LLM Response generated successfully')
       
