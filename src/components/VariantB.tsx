@@ -42,6 +42,7 @@ export default function VariantB({ onComplete, startTime }: VariantBProps) {
   const [sessionId, setSessionId] = useState('')
   const [canAskFollowUp, setCanAskFollowUp] = useState(true)
   const [ragSources, setRagSources] = useState<{ id: string; source: string; page?: number; score?: number }[]>([])
+  const [uiSnippets, setUiSnippets] = useState<{ start_intro?: string; sidepanel?: string; scenario_short?: string; tip_text?: string }>({})
 
   // Auto-scroll to bottom
   const scrollToBottom = () => {
@@ -57,6 +58,24 @@ export default function VariantB({ onComplete, startTime }: VariantBProps) {
     const id = `dialog_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
     setSessionId(id)
     console.log('🎬 Flexible VariantB initialized:', { sessionId: id })
+    ;(async () => {
+      try {
+        const res = await fetch('/api/ui/snippets', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ variant: 'B', context: 'Mehrfamilienhaus Baujahr 1965, Eingangsfassade Südseite, WDVS 140mm Mineralwolle, Ölheizung, Mieterin EG rechts 57.5m²' })
+        })
+        if (res.ok) {
+          const data = await res.json()
+          setUiSnippets({
+            start_intro: data.start_intro,
+            sidepanel: data.sidepanel,
+            scenario_short: data.scenario_short,
+            tip_text: data.tip_text,
+          })
+        }
+      } catch {}
+    })()
   }, [])
 
   // Start Dialog
@@ -302,19 +321,12 @@ Tipp: Auch ohne perfekte Technik können Sie fortfahren - geben Sie einfach Ihre
                       <MessageCircle className="w-8 h-8 text-purple-600" />
                     </div>
                     <h3 className="text-xl font-semibold">Flexiblen Dialog starten</h3>
-                    <p className="text-gray-600 max-w-md mx-auto">
-                      Ein intelligenter Dialog mit unbegrenzten Nachfragen. 
-                      Fragen Sie nach, bis alles klar ist!
+                    <p className="text-gray-700 max-w-md mx-auto">
+                      {uiSnippets.start_intro || 'Geführter Dialog mit kurzen Rückfragen und klaren Schritten.'}
                     </p>
                     
-                    <div className="bg-green-50 p-4 rounded-lg border border-green-200">
-                      <h4 className="font-semibold text-green-800 mb-2">✨ Neu: Nachfragen möglich!</h4>
-                      <ul className="text-sm text-green-700 space-y-1">
-                        <li>• Beliebig viele Rückfragen zu jeder Hauptfrage</li>
-                        <li>• Beispiele und Details auf Nachfrage</li>
-                        <li>• Flexibler Fortschritt - Sie bestimmen das Tempo</li>
-                        <li>• Weiter zur nächsten Frage nur wenn Sie bereit sind</li>
-                      </ul>
+                    <div className="bg-green-50 p-4 rounded-lg border border-green-200 text-sm text-green-800">
+                      {uiSnippets.sidepanel || 'Stellen Sie bei Unklarheiten eine kurze Frage und gehen Sie weiter, wenn Ihre Antwort feststeht.'}
                     </div>
                     
                     <Button 
@@ -526,30 +538,16 @@ Tipp: Auch ohne perfekte Technik können Sie fortfahren - geben Sie einfach Ihre
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3 text-sm">
-                <div className="bg-blue-50 p-3 rounded border border-blue-200">
-                  <h4 className="font-semibold text-blue-800 mb-1">💡 Nachfragen stellen</h4>
-                  <ul className="text-blue-700 space-y-1 text-xs">
-                    <li>• "Was bedeutet WDVS?"</li>
-                    <li>• "Können Sie ein Beispiel geben?"</li>
-                    <li>• "Warum ist das wichtig?"</li>
-                    <li>• "Welche Optionen habe ich?"</li>
-                  </ul>
+                <div className="bg-blue-50 p-3 rounded border border-blue-200 text-xs text-blue-800">
+                  {uiSnippets.sidepanel || 'Stellen Sie bei Unklarheiten eine kurze Frage und gehen Sie weiter, wenn Ihre Antwort feststeht.'}
                 </div>
-                
-                <div className="bg-green-50 p-3 rounded border border-green-200">
-                  <h4 className="font-semibold text-green-800 mb-1">➡️ Weitergehen</h4>
-                  <ul className="text-green-700 space-y-1 text-xs">
-                    <li>• Ihre Antwort geben</li>
-                    <li>• "weiter" oder "nächste Frage"</li>
-                    <li>• "verstanden" oder "ok"</li>
-                  </ul>
+
+                <div className="bg-gray-50 p-3 rounded border text-xs text-gray-700">
+                  {uiSnippets.scenario_short || 'Kurzfassung des Szenarios verfügbar.'}
                 </div>
-                
-                <div className="bg-gray-50 p-3 rounded border">
-                  <h4 className="font-semibold text-gray-800 mb-1">🏠 Ihr Szenario</h4>
-                  <p className="text-xs text-gray-600">
-                    Mehrfamilienhaus (1965), WDVS-Sanierung Eingangsfassade Südseite, 140mm Mineralwolle
-                  </p>
+
+                <div className="bg-yellow-50 p-3 rounded border text-xs text-yellow-800">
+                  <strong>Tipp:</strong> {uiSnippets.tip_text || 'Fragen Sie nach einer kurzen Erklärung oder einem Beispiel.'}
                 </div>
               </CardContent>
             </Card>

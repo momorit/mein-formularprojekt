@@ -7,8 +7,6 @@ export async function POST(request: NextRequest) {
     
     const sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
     
-    const { context } = await request.json()
-
     // Willkommen: LLM‑generiert, kurz, natürlich, direkt zur ersten Frage
     const systemOverride = `
 Sprich natürlich, höflich und knapp (1–3 Sätze), ohne Emojis oder Listen.

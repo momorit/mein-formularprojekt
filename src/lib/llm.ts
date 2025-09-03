@@ -1,13 +1,12 @@
-// src/lib/llm.ts - KOMPLETT OPTIMIERT
+// src/lib/llm.ts - Groq-only generation (Ollama remains for RAG embeddings in rag/* only)
 import Groq from 'groq-sdk';
-import { generate as ollamaGenerate } from './rag/ollama';
 
 let groqClient: Groq | null = null;
 function getGroqClient(): Groq {
   if (!groqClient) {
     const key = process.env.GROQ_API_KEY;
     if (!key) {
-      throw new Error('GROQ_API_KEY fehlt. Setze LLM_PROVIDER=ollama oder konfiguriere GROQ_API_KEY.');
+      throw new Error('GROQ_API_KEY fehlt. Bitte in .env.local setzen und Server neu starten.');
     }
     groqClient = new Groq({ apiKey: key });
   }
@@ -19,7 +18,7 @@ export async function callLLM(
   context: string = "",
   dialogMode: boolean = false,
   systemOverride?: string,
-  options?: { provider?: 'groq' | 'ollama'; model?: string }
+  options?: { provider?: 'groq'; model?: string }
 ): Promise<string> {
   try {
     const baseSystem = dialogMode 
@@ -52,39 +51,21 @@ Beantworte die konkrete Frage des Nutzers basierend auf dem Kontext.`;
       ? `${baseSystem}\n\nZUSÄTZLICHE SYSTEMANWEISUNGEN:\n${systemOverride}`
       : baseSystem
 
-    // Use Groq by default for chat generation; can be overridden per-call
-    const provider = options?.provider || process.env.LLM_PROVIDER || 'groq'
+    // Groq-only generation
     const primaryModel = process.env.GROQ_MODEL || 'llama3-8b-8192'
     const envFallbacks = (process.env.GROQ_MODEL_FALLBACKS || '')
       .split(',')
       .map(s => s.trim())
       .filter(Boolean)
     const defaultFallbacks = ['llama-3.1-8b-instant']
-    const tryModels = Array.from(new Set([primaryModel, ...envFallbacks, ...defaultFallbacks]))
+    const tryModels = Array.from(new Set([
+      ...(options?.model ? [options.model] : []),
+      primaryModel,
+      ...envFallbacks,
+      ...defaultFallbacks,
+    ]))
 
-    if (provider === 'ollama') {
-      const fullPrompt = `${systemMessage}\n\nKONTEXT:\n${context}\n\nAUFGABE:\n${prompt}`
-      const primary = options?.model || process.env.OLLAMA_MODEL || 'llama3:8b-instruct'
-      const envFB = (process.env.OLLAMA_MODEL_FALLBACKS || '')
-        .split(',').map(s => s.trim()).filter(Boolean)
-      const defFB = ['qwen2.5:7b-instruct', 'mistral:7b-instruct', 'llama3.1:8b-instruct', 'llama3:8b', 'phi3:3.8b-mini-instruct']
-      const models = Array.from(new Set([primary, ...envFB, ...defFB]))
-      let lastError: any = null
-      for (const model of models) {
-        try {
-          console.log('🤖 LLM Call (Ollama):', { dialogMode, model, promptLength: prompt.length, contextLength: context.length })
-          const response = await ollamaGenerate(fullPrompt, { model, temperature: dialogMode ? 0.4 : 0.6 })
-          console.log('✅ LLM Response (Ollama):', { responseLength: response.length, model })
-          return response || 'Keine Antwort erhalten'
-        } catch (err: any) {
-          lastError = err
-          const msg = (err && (err.message || String(err))) || ''
-          console.warn('⚠️ Ollama model failed, trying next if available:', { model, error: msg })
-          continue
-        }
-      }
-      throw lastError || new Error('Ollama: alle Modellversuche fehlgeschlagen')
-    } else {
+    {
       let lastError: any = null
       const groq = getGroqClient();
       for (const model of tryModels) {
@@ -112,7 +93,6 @@ Beantworte die konkrete Frage des Nutzers basierend auf dem Kontext.`;
           continue
         }
       }
-      // If we got here, all models failed
       throw lastError || new Error('LLM-Service: alle Modellversuche fehlgeschlagen')
     }
     
@@ -122,16 +102,6 @@ Beantworte die konkrete Frage des Nutzers basierend auf dem Kontext.`;
     // Detaillierte Fehlerbehandlung
     if (error instanceof Error) {
       const msg = error.message.toLowerCase()
-      // Ollama-spezifisch
-      if (msg.includes('ollama')) {
-        if (msg.includes('not found') || msg.includes("model '")) {
-          throw new Error('Ollama Modell nicht gefunden. Installiere ein Modell, z.B.:\n  ollama pull llama3:8b-instruct\nOder setze OLLAMA_MODEL auf ein installiertes Modell.')
-        }
-        if (msg.includes('fetch failed') || msg.includes('econnrefused')) {
-          throw new Error('Ollama nicht erreichbar. Läuft der Dienst? Prüfe OLLAMA_HOST (Standard: http://localhost:11434).')
-        }
-        throw new Error('Ollama-Fehler: ' + error.message)
-      }
       // Groq-spezifisch
       if (msg.includes('api key')) {
         throw new Error('GROQ API-Schlüssel ungültig oder fehlt');
