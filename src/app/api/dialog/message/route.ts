@@ -15,6 +15,24 @@ interface DialogSession {
 
 const sessions = new Map<string, DialogSession>()
 
+// Simple glossary for robust fallbacks
+function glossaryAnswer(message: string): string | null {
+  const m = (message || '').toLowerCase()
+  if (m.includes('wdvs')) {
+    return 'WDVS bedeutet Wärmedämmverbundsystem: Dämmplatten (z. B. Mineralwolle) werden außen auf die Fassade geklebt/dübeliert und mit Putzschichten abgeschlossen – das verbessert den Wärmeschutz deutlich.'
+  }
+  if (m.includes('u-wert') || m.includes('u wert') || m.includes('uwert')) {
+    return 'Der U‑Wert (W/m²·K) beschreibt den Wärmeverlust durch ein Bauteil. Je niedriger, desto besser; ungedämmte Fassaden der 1960er liegen oft um 1,6–1,8 W/m²·K.'
+  }
+  if (m.includes('mineralwolle')) {
+    return 'Mineralwolle ist ein nichtbrennbarer Dämmstoff mit guter Wärme- und Schalldämmung; 140 mm ist eine gängige WDVS‑Stärke im Bestand.'
+  }
+  if (m.includes('klinker') || m.includes('rotklinker')) {
+    return 'Klinker ist eine harte, wasserabweisende Ziegelfassade; bei WDVS sind geeignete Kleber/Dübel und ggf. Vorbehandlung wichtig.'
+  }
+  return null
+}
+
 // ——— Stil-/Verhaltensleitlinien (knapp, natürlich) ———
 const styleDirectives = `
 Sprich natürlich, knapp und präzise (1–3 Sätze).
@@ -155,7 +173,7 @@ export async function POST(request: NextRequest) {
 
     // Priorität: Follow-up vor Progress
     if (isFollowUp) {
-      // Rückfrage: bei der Frage bleiben, nicht springen
+      // Rückfrage: zuerst direkt beantworten, dann zur aktuellen Frage zurückführen
       prompt = [
         systemPrompt,
         `KONTEXT: ${session.context}`,
@@ -163,10 +181,9 @@ export async function POST(request: NextRequest) {
         buildHistorySnippet(session.conversationHistory),
         `NUTZER (Rückfrage): ${message}`,
         `ANTWORT-RICHTLINIEN:
-- Beantworte nur die Nachfrage.
-- Kein Fortschritt. Keine neue Frage.
-- Keine Labels/Listen. 1–3 Sätze.
-- Eine kurze Anschlussfrage ist erlaubt, z. B.: "Möchten Sie das so eintragen oder noch etwas dazu klären?"`
+- Beantworte die Nachfrage direkt und konkret (1–2 Sätze).
+- Danach führe in 1 Satz natürlich zur aktuellen Frage zurück (kein Fortschritt, nur Bezug).
+- Keine Listen/Labels, insgesamt 1–3 Sätze.`
       ].join('\n\n')
     } else if (isProgress) {
       // Weiter ohne Antwort speichern
@@ -256,7 +273,12 @@ export async function POST(request: NextRequest) {
 
       // Build simple, on-track fallback response
       if (isFollowUp) {
-        llmResponse = `Gerne. Zur aktuellen Frage: ${currentQ}. Möchten Sie das noch klären oder sollen wir fortfahren?`
+        const gloss = glossaryAnswer(message)
+        if (gloss) {
+          llmResponse = `${gloss} Kurz zurück zur aktuellen Frage: ${currentQ}`
+        } else {
+          llmResponse = `Danke für die Rückfrage. Kurz zurück zur aktuellen Frage: ${currentQ}`
+        }
       } else if (isProgress) {
         const nextIndex = idx + 1
         if (nextIndex < total) {

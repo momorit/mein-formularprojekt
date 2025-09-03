@@ -87,6 +87,12 @@ Beziehe dich möglichst wörtlich auf zentrale Begriffe des Nutzers, damit der B
 
 function generateIntelligentFallback(message: string, formValues: any): string {
   const lowerMessage = message.toLowerCase()
+  if (lowerMessage.includes('wdvs')) {
+    return `WDVS bedeutet Wärmedämmverbundsystem: Dämmplatten (z. B. Mineralwolle) werden außen auf die Fassade montiert und mit Putzschichten abgeschlossen, um den Wärmeschutz deutlich zu verbessern.`
+  }
+  if (lowerMessage.includes('u-wert') || lowerMessage.includes('u wert') || lowerMessage.includes('uwert')) {
+    return `Der U‑Wert (W/m²·K) gibt an, wie viel Wärme durch ein Bauteil verloren geht. Je niedriger, desto besser; ungedämmte Fassaden der 1960er liegen oft um 1,6–1,8 W/m²·K.`
+  }
   
   // Spezifische Hilfeantworten basierend auf dem Szenario
   if (lowerMessage.includes('gebäude') || lowerMessage.includes('fassade')) {
