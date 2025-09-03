@@ -57,15 +57,16 @@ export async function POST(request: NextRequest) {
     }))
 
     // Prompt to generate concise, field-specific hints in German as pure JSON
-    const prompt = `Erzeuge für jedes der folgenden Formularfelder einen prägnanten, deutschsprachigen Hinweis (1–2 Sätze).
+    const prompt = `Erzeuge für jedes der folgenden Formularfelder einen prägnanten Hinweis (1–2 Sätze) auf Deutsch.
 Vorgaben:
-- Berücksichtige den Kontext der Aufgabe (Gebäude-Energieberatung) und den mitgelieferten Szenario-Kontext.
-- Verwende klare, kurze Sätze und nenne Maßeinheiten, falls sinnvoll.
-- Für type == "number": gib einen plausiblen Bereich/Bezug an (z.B. typische Werte, Einheiten, Orientierung).
-- Für type == "select": erläutere, wann welche Option passt (kurz und neutral).
-- Keine Markdown, keine Aufzählungen – nur ein JSON-Objekt zurückgeben.
+- Sprich den Nutzer direkt an (Du-Form), freundlich und fachlich korrekt.
+- Beziehe dich auf das vorliegende Szenario (Energieberatung) und das konkrete Feld (Label/Typ) – bleibe feldnah.
+- Für type == "number": nenne Einheit und ggf. typische Wertebereiche als Orientierung.
+- Für type == "select": nenne kurz, wann welche Option sinnvoll ist (neutral, knapp).
+- Keine Floskeln, keine Entschuldigungen, keine Disclaimer.
+- Keine Markdown, keine Aufzählungen, keine Erklärtexte außerhalb des JSON.
 
-Gib ausschliesslich ein JSON-Objekt zurück: { "<field.id>": "<Hinweis>", ... } für alle Felder.
+Ausgabeformat (STRICT): Nur ein JSON-Objekt der Form { "<field.id>": "<Hinweis>", ... } für alle Felder.
 
 Felder (JSON):\n${JSON.stringify(fieldsForLLM)}`
 
@@ -105,7 +106,8 @@ Felder (JSON):\n${JSON.stringify(fieldsForLLM)}`
     return NextResponse.json({
       fields,
       context_used: context,
-      instructions: fields.map(field => field.hint)
+      instructions: fields.map(field => field.hint),
+      llm_used: !!generatedHints
     })
   } catch (error) {
     console.error('Error generating instructions:', error)

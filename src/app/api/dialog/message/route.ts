@@ -186,6 +186,7 @@ export async function POST(request: NextRequest) {
         `ANTWORT-RICHTLINIEN:
 - Beantworte die Nachfrage direkt und konkret (1–2 Sätze).
 - Danach führe in 1 Satz natürlich zur aktuellen Frage zurück (kein Fortschritt, nur Bezug).
+- Spiegele mindestens ein Schlüsselwort des Nutzers in der Antwort.
 - Keine Listen/Labels, insgesamt 1–3 Sätze.`
       ].join('\n\n')
     } else if (isProgress) {
