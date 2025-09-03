@@ -245,7 +245,42 @@ export async function POST(request: NextRequest) {
       ].join('\n\n')
     }
 
-    const llmResponse = await callLLM(prompt, '', true)
+    // Try LLM; fallback to deterministic messages if it fails
+    let llmResponse: string
+    try {
+      llmResponse = await callLLM(prompt, '', true)
+    } catch (llmErr) {
+      console.error('⚠️ LLM unavailable for dialog; using fallback:', llmErr)
+
+      // Build simple, on-track fallback response
+      if (isFollowUp) {
+        llmResponse = `Gerne. Zur aktuellen Frage: ${currentQ}. Möchten Sie das noch klären oder sollen wir fortfahren?`
+      } else if (isProgress) {
+        const nextIndex = idx + 1
+        if (nextIndex < total) {
+          const nextQ = session.mainQuestions[nextIndex]
+          llmResponse = `Alles klar, wir machen weiter. Nächste Frage: ${nextQ}`
+          advance = true
+        } else {
+          llmResponse = 'Vielen Dank. Das Formular ist ausgefüllt und wird jetzt weitergeleitet.'
+          markCompleted = true
+        }
+      } else if (isLikelyAnswer(message)) {
+        saveAnswer = true
+        savedAnswerText = message
+        const nextIndex = idx + 1
+        if (nextIndex < total) {
+          const nextQ = session.mainQuestions[nextIndex]
+          llmResponse = `Danke, verstanden. Nächste Frage: ${nextQ}`
+          advance = true
+        } else {
+          llmResponse = 'Danke, verstanden. Das Formular ist ausgefüllt und wird jetzt weitergeleitet.'
+          markCompleted = true
+        }
+      } else {
+        llmResponse = `Könnten Sie das bitte präzisieren? Zurzeit sind wir bei: ${currentQ}`
+      }
+    }
 
     if (saveAnswer) {
       // Speichere neutral als frage_1..frage_4 (du kannst hier gern sprechende Keys verwenden)
