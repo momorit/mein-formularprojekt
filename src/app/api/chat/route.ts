@@ -5,7 +5,7 @@ import { callLLM } from '@/lib/llm'
 
 export async function POST(request: NextRequest) {
   try {
-    const { message, context, formValues } = await request.json()
+    const { message, context, formValues, history } = await request.json()
     
     console.log('💬 Chat API called:', { message, hasContext: !!context })
     
@@ -14,6 +14,10 @@ export async function POST(request: NextRequest) {
       .filter(([_, value]) => value && String(value).trim())
       .map(([key, value]) => `- ${key}: ${value}`)
       .join('\n') : 'Noch keine Felder ausgefüllt'
+
+    const lastTurns = Array.isArray(history)
+      ? history.slice(-6).map((h: any) => `${h.role?.toUpperCase()}: ${h.message || h.content || ''}`).join('\n')
+      : ''
 
     const enhancedContext = `
 SZENARIO:
@@ -24,6 +28,9 @@ Aufgabe: Gebäude-Energieberatung und korrekte Formularbefüllung.
 
 BEREITS AUSGEFÜLLTE FELDER:
 ${filled}
+
+VERLAUF (gekürzt):
+${lastTurns}
 `
 
     // Präziser Prompt: konkret, feldnah, deutsch
@@ -41,6 +48,7 @@ ${message}
     const systemOverride = `
 Wenn der Nutzer nur ein Stichwort liefert (z.B. "Südseite"), interpretiere es fachlich korrekt (z.B. Himmelsrichtung: Süden) und erkläre in 1–2 Sätzen die Relevanz für das Formular.
 Wenn möglich, schlage eine plausible Eintragung oder nächsten Schritt vor (z.B. Feldname + kurzer Hinweis).
+Beziehe dich möglichst wörtlich auf zentrale Begriffe des Nutzers, damit der Bezug klar ist.
 `
 
     try {

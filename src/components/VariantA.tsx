@@ -126,7 +126,8 @@ Beginnen Sie einfach mit dem Ausfüllen und fragen Sie bei Unsicherheiten!`,
       body: JSON.stringify({ 
         message: currentMessage,
         context: 'Mehrfamilienhaus Baujahr 1965, Eingangsfassade Südseite, WDVS-Sanierung 140mm Mineralwolle, Ölheizung, Mieterin EG rechts 57.5m²',
-        formValues: formValues // Aktueller Formular-Zustand
+        formValues: formValues, // Aktueller Formular-Zustand
+        history: chatHistory.map(h => ({ role: h.role, message: h.message }))
       })
     })
     

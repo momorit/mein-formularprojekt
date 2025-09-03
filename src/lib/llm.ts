@@ -45,8 +45,11 @@ Beantworte die konkrete Frage des Nutzers basierend auf dem Kontext.`;
       ? `${baseSystem}\n\nZUSÄTZLICHE SYSTEMANWEISUNGEN:\n${systemOverride}`
       : baseSystem
 
+    const model = process.env.GROQ_MODEL || 'llama-3.1-70b-versatile'
+
     console.log('🤖 LLM Call:', { 
       dialogMode, 
+      model,
       promptLength: prompt.length, 
       contextLength: context.length 
     })
@@ -62,7 +65,7 @@ Beantworte die konkrete Frage des Nutzers basierend auf dem Kontext.`;
           content: context ? `${context}\n\n${prompt}` : prompt
         }
       ],
-      model: "llama3-8b-8192",
+      model,
       temperature: dialogMode ? 0.4 : 0.6, // Niedriger für konsistente Dialog-Führung
       max_tokens: 1500, // Mehr Tokens für vollständige Antworten
       top_p: 0.85, // Fokussiertere, qualitativ bessere Antworten
@@ -74,7 +77,7 @@ Beantworte die konkrete Frage des Nutzers basierend auf dem Kontext.`;
     
     console.log('✅ LLM Response:', { 
       responseLength: response.length,
-      model: "llama3-8b-8192"
+      model
     })
     
     return response;
