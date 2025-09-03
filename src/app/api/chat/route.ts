@@ -2,6 +2,7 @@
 export const runtime = 'nodejs'
 import { NextRequest, NextResponse } from 'next/server'
 import { callLLM } from '@/lib/llm'
+import { searchTopK, formatContextFromHits } from '@/lib/rag/store'
 
 export async function POST(request: NextRequest) {
   try {
@@ -19,7 +20,7 @@ export async function POST(request: NextRequest) {
       ? history.slice(-6).map((h: any) => `${h.role?.toUpperCase()}: ${h.message || h.content || ''}`).join('\n')
       : ''
 
-    const enhancedContext = `
+    let enhancedContext = `
 SZENARIO:
 Mehrfamilienhaus, Baujahr 1965, Rotklinkerfassade, 10 WE.
 Geplante Maßnahme: WDVS an der Eingangsfassade (Südseite) mit 140mm Mineralwolle.
@@ -32,6 +33,19 @@ ${filled}
 VERLAUF (gekürzt):
 ${lastTurns}
 `
+
+    // RAG: relevante Dokumentpassagen beifügen (falls vorhanden)
+    let ragHits: any[] = []
+    try {
+      const hits = await searchTopK(String(message || '').slice(0, 2000))
+      ragHits = hits
+      if (ragHits.length > 0) {
+        const ragCtx = formatContextFromHits(ragHits)
+        enhancedContext += `\n\n${ragCtx}`
+      }
+    } catch (ragErr) {
+      console.warn('RAG retrieval failed (continuing without RAG):', ragErr)
+    }
 
     // Präziser Prompt: konkret, feldnah, deutsch
     const prompt = `
@@ -59,7 +73,15 @@ Beziehe dich möglichst wörtlich auf zentrale Begriffe des Nutzers, damit der B
       return NextResponse.json({
         response: llmResponse,
         context_understanding: "LLM mit Formular-Kontext",
-        llm_used: true
+        llm_used: true,
+        rag_used: Array.isArray(ragHits) && ragHits.length > 0,
+        rag_hits: (ragHits || []).map(h => ({
+          id: h.id,
+          source: h.source,
+          page: h.page,
+          score: typeof h.score === 'number' ? Number(h.score.toFixed(2)) : undefined,
+          snippet: typeof h.text === 'string' ? h.text.slice(0, 300) : undefined,
+        })),
       })
       
     } catch (llmError) {
