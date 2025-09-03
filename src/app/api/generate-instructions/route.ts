@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+export const runtime = 'nodejs'
 import { callLLM } from '@/lib/llm'
 
 export async function POST(request: NextRequest) {

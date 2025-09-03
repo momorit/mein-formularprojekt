@@ -1,4 +1,5 @@
 // src/app/api/chat/route.ts - FIXED MIT LLM
+export const runtime = 'nodejs'
 import { NextRequest, NextResponse } from 'next/server'
 import { callLLM } from '@/lib/llm'
 

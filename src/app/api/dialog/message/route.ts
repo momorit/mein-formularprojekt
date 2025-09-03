@@ -1,4 +1,5 @@
 // src/app/api/dialog/message/route.ts
+export const runtime = 'nodejs'
 import { NextRequest, NextResponse } from 'next/server'
 import { callLLM } from '@/lib/llm'
 
@@ -304,13 +305,15 @@ export async function POST(request: NextRequest) {
       total_questions: total,
       dialog_complete: session.questionStatus === 'completed',
       answers_collected: session.answers,
-      can_ask_followup: session.questionStatus !== 'completed'
+      can_ask_followup: session.questionStatus !== 'completed',
+      llm_used: true
     })
   } catch (error) {
     console.error('❌ Flexible Dialog API error:', error)
     return NextResponse.json({
       response: 'Entschuldigung, es gab einen Fehler. Können Sie Ihre Nachricht wiederholen?',
-      session_id: 'error'
+      session_id: 'error',
+      llm_used: false
     }, { status: 500 })
   }
 }
