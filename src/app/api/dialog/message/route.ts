@@ -27,6 +27,9 @@ function glossaryAnswer(message: string): string | null {
   if (m.includes('mineralwolle')) {
     return 'Mineralwolle ist ein nichtbrennbarer Dämmstoff mit guter Wärme- und Schalldämmung; 140 mm ist eine gängige WDVS‑Stärke im Bestand.'
   }
+  if (m.includes('dämmmaterial') || m.includes('daemmmaterial') || m.includes('dämmstoffe') || m.includes('daemmstoffe') || m.includes('materialien')) {
+    return 'Gängige Dämmmaterialien für WDVS sind Mineralwolle, EPS (expandiertes Polystyrol), XPS (extrudiertes Polystyrol), Holzfaserplatten und seltener Phenolharzplatten – Auswahl nach Brandschutz, Diffusion und Oberfläche.'
+  }
   if (m.includes('klinker') || m.includes('rotklinker')) {
     return 'Klinker ist eine harte, wasserabweisende Ziegelfassade; bei WDVS sind geeignete Kleber/Dübel und ggf. Vorbehandlung wichtig.'
   }
@@ -265,11 +268,13 @@ export async function POST(request: NextRequest) {
     // Try LLM; fallback to deterministic messages if it fails
     let llmResponse: string
     let usedLLM = true
+    let llmErrorMsg: string | undefined
     try {
       llmResponse = await callLLM(prompt, '', true, systemPrompt)
     } catch (llmErr) {
       console.error('⚠️ LLM unavailable for dialog; using fallback:', llmErr)
       usedLLM = false
+      llmErrorMsg = llmErr instanceof Error ? llmErr.message : String(llmErr)
 
       // Build simple, on-track fallback response
       if (isFollowUp) {
@@ -329,7 +334,8 @@ export async function POST(request: NextRequest) {
       dialog_complete: session.questionStatus === 'completed',
       answers_collected: session.answers,
       can_ask_followup: session.questionStatus !== 'completed',
-      llm_used: usedLLM
+      llm_used: usedLLM,
+      ...(usedLLM ? {} : { llm_error: llmErrorMsg })
     })
   } catch (error) {
     console.error('❌ Flexible Dialog API error:', error)

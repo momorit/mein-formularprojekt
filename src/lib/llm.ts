@@ -45,42 +45,42 @@ Beantworte die konkrete Frage des Nutzers basierend auf dem Kontext.`;
       ? `${baseSystem}\n\nZUSÄTZLICHE SYSTEMANWEISUNGEN:\n${systemOverride}`
       : baseSystem
 
-    const model = process.env.GROQ_MODEL || 'llama-3.1-70b-versatile'
+    const primaryModel = process.env.GROQ_MODEL || 'llama3-8b-8192'
+    const envFallbacks = (process.env.GROQ_MODEL_FALLBACKS || '')
+      .split(',')
+      .map(s => s.trim())
+      .filter(Boolean)
+    const defaultFallbacks = ['llama-3.1-8b-instant']
+    const tryModels = Array.from(new Set([primaryModel, ...envFallbacks, ...defaultFallbacks]))
 
-    console.log('🤖 LLM Call:', { 
-      dialogMode, 
-      model,
-      promptLength: prompt.length, 
-      contextLength: context.length 
-    })
-
-    const completion = await groq.chat.completions.create({
-      messages: [
-        {
-          role: "system",
-          content: systemMessage
-        },
-        {
-          role: "user", 
-          content: context ? `${context}\n\n${prompt}` : prompt
-        }
-      ],
-      model,
-      temperature: dialogMode ? 0.4 : 0.6, // Niedriger für konsistente Dialog-Führung
-      max_tokens: 1500, // Mehr Tokens für vollständige Antworten
-      top_p: 0.85, // Fokussiertere, qualitativ bessere Antworten
-      frequency_penalty: 0.2, // Weniger Wiederholungen
-      presence_penalty: 0.1, // Mehr Variationen
-    });
-
-    const response = completion.choices[0]?.message?.content || "Keine Antwort erhalten";
-    
-    console.log('✅ LLM Response:', { 
-      responseLength: response.length,
-      model
-    })
-    
-    return response;
+    let lastError: any = null
+    for (const model of tryModels) {
+      try {
+        console.log('🤖 LLM Call:', { dialogMode, model, promptLength: prompt.length, contextLength: context.length })
+        const completion = await groq.chat.completions.create({
+          messages: [
+            { role: 'system', content: systemMessage },
+            { role: 'user', content: context ? `${context}\n\n${prompt}` : prompt }
+          ],
+          model,
+          temperature: dialogMode ? 0.4 : 0.6,
+          max_tokens: 1200,
+          top_p: 0.85,
+          frequency_penalty: 0.2,
+          presence_penalty: 0.1,
+        })
+        const response = completion.choices[0]?.message?.content || 'Keine Antwort erhalten'
+        console.log('✅ LLM Response:', { responseLength: response.length, model })
+        return response
+      } catch (err: any) {
+        lastError = err
+        const msg = (err && (err.message || String(err))) || ''
+        console.warn('⚠️ LLM model failed, trying next if available:', { model, error: msg })
+        continue
+      }
+    }
+    // If we got here, all models failed
+    throw lastError || new Error('LLM-Service: alle Modellversuche fehlgeschlagen')
     
   } catch (error) {
     console.error('❌ LLM Error:', error);

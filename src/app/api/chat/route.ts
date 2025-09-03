@@ -71,7 +71,8 @@ Beziehe dich möglichst wörtlich auf zentrale Begriffe des Nutzers, damit der B
       return NextResponse.json({
         response: fallbackResponse,
         context_understanding: "Fallback-System",
-        llm_used: false
+        llm_used: false,
+        llm_error: llmError instanceof Error ? llmError.message : String(llmError)
       })
     }
     
@@ -102,7 +103,7 @@ Das Gebäude ist ein Mehrfamilienhaus aus **Baujahr 1965** mit Rotklinkerfassade
   }
   
   if (lowerMessage.includes('dämmung') || lowerMessage.includes('material')) {
-    return `Für Ihr Vorhaben ist **140mm Mineralwolle-Dämmung** vorgesehen. Dies ist eine bewährte Lösung für WDVS-Sanierungen und bietet gute Dämmeigenschaften.`
+    return `Für WDVS werden häufig Mineralwolle, EPS (expandiertes Polystyrol), XPS (extrudiertes Polystyrol) oder Holzfaser verwendet. 140 mm Mineralwolle ist im Bestand eine gängige, brandsichere Wahl.`
   }
   
   if (lowerMessage.includes('heizung') || lowerMessage.includes('energie')) {
