@@ -17,8 +17,8 @@ export function chunkText(
   }
 ): Chunk[] {
   const { docId, source } = params;
-  const size = params.size ?? Number(process.env.RAG_CHUNK_SIZE || 8000); // ~8000 chars ≈ 800-1200 tokens
-  const overlap = params.overlap ?? Number(process.env.RAG_CHUNK_OVERLAP || 1200);
+  const size = params.size ?? Number(process.env.RAG_CHUNK_SIZE || 1500); // ~1500 chars ~ 250-350 tokens
+  const overlap = params.overlap ?? Number(process.env.RAG_CHUNK_OVERLAP || 200);
   const paragraphs = params.text
     .replace(/\r\n/g, '\n')
     .split(/\n{2,}/)
@@ -70,4 +70,3 @@ export function chunkText(
 
   return chunks;
 }
-

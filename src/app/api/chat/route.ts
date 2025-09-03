@@ -4,6 +4,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { callLLM } from '@/lib/llm'
 import { searchTopK, formatContextFromHits } from '@/lib/rag/store'
 
+function sanitizeSnippet(s: string): string {
+  return s.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '').slice(0, 300)
+}
+
 export async function POST(request: NextRequest) {
   try {
     const { message, context, formValues, history } = await request.json()
@@ -66,7 +70,7 @@ Beziehe dich möglichst wörtlich auf zentrale Begriffe des Nutzers, damit der B
 `
 
     try {
-      const llmResponse = await callLLM(prompt, enhancedContext, false, systemOverride)
+      const llmResponse = await callLLM(prompt, enhancedContext, false, systemOverride, { provider: 'groq' })
       
       console.log('✅ LLM Response generated successfully')
       
@@ -80,7 +84,7 @@ Beziehe dich möglichst wörtlich auf zentrale Begriffe des Nutzers, damit der B
           source: h.source,
           page: h.page,
           score: typeof h.score === 'number' ? Number(h.score.toFixed(2)) : undefined,
-          snippet: typeof h.text === 'string' ? h.text.slice(0, 300) : undefined,
+          snippet: typeof h.text === 'string' ? sanitizeSnippet(h.text) : undefined,
         })),
       })
       

@@ -103,11 +103,23 @@ Felder (JSON):\n${JSON.stringify(fieldsForLLM)}`
         : fallbackHints[f.id as keyof typeof fallbackHints]
     }))
 
+    // Generate dynamic welcome (minimize fixed text)
+    let welcomeMessage = ''
+    try {
+      const welcomePrompt = `Formuliere eine kurze Begrüßung (1–2 Sätze) und erkläre in 1 Satz, wie der Nutzer vorgeht (Hinweise pro Feld, KI-Chat bei Bedarf). Keine Emojis, keine Listen/Labels.
+
+Ziel: natürlich, knapp, freundlich.`
+      welcomeMessage = await callLLM(welcomePrompt, context || '', false, undefined, { provider: 'groq' })
+    } catch (e) {
+      welcomeMessage = 'Willkommen! Das Formular enthält zu jedem Feld kurze Hinweise. Bei Rückfragen hilft der KI-Chat.'
+    }
+
     return NextResponse.json({
       fields,
       context_used: context,
       instructions: fields.map(field => field.hint),
-      llm_used: !!generatedHints
+      llm_used: !!generatedHints,
+      welcome_message: welcomeMessage
     })
   } catch (error) {
     console.error('Error generating instructions:', error)

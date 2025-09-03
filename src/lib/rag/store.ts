@@ -123,22 +123,35 @@ export type SearchHit = StoredChunk & { score: number };
 export async function searchTopK(
   query: string,
   k = Number(process.env.RAG_TOP_K || 5),
-  minScore = Number(process.env.RAG_MIN_SCORE || 0.25)
+  minScore = Number(process.env.RAG_MIN_SCORE || 0.15)
 ): Promise<SearchHit[]> {
   const { chunks: chunksFile } = filePaths();
   const chunks = await readJson<StoredChunk[]>(chunksFile, []);
   if (chunks.length === 0) return [];
   const qv = await embedText(query);
-  const scored = chunks.map((c) => ({ ...c, score: cosineSim(qv, c.embedding) }));
+  // Filter chunks whose embedding dimension matches the query vector
+  const qdim = qv.length;
+  const comparable = chunks.filter((c) => Array.isArray(c.embedding) && c.embedding.length === qdim);
+  if (comparable.length === 0) {
+    console.warn('RAG search: no comparable embeddings (dimension mismatch). Consider reindexing documents with the current embedding model.');
+    return [];
+  }
+  const scored = comparable.map((c) => ({ ...c, score: cosineSim(qv, c.embedding) }));
   scored.sort((a, b) => b.score - a.score);
   const top = scored.filter((s) => s.score >= minScore).slice(0, k);
   return top;
 }
 
+function stripBinary(s: string): string {
+  // remove control chars except tab/newline/carriage return
+  return s.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '')
+}
+
 export function formatContextFromHits(hits: SearchHit[], maxChars = Number(process.env.RAG_MAX_CONTEXT_CHARS || 6000)) {
   const parts: string[] = [];
   for (const h of hits) {
-    parts.push(`Quelle: ${h.source}${typeof h.page === 'number' ? ` S.${h.page}` : ''} (Score: ${h.score.toFixed(2)})\n${h.text}`);
+    const clean = stripBinary(h.text).slice(0, Math.floor(maxChars / Math.max(1, hits.length)));
+    parts.push(`Quelle: ${h.source}${typeof h.page === 'number' ? ` S.${h.page}` : ''} (Score: ${h.score.toFixed(2)})\n${clean}`);
   }
   let ctx = parts.join('\n\n---\n\n');
   if (ctx.length > maxChars) {
@@ -146,4 +159,3 @@ export function formatContextFromHits(hits: SearchHit[], maxChars = Number(proce
   }
   return `DOKUMENTEN-KONTEXT (nur hieraus antworten, bei Unsicherheit: "Nicht gefunden")\n\n${ctx}`;
 }
-

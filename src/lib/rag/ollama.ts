@@ -50,7 +50,7 @@ export async function generate(
   prompt: string,
   opts: OllamaGenerateOptions = {}
 ): Promise<string> {
-  const model = opts.model || process.env.OLLAMA_MODEL || 'llama3.1:8b';
+  const model = opts.model || process.env.OLLAMA_MODEL || 'llama3:8b-instruct';
   const temperature = opts.temperature ?? 0.6;
   const res = await fetch(`${OLLAMA_HOST}/api/generate`, {
     method: 'POST',
@@ -65,4 +65,3 @@ export async function generate(
   const text: string = json?.response ?? '';
   return text;
 }
-

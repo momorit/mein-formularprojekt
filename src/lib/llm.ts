@@ -18,26 +18,24 @@ export async function callLLM(
   prompt: string,
   context: string = "",
   dialogMode: boolean = false,
-  systemOverride?: string
+  systemOverride?: string,
+  options?: { provider?: 'groq' | 'ollama'; model?: string }
 ): Promise<string> {
   try {
     const baseSystem = dialogMode 
-      ? `Du bist ein professioneller Gebäude-Energieberater und führst strukturierte Interviews durch.
+      ? `Du bist ein professioneller, natürlicher Energieberater im Gespräch.
 
-WICHTIGE REGELN:
-- Bestätige IMMER die Antwort des Nutzers positiv
-- Stelle danach die nächste Frage klar und deutlich
-- Verwende deutsche Sprache
-- Halte Antworten kurz und strukturiert (2-4 Sätze)
-- Sei freundlich aber fokussiert
-- Folge den Anweisungen im User-Prompt exakt
+Gesprächsregeln (streng befolgen):
+- Antworte auf Deutsch in 1–3 Sätzen.
+- Bestätige die Nutzerangabe knapp in eigenen Worten (Paraphrase).
+- Stelle genau EINE nächste, gezielte Frage – nur wenn nötig.
+- Keine Listen, keine Labels, keine Meta-Kommentare.
+- Bleibe bei der aktuellen Feldfrage; mache nur dann weiter, wenn bestätigt.
+- Wenn der Nutzer eine fachliche Rückfrage stellt, beantworte sie kurz und leite dann zurück zur aktuellen Frage.
+- Nutze bereitgestellten Kontext, erfinde nichts. Wenn unbekannt: sag knapp, dass es unklar ist.
 
-FORMAT:
-1. Bestätigung der Antwort
-2. Nächste Frage (falls vorhanden)
-3. Optional: Kurzer Hinweis
-
-Antworte VOLLSTÄNDIG und befolge die Anweisungen genau.`
+Format (implizit, ohne Überschriften):
+1) Kurze Bestätigung/Antwort → 2) Natürliche Überleitung zur (nächsten) Frage.`
 
       : `Du bist ein Experte für Gebäudeformulare und Energieberatung.
 
@@ -54,7 +52,8 @@ Beantworte die konkrete Frage des Nutzers basierend auf dem Kontext.`;
       ? `${baseSystem}\n\nZUSÄTZLICHE SYSTEMANWEISUNGEN:\n${systemOverride}`
       : baseSystem
 
-    const provider = process.env.LLM_PROVIDER || (process.env.GROQ_API_KEY ? 'groq' : 'ollama')
+    // Use Groq by default for chat generation; can be overridden per-call
+    const provider = options?.provider || process.env.LLM_PROVIDER || 'groq'
     const primaryModel = process.env.GROQ_MODEL || 'llama3-8b-8192'
     const envFallbacks = (process.env.GROQ_MODEL_FALLBACKS || '')
       .split(',')
@@ -65,10 +64,26 @@ Beantworte die konkrete Frage des Nutzers basierend auf dem Kontext.`;
 
     if (provider === 'ollama') {
       const fullPrompt = `${systemMessage}\n\nKONTEXT:\n${context}\n\nAUFGABE:\n${prompt}`
-      console.log('🤖 LLM Call (Ollama):', { dialogMode, promptLength: prompt.length, contextLength: context.length })
-      const response = await ollamaGenerate(fullPrompt, { model: process.env.OLLAMA_MODEL || 'llama3.1:8b', temperature: dialogMode ? 0.4 : 0.6 })
-      console.log('✅ LLM Response (Ollama):', { responseLength: response.length })
-      return response || 'Keine Antwort erhalten'
+      const primary = options?.model || process.env.OLLAMA_MODEL || 'llama3:8b-instruct'
+      const envFB = (process.env.OLLAMA_MODEL_FALLBACKS || '')
+        .split(',').map(s => s.trim()).filter(Boolean)
+      const defFB = ['qwen2.5:7b-instruct', 'mistral:7b-instruct', 'llama3.1:8b-instruct', 'llama3:8b', 'phi3:3.8b-mini-instruct']
+      const models = Array.from(new Set([primary, ...envFB, ...defFB]))
+      let lastError: any = null
+      for (const model of models) {
+        try {
+          console.log('🤖 LLM Call (Ollama):', { dialogMode, model, promptLength: prompt.length, contextLength: context.length })
+          const response = await ollamaGenerate(fullPrompt, { model, temperature: dialogMode ? 0.4 : 0.6 })
+          console.log('✅ LLM Response (Ollama):', { responseLength: response.length, model })
+          return response || 'Keine Antwort erhalten'
+        } catch (err: any) {
+          lastError = err
+          const msg = (err && (err.message || String(err))) || ''
+          console.warn('⚠️ Ollama model failed, trying next if available:', { model, error: msg })
+          continue
+        }
+      }
+      throw lastError || new Error('Ollama: alle Modellversuche fehlgeschlagen')
     } else {
       let lastError: any = null
       const groq = getGroqClient();
@@ -84,8 +99,8 @@ Beantworte die konkrete Frage des Nutzers basierend auf dem Kontext.`;
             temperature: dialogMode ? 0.4 : 0.6,
             max_tokens: 1200,
             top_p: 0.85,
-            frequency_penalty: 0.2,
-            presence_penalty: 0.1,
+            frequency_penalty: dialogMode ? 0.5 : 0.2,
+            presence_penalty: dialogMode ? 0.2 : 0.1,
           })
           const response = completion.choices[0]?.message?.content || 'Keine Antwort erhalten'
           console.log('✅ LLM Response (Groq):', { responseLength: response.length, model })
@@ -106,11 +121,23 @@ Beantworte die konkrete Frage des Nutzers basierend auf dem Kontext.`;
     
     // Detaillierte Fehlerbehandlung
     if (error instanceof Error) {
-      if (error.message.includes('API key')) {
+      const msg = error.message.toLowerCase()
+      // Ollama-spezifisch
+      if (msg.includes('ollama')) {
+        if (msg.includes('not found') || msg.includes("model '")) {
+          throw new Error('Ollama Modell nicht gefunden. Installiere ein Modell, z.B.:\n  ollama pull llama3:8b-instruct\nOder setze OLLAMA_MODEL auf ein installiertes Modell.')
+        }
+        if (msg.includes('fetch failed') || msg.includes('econnrefused')) {
+          throw new Error('Ollama nicht erreichbar. Läuft der Dienst? Prüfe OLLAMA_HOST (Standard: http://localhost:11434).')
+        }
+        throw new Error('Ollama-Fehler: ' + error.message)
+      }
+      // Groq-spezifisch
+      if (msg.includes('api key')) {
         throw new Error('GROQ API-Schlüssel ungültig oder fehlt');
-      } else if (error.message.includes('rate limit')) {
+      } else if (msg.includes('rate limit')) {
         throw new Error('GROQ Rate-Limit erreicht - versuchen Sie es später erneut');
-      } else if (error.message.includes('model')) {
+      } else if (msg.includes('model')) {
         throw new Error('GROQ Modell nicht verfügbar');
       }
     }

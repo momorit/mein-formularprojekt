@@ -16,6 +16,7 @@ export default function RAGPage() {
   const [query, setQuery] = useState('')
   const [hits, setHits] = useState<Hit[]>([])
   const [searching, setSearching] = useState(false)
+  const [preview, setPreview] = useState<{ docId: string; text: string } | null>(null)
   const [chatInput, setChatInput] = useState('')
   const [chatLoading, setChatLoading] = useState(false)
   const [chatResponse, setChatResponse] = useState('')
@@ -53,6 +54,16 @@ export default function RAGPage() {
     await refresh()
   }
 
+  async function handlePreview(docId: string) {
+    const res = await fetch(`/api/rag/doc/${docId}`, { cache: 'no-store' })
+    const json = await res.json()
+    if (json?.ok) {
+      setPreview({ docId, text: json.preview || '' })
+    } else {
+      alert(json?.error || 'Keine Vorschau verfügbar')
+    }
+  }
+
   async function handleSearch() {
     setSearching(true)
     try {
@@ -69,10 +80,10 @@ export default function RAGPage() {
     setChatLoading(true)
     setChatResponse('')
     try {
-      const res = await fetch('/api/chat', {
+      const res = await fetch('/api/rag/ask', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: chatInput, history: [] }),
+        body: JSON.stringify({ message: chatInput, k: 5 }),
       })
       let json: any = null
       try {
@@ -117,10 +128,22 @@ export default function RAGPage() {
                 <div className="font-mono text-sm">{d.source}</div>
                 <div className="text-xs text-gray-500">Chunks: {d.chunkCount} · Zeichen: {d.charCount} · {new Date(d.createdAt).toLocaleString()}</div>
               </div>
-              <Button variant="secondary" onClick={() => handleDelete(d.docId)}>Löschen</Button>
+              <div className="flex gap-2">
+                <Button variant="secondary" onClick={() => handlePreview(d.docId)}>Vorschau</Button>
+                <Button variant="secondary" onClick={() => handleDelete(d.docId)}>Löschen</Button>
+              </div>
             </div>
           ))}
         </div>
+        {preview && (
+          <div className="mt-3 border rounded p-3 bg-white/50">
+            <div className="text-xs text-gray-500 mb-1">Vorschau aus {preview.docId}</div>
+            <pre className="whitespace-pre-wrap text-sm max-h-64 overflow-auto">{preview.text}</pre>
+            <div className="mt-2">
+              <Button variant="secondary" onClick={() => setPreview(null)}>Schließen</Button>
+            </div>
+          </div>
+        )}
       </Card>
 
       <Card className="p-4 space-y-3">
@@ -142,7 +165,7 @@ export default function RAGPage() {
 
       <Card className="p-4 space-y-3">
         <div className="font-medium">Chat mit RAG</div>
-        <div className="text-xs text-gray-500">Stellt Fragen, Antworten nutzen die oben indizierten Dokumente als Kontext.</div>
+        <div className="text-xs text-gray-500">Strenger RAG‑Modus: Antworten dürfen nur den Dokumenten‑Kontext nutzen. Bei fehlender Evidenz: „Nicht gefunden“.</div>
         <div className="space-y-2">
           <Textarea rows={4} placeholder="Deine Frage…" value={chatInput} onChange={(e) => setChatInput(e.target.value)} />
           <div className="flex gap-2">

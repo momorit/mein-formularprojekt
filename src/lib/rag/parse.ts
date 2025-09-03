@@ -1,6 +1,28 @@
 // Parsing utilities for PDF, DOCX, and plain text
 // Note: pdf-parse and mammoth are optional deps; route should handle absence gracefully
 
+import { createRequire } from 'node:module'
+
+function normalizeExtractedText(input: string): string {
+  let t = input
+    .replace(/\r\n/g, '\n')
+    // de-hyphenate line breaks: "Wärme-\nschutz" -> "Wärmeschutz"
+    .replace(/([\p{L}\p{N}])-(?:\n|\r\n)([\p{L}\p{N}])/gu, '$1$2')
+    // collapse multiple spaces/newlines
+    .replace(/[\t\f\v]+/g, ' ')
+    .replace(/\u00A0/g, ' ') // no-break space
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '')
+  t = t
+    .split('\n')
+    .map((line) => line.trim())
+    .join('\n')
+  t = t.replace(/\n{3,}/g, '\n\n')
+  try {
+    t = t.normalize('NFKC')
+  } catch {}
+  return t.trim()
+}
+
 type Parsed = { text: string; meta?: Record<string, any> };
 
 export async function parseBlob(file: Blob, filename: string): Promise<Parsed> {
@@ -19,32 +41,35 @@ export async function parseBlob(file: Blob, filename: string): Promise<Parsed> {
 }
 
 async function parsePDF(file: Blob): Promise<Parsed> {
+  const buf = Buffer.from(await file.arrayBuffer())
+  const require = createRequire(import.meta.url)
   try {
-    // Lazy import to avoid hard dependency during build if not installed
-    // @ts-ignore
-    const pdfParse = (await import('pdf-parse')).default as any;
-    const buf = Buffer.from(await file.arrayBuffer());
-    const res = await pdfParse(buf);
-    return { text: String(res?.text || ''), meta: { pdf_numpages: res?.numpages } };
+    // Use CommonJS entry to avoid bundler ESM quirks and worker issues
+    const pdfParse: any = require('pdf-parse')
+    const res = await pdfParse(buf)
+    const raw = String(res?.text || '')
+    const text = normalizeExtractedText(raw)
+    if (!text) throw new Error('Keine extrahierbare PDF-Textschicht gefunden (möglicherweise gescannt, OCR nötig).')
+    return { text, meta: { pdf_numpages: res?.numpages } }
   } catch (err) {
-    // Fallback: raw text if user uploaded a text-like PDF
-    const text = await file.text().catch(() => '');
-    if (text) return { text };
-    throw new Error('PDF parsing not available. Please install pdf-parse or upload a text file.');
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error('parsePDF error (pdf-parse CJS):', msg)
+    throw new Error('PDF-Parsing nicht verfügbar oder fehlgeschlagen: ' + msg)
   }
 }
 
 async function parseDOCX(file: Blob): Promise<Parsed> {
   try {
-    // @ts-ignore
-    const mammoth = await import('mammoth');
+    const mod: any = await import('mammoth');
+    const mammoth: any = mod?.default || mod; // handle CJS/ESM interop
     const buf = Buffer.from(await file.arrayBuffer());
     const res = await (mammoth as any).extractRawText({ buffer: buf });
-    return { text: String(res?.value || '') };
+    const text = String(res?.value || '').trim();
+    if (!text) throw new Error('Leeres DOCX ohne Textinhalt.');
+    return { text };
   } catch (err) {
-    const text = await file.text().catch(() => '');
-    if (text) return { text };
-    throw new Error('DOCX parsing not available. Please install mammoth or upload a text file.');
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('parseDOCX error:', msg);
+    throw new Error('DOCX-Parsing nicht verfügbar oder fehlgeschlagen: ' + msg);
   }
 }
-

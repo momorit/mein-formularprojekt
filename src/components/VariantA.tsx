@@ -77,17 +77,7 @@ export default function VariantA({ onComplete, startTime }: VariantAProps) {
       
       setChatHistory([{
         role: 'assistant',
-        message: `Willkommen! Ich helfe Ihnen beim Ausfüllen des Formulars für Ihre Gebäude-Energieberatung.
-
-Das Formular ist jetzt bereit und enthält Hinweise zu jedem Feld. Bei schwierigen Feldern (markiert mit ⚠️) können Sie mich gerne um detaillierte Hilfe bitten.
-
-Ihr Szenario: Sie besitzen ein Mehrfamilienhaus (Baujahr 1965) in der Siedlungsstraße 23. 
-Es hat eine Rotklinkerfassade und 10 Wohneinheiten. Sie planen eine WDVS-Sanierung 
-der Eingangsfassade zur Straße (Südseite) mit 140mm Mineralwolle-Dämmung. 
-Das Gebäude hat eine Ölheizung im Keller. Sie müssen für eine Mieterin 
-(EG rechts, 57,5m²) die mögliche Mieterhöhung berechnen.
-
-Beginnen Sie einfach mit dem Ausfüllen und fragen Sie bei Unsicherheiten!`,
+        message: data.welcome_message || 'Willkommen! Das Formular enthält Hinweise pro Feld. Der KI‑Chat hilft bei Bedarf.',
         timestamp: new Date()
       }])
       
