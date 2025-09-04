@@ -1,3 +1,9 @@
+// src/lib/rag/chunk.ts
+// Zweck: Absatzsensitives Chunking mit konfigurierbarer Zielgröße und Overlap.
+//  - Sinnvoll für semantische Suche: hält Absätze zusammen, splittet harte Ausreißer
+//  - Overlap vermeidet Informationsverlust an Chunk-Grenzen
+// Env: RAG_CHUNK_SIZE (Default 1500 Zeichen), RAG_CHUNK_OVERLAP (Default 200)
+
 export type Chunk = {
   id: string;
   docId: string;

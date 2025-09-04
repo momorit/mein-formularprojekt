@@ -1,3 +1,5 @@
+// src/app/api/rag/search/route.ts
+// Zweck: Semantische Volltextsuppe über indizierte Chunks per Cosine‑Similarity (Top‑K).
 export const runtime = 'nodejs'
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -15,4 +17,3 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: err?.message || 'Search failed' }, { status: 500 })
   }
 }
-

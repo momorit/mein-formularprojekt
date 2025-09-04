@@ -1,473 +1,216 @@
-# 🏢 FormularIQ - KI-gestützte Formularbearbeitung
+# 🏢 FormularIQ – KI‑gestützte Formularbearbeitung (Variante A vs. B)
 
-> **Innovatives Forschungsprojekt an der HAW Hamburg**  
-> Vergleich von sichtbaren Formularen vs. Dialog-Systemen mit Large Language Models
+Forschungsprojekt an der HAW Hamburg. Vergleich zweier Interaktionsparadigmen zur Formularbearbeitung mit LLM‑Unterstützung:
 
-[![Next.js](https://img.shields.io/badge/Next.js-15.4.1-black)](https://nextjs.org/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue)](https://typescriptlang.org/)
-[![Tailwind](https://img.shields.io/badge/Tailwind-3.4-38bdf8)](https://tailwindcss.com/)
-[![License](https://img.shields.io/badge/License-Research-green)](LICENSE)
+- 📋 Variante A: Sichtbares Webformular mit KI‑Hinweisen und Chat
+- 💬 Variante B: Dialogbasiertes System, das Formularfelder konversational klärt
 
----
+Technik: Next.js 15 · TypeScript · Tailwind · shadcn/ui · Groq (Generierung) · Ollama (Embeddings) · Datei‑basierter Vektor‑Store (JSON)
 
-## 🎯 Projektziel
+—
 
-FormularIQ erforscht innovative Ansätze zur **KI-gestützten Formularbearbeitung** und vergleicht zwei Interaktionsparadigmen:
+## Inhalt
+- Überblick und Architektur
+- Setup und Start (inkl. .env)
+- RAG (Upload → Parsing → Chunking → Embedding → Suche)
+- LLM/Prompting (Modi, Modelle, Fehlerfälle)
+- Wichtige API‑Endpunkte und Flows
+- Code‑Karte (Dateien und Verantwortlichkeiten)
+- Häufige Aufgaben
+- Troubleshooting und Tipps
 
-- **📋 Variante A**: Klassisches sichtbares Formular mit KI-Chat-Unterstützung
-- **💬 Variante B**: Konversationelle Datenerfassung durch Dialog-System
+—
 
-**Anwendungsfall:** Gebäude-Energieberatung für Mehrfamilienhäuser mit komplexen Förderanträgen.
+## Überblick
 
----
+System zum Vergleich zweier KI‑gestützter Formular‑UIs im Energieberatungs‑Szenario. Die App kombiniert:
+- Frontend (Next.js, React, Tailwind, shadcn/ui)
+- Backend (Next.js API Routes; Node.js Runtime)
+- LLM‑Generierung über Groq (chat.completions)
+- Lokalen Vektorindex (JSON) mit Embeddings via Ollama
 
-## 🚀 Quick Start
+ASCII‑Architektur
+```
+Browser (Variante A/B, RAG-UI)
+   │
+   ├── /api/generate-instructions   (LLM: Feldhinweise)
+   ├── /api/chat                    (LLM + optional RAG für Formhilfe)
+   ├── /api/dialog/*                (LLM gesteuerter Dialogfluss)
+   └── /api/rag/*                   (Upload/Index/Suche/Ask)
+                                   │
+LLM (Groq)  ←→  callLLM()           │        RAG Store (JSON: data/rag)
+                                   │        ├─ chunks.json (Embeddings)
+Ollama (Embeddings)  ←→  /api/embeddings    └─ docs.json   (Metadaten)
+```
 
-### Voraussetzungen
-- **Node.js** ≥ 18.0.0
-- **npm** oder **yarn**
-- **Git**
+—
 
-### Installation
+## Setup
 
+Voraussetzungen
+- Node.js ≥ 18
+- Groq API‑Key für Generierung
+- Optional: lokale Ollama‑Instanz für RAG‑Embeddings (empfohlen)
+
+Installation
 ```bash
-# Repository klonen
-git clone https://github.com/your-username/formulariq.git
-cd formulariq
-
-# Dependencies installieren
 npm install
-
-# Development Server starten
-npm run dev
 ```
 
-✅ **Anwendung läuft auf**: http://localhost:3000
-
----
-
-## 🏗️ Systemarchitektur
-
-### Tech Stack
-```
-Frontend:    Next.js 15 + TypeScript + Tailwind CSS + shadcn/ui
-Backend:     Next.js API Routes (Serverless Functions)
-Deployment:  Vercel (Full-Stack)
-Storage:     Vercel Logging + JSON Export
-State:       React State (keine Browser Storage APIs)
-```
-
-### Projektstruktur
-```
-FormularIQ/
-├── src/app/
-│   ├── page.tsx                    # Landing & Redirect
-│   ├── study/page.tsx              # Haupt-Studienablauf
-│   ├── form-a/page.tsx             # Variante A Wrapper
-│   ├── form-b/page.tsx             # Variante B Wrapper
-│   └── api/                        # Backend API Routes
-│       ├── save/route.ts           # Variante A Daten
-│       ├── dialog/save/route.ts    # Variante B Daten
-│       ├── questionnaire/save/route.ts # Fragebogen-Daten
-│       └── study/complete/route.ts # Studie-Abschluss
-├── src/components/
-│   ├── VariantA.tsx                # Sichtbares Formular
-│   ├── VariantB.tsx                # Dialog-System
-│   ├── LoadingStates.tsx           # UI Loading Components
-│   ├── ui/                         # shadcn/ui Komponenten
-│   └── Questionnaire/              # Fragebogen-System
-│       ├── EnhancedQuestionnaire.tsx # Haupt-Fragebogen
-│       ├── TrustQuestionnaire.tsx  # Vertrauen (5-Punkt Likert)
-│       ├── SUSQuestionnaire.tsx    # System Usability Scale
-│       └── PreferenceQuestionnaire.tsx # Nutzerpräferenz
-└── public/                         # Statische Assets
-```
-
----
-
-## 📊 Studiendesign
-
-### Ablauf (6 Schritte)
-```
-1. intro → 2. demographics → 3. variant1_intro → [Variante] → 4. variant1_survey → 
-5. variant2_intro → [Variante] → 6. variant2_survey → 7. final_comparison → 8. complete
-```
-
-### Randomisierung
-- **Deterministische Zuordnung** basierend auf Teilnehmer-ID
-- **Balancierte A-B / B-A Reihenfolge** über alle Sessions
-- **Konsistente Navigation** mit URL-Parametern
-
-### Messgrößen
-- **Bearbeitungszeiten** (automatische Timestamps)
-- **Vollständigkeitsraten** (Completion Rates)
-- **Vertrauen in KI-Systeme** (5-Item Likert-Skala)
-- **System Usability Scale** (SUS, 10 Items)
-- **Nutzerpräferenzen** (Direktvergleich & Empfehlungen)
-
----
-
-## 🔧 Entwicklung
-
-### Lokaler Development
-
-```bash
-# Development Server
-npm run dev
-
-# Type Checking
-npm run type-check
-
-# Production Build
-npm run build
-
-# Preview Production Build
-npm run start
-```
-
-### API Endpoints
-
-| Endpoint | Methode | Beschreibung |
-|----------|---------|--------------|
-| `/api/health` | GET | System Health Check |
-| `/api/save` | POST | Variante A Formulardaten |
-| `/api/dialog/save` | POST | Variante B Dialogdaten |
-| `/api/questionnaire/save` | POST | Fragebogen-Antworten |
-| `/api/study/complete` | POST | Studie-Abschluss |
-
-### Datenstruktur (Export)
-
-```json
-{
-  "variant": "A_sichtbares_formular" | "B_dialog_system",
-  "timestamp": "2024-XX-XXTXX:XX:XX",
-  "instructions|questions": {...},
-  "values|answers": {...},
-  "chatHistory": [...],
-  "metadata": {
-    "completion_rate": 85.5,
-    "total_fields": 8,
-    "filled_fields": 7
-  },
-  "study_metadata": {
-    "project": "FormularIQ - LLM-gestützte Formularbearbeitung",
-    "institution": "HAW Hamburg",
-    "researcher": "Moritz Treu"
-  }
-}
-```
-
----
-
-## 🎮 Nutzung
-
-### Für Studienteilnehmer
-
-1. **Homepage** besuchen → Instruktionen lesen
-2. **Demografische Daten** eingeben (Schritt 1)
-3. **Erste Variante** testen (A oder B, randomisiert)
-4. **Fragebogen** zu Variante 1 ausfüllen
-5. **Zweite Variante** testen
-6. **Fragebogen** zu Variante 2 ausfüllen  
-7. **Vergleich & Präferenzen** bewerten
-8. **Abschluss** - Daten gespeichert
-
-### Für Forscher/Administratoren
-
-#### Datenzugriff
-- **Vercel Dashboard**: Echtzeit-Logs und Analytics
-- **JSON Export**: Strukturierte Datenexporte
-- **Anonymisierung**: Automatische Teilnehmer-ID Generation
-
-#### Monitoring
-```bash
-# System Status prüfen
-curl https://mein-formularprojekt.vercel.app/api/health
-
-# Expected Response:
-{
-  "status": "healthy",
-  "timestamp": "2024-XX-XXTXX:XX:XX",
-  "version": "2.0.0"
-}
-```
-
----
-
-## 🛠️ Deployment
-
-### Vercel (Empfohlen)
-
-```bash
-# Vercel CLI installieren
-npm i -g vercel
-
-# Projekt deployen
-vercel
-
-# Domain konfigurieren
-vercel --prod
-```
-
-### Umgebungsvariablen
-
+.env.local (Beispiel)
 ```env
-# Vercel Dashboard → Settings → Environment Variables
-NEXT_PUBLIC_SITE_URL=https://mein-formularprojekt.vercel.app
-NODE_ENV=production
+LLM_PROVIDER=groq
+GROQ_API_KEY=...            # erforderlich für Generierung
+OLLAMA_HOST=http://localhost:11434
+# Optional/RAG-Feintuning
+# OLLAMA_EMBED_MODEL=nomic-embed-text
+# RAG_DATA_DIR=./data/rag
+# RAG_CHUNK_SIZE=1500
+# RAG_CHUNK_OVERLAP=200
+# RAG_TOP_K=5
+# RAG_MIN_SCORE=0.15
+# RAG_MAX_CONTEXT_CHARS=6000
 ```
 
-### Custom Domain Setup
-
+Start
 ```bash
-# Domain hinzufügen
-vercel domains add beispiel-studie.de
-
-# SSL automatisch konfiguriert ✅
-```
-
----
-
-## 📈 Monitoring & Analytics
-
-### Performance Monitoring
-- **Vercel Analytics**: Automatische Performance-Metriken
-- **Core Web Vitals**: LCP, FID, CLS Tracking
-- **Error Tracking**: Echtzeit-Fehlermeldungen
-
-### Nutzerdaten (Anonymisiert)
-- **Session-Längen** und **Completion-Raten**
-- **Device/Browser-Verteilung**  
-- **Geografische Verteilung** (Land-Ebene)
-
----
-
-## 🔒 Datenschutz & Sicherheit
-
-### DSGVO-Compliance
-- ✅ **Vollständige Anonymisierung** aller Teilnehmerdaten
-- ✅ **Minimale Datensammlung** (nur studienrelevant)
-- ✅ **Europäische Server** (Vercel EU-Region)
-- ✅ **Verschlüsselte Übertragung** (TLS 1.3)
-- ✅ **Keine persistente User-Tracking**
-
-### Sicherheitsmaßnahmen
-- **Content Security Policy** (CSP) Headers
-- **HTTPS-Only** in Production
-- **Input Validation** auf Client- und Server-Seite
-- **Rate Limiting** für API-Endpoints
-
----
-
-## 🧪 Testing
-
-### Unit Tests
-```bash
-npm run test
-```
-
-### End-to-End Tests
-```bash
-npm run test:e2e
-```
-
-### Browser Testing
-- **Chrome/Edge**: Vollständig unterstützt
-- **Firefox**: Vollständig unterstützt  
-- **Safari**: Vollständig unterstützt
-- **Mobile**: Responsive Design getestet
-
----
-
-## 📚 Wissenschaftlicher Hintergrund
-
-### Forschungsfragen
-1. **Effizienz**: Welche Variante ermöglicht schnellere Formularbearbeitung?
-2. **Benutzerfreundlichkeit**: Welche Interaktionsform wird als intuitiver empfunden?
-3. **Vertrauen**: Wie unterscheidet sich das Vertrauen in beide KI-Unterstützungsformen?
-4. **Präferenz**: Welche Faktoren beeinflussen die Nutzerpräferenz?
-
-### Methodologie
-- **Within-Subject Design**: Alle Teilnehmer testen beide Varianten
-- **Randomisierte Reihenfolge**: Ausgleich von Lerneffekten
-- **Standardisierte Fragebögen**: SUS, Trust Scale, demografische Daten
-- **Quantitative + Qualitative Daten**: Metriken + offenes Feedback
-
-### Zielpublikation
-- **Konferenz**: HCI, CHI, UIST, oder ähnliche
-- **Journal**: Computers in Human Behavior, IJHCI
-- **Fokus**: Human-AI Interaction, Form Design, Conversational UI
-
----
-
-## 🤝 Beitragen
-
-### Development Guidelines
-```bash
-# Branch erstellen
-git checkout -b feature/neue-funktion
-
-# Commits mit Convention
-git commit -m "feat: neue Fragebogen-Komponente hinzugefügt"
-
-# Pull Request erstellen
-```
-
-### Code Style
-- **TypeScript**: Strikte Typisierung
-- **ESLint**: Automatische Code-Qualität
-- **Prettier**: Einheitliche Formatierung
-- **Komponenten**: Funktionale React Components mit Hooks
-
-### Testing Requirements
-- **Unit Tests**: Für alle Utilities und Helpers
-- **Component Tests**: Für UI-Komponenten
-- **Integration Tests**: Für API-Endpoints
-- **E2E Tests**: Für kritische User Journeys
-
----
-
-## 🐛 Troubleshooting
-
-### Häufige Probleme
-
-#### 1. Build-Fehler
-```bash
-# Cache leeren
-npm run clean
-rm -rf .next node_modules
-npm install
-
-# Type-Check
-npm run type-check
-```
-
-#### 2. Styling-Probleme
-```bash
-# Tailwind CSS regenerieren
-npm run build:css
-
-# shadcn/ui Komponenten updaten
-npx shadcn-ui@latest add button
-```
-
-#### 3. API-Fehler
-```bash
-# Logs prüfen (Development)
 npm run dev
-
-# Logs prüfen (Production)
-vercel logs
+# App: http://localhost:3000
 ```
 
-#### 4. Performance-Issues
+Ollama Embedding‑Modell vorbereiten (lokal)
 ```bash
-# Bundle Analyzer
-npm run analyze
-
-# Performance Audit
-npm run lighthouse
+# Beispiel (eines wählen)
+ollama pull nomic-embed-text
+# oder
+ollama pull all-minilm
 ```
 
-### Support Kanäle
-- **GitHub Issues**: Bug Reports & Feature Requests
-- **Diskussionen**: GitHub Discussions für Fragen
-- **Email**: Bei kritischen Problemen
+—
 
----
+## RAG: Upload → Index → Suche → Ask
 
-## 📄 Lizenz & Rechte
+UI: „RAG Verwaltung“ unter `/rag`.
 
-### Akademische Nutzung
-Dieses Projekt wurde für wissenschaftliche Zwecke im Rahmen eines Forschungsprojekts an der **HAW Hamburg** entwickelt.
+- Upload: PDF/DOCX/TXT → `/api/rag/upload`
+  - Parsing: `pdf-parse` (PDF), `mammoth` (DOCX), Fallback Text
+  - Normalisierung: De‑Hyphenation, Whitespaces, Unicode‑Cleanup
+- Chunking: absatzsensitiv, Zielgröße/Overlap konfigurierbar
+- Embedding: Ollama `/api/embeddings` (Default: `nomic-embed-text`)
+- Persistenz: JSON unter `data/rag/` (konfigurierbar via `RAG_DATA_DIR`)
+- Suche: `searchTopK` (Cosine), Filter via `RAG_MIN_SCORE`, Top‑K via `RAG_TOP_K`
+- RAG‑Chat (streng): `/api/rag/ask` – nur dokumentenbasierte Antworten, sonst „Nicht gefunden“
 
-### Rechteinhaber
-- **Institution**: Hochschule für Angewandte Wissenschaften Hamburg
-- **Forscher**: Moritz Treu
-- **Betreuer**: Prof. Dr. [Name]
-- **Fakultät**: Technik und Informatik
+—
 
-### Nutzungsrechte
-- ✅ **Akademische Forschung**: Frei nutzbar für Bildungszwecke
-- ✅ **Open Source**: Code ist öffentlich einsehbar
-- ❌ **Kommerzielle Nutzung**: Nicht ohne Genehmigung gestattet
-- ❌ **Datenverwendung**: Studiendaten sind nicht öffentlich
+## LLM/Prompting
 
----
+Zentrale Funktion: `src/lib/llm.ts` → `callLLM(prompt, context, dialogMode, systemOverride)`
+- Provider: Groq (Chat Completions)
+- Modelle: `GROQ_MODEL` mit Fallbacks (`GROQ_MODEL_FALLBACKS`), Default: `llama3-8b-8192`
+- Modi:
+  - Beratung (Standard): kurze, fokussierte Antworten, deutsch, kontextsensitiv
+  - Dialogmodus: 1–3 Sätze, Paraphrase + genau 1 Frage, keine Listen/Labels
+- Fehlerbehandlung: API‑Key, Rate‑Limit, Modellverfügbarkeit → klare Fehlermeldungen
 
-## 🔗 Links & Ressourcen
+Prompt‑Beispiele
+- Feldhinweise (JSON only): `/api/generate-instructions`
+- Form‑Chat (feldnah, deutsch, optionaler RAG‑Kontext): `/api/chat`
+- Strenger RAG‑Modus (Kontextpflicht, Quellen, „Nicht gefunden“): `/api/rag/ask`
+- Dialogfluss (Follow‑up/Progress/Antwort): `/api/dialog/message`
 
-### Live Demo
-- **Production**: [https://mein-formularprojekt.vercel.app](https://mein-formularprojekt.vercel.app)
-- **Staging**: [https://formulariq-staging.vercel.app](https://formulariq-staging.vercel.app)
+—
 
-### Dokumentation
-- **API Docs**: [/api-documentation](https://mein-formularprojekt.vercel.app/api-documentation)
-- **Component Library**: [/components](https://mein-formularprojekt.vercel.app/components)
-- **Research Protocol**: [docs/research-protocol.md](docs/research-protocol.md)
+## Wichtige Endpunkte
 
-### Externe Ressourcen
-- **Next.js Docs**: [https://nextjs.org/docs](https://nextjs.org/docs)
-- **Tailwind CSS**: [https://tailwindcss.com/docs](https://tailwindcss.com/docs)
-- **shadcn/ui**: [https://ui.shadcn.com](https://ui.shadcn.com)
-- **HAW Hamburg**: [https://www.haw-hamburg.de](https://www.haw-hamburg.de)
+LLM & Dialog
+- `POST /api/generate-instructions` – generiert knappe Feldhinweise + Welcome
+- `POST /api/chat` – KI‑Hilfe im Formular (mit optionalen RAG‑Quellen)
+- `POST /api/dialog/start` – begrüßt und stellt Frage 1/4
+- `POST /api/dialog/message` – flexible Dialoglogik (Follow‑up, Fortschritt, Abschluss)
+- `GET  /api/debug/llm` – Groq‑Checks und Testaufrufe
 
----
+RAG
+- `POST /api/rag/upload` – Datei indizieren (parse → chunk → embed → speichern)
+- `POST /api/rag/search` – semantische Suche
+- `GET  /api/rag/list` – Dokumente listen
+- `POST /api/rag/delete` – Dokument entfernen
+- `GET  /api/rag/doc/:id` – Vorschau erster Chunks
+- `POST /api/rag/ask` – strenger RAG‑Chat
 
-## 📊 Projektstatistiken
+Sonstiges
+- `POST /api/save` – Variante‑A Daten (logging‑basiert)
+- `POST /api/dialog/save` – Variante‑B Daten (logging‑basiert)
+- `GET  /api/health` – einfache Status‑Probe
 
-### Entwicklung
-- **Entwicklungszeit**: ~6 Monate
-- **Code Lines**: ~15,000 LOC
-- **Komponenten**: 25+ React Components
-- **API Endpoints**: 8 REST APIs
+—
 
-### Forschung
-- **Ziel-Teilnehmer**: 100-200 Personen
-- **Studiendauer**: ~20-25 Minuten pro Person
-- **Datenfelder**: 50+ gemessene Variablen
-- **Varianten**: 2 Hauptvarianten + 3 Fragebögen
+## Code‑Karte (Dateien → Zweck)
 
----
+LLM
+- `src/lib/llm.ts` – zentrale Groq‑Anbindung, Modus‑Prompts, Fallbacks, Fehlerbehandlung
 
-## 🏆 Danksagungen
+RAG
+- `src/lib/rag/parse.ts` – PDF/DOCX/Text‑Parsing, Normalisierung
+- `src/lib/rag/chunk.ts` – absatzsensitives Chunking mit Overlap
+- `src/lib/rag/ollama.ts` – Ollama‑Client für Embeddings/Generate
+- `src/lib/rag/store.ts` – JSON‑Store, Cosine‑Suche, Kontextformatierung
 
-### Team
-- **Hauptentwickler**: Moritz Treu
-- **Wissenschaftliche Betreuung**: Prof. Dr. [Name], HAW Hamburg
-- **UI/UX Consulting**: [Name], falls zutreffend
-- **Beta-Tester**: Studierende und Fakultätsmitglieder der HAW
+APIs (Auswahl)
+- `src/app/api/chat/route.ts` – Form‑Chat (Kontextanreicherung + optionales RAG)
+- `src/app/api/rag/ask/route.ts` – strenger RAG‑Chat
+- `src/app/api/rag/*` – Upload/Liste/Suche/Delete/Preview
+- `src/app/api/generate-instructions/route.ts` – Feldhinweise (JSON Only)
+- `src/app/api/dialog/start|message` – Dialoglogik
+- `src/app/api/ui/snippets/route.ts` – kurze UI‑Texte (Intro/Tipps)
 
-### Technologien
-Besonderer Dank an die Open-Source-Community für:
-- **Vercel** - Hosting & Deployment Platform
-- **Next.js Team** - React Framework
-- **Tailwind Labs** - CSS Framework  
-- **shadcn** - UI Component Library
-- **TypeScript Team** - Type Safety
+UI
+- `src/components/VariantA.tsx` – sichtbares Formular + Chat
+- `src/components/VariantB.tsx` – flexibler Dialog mit Follow‑up‑Erkennung
+- `src/app/rag/page.tsx` – RAG Admin/Debug‑UI
 
----
+—
 
-## 📞 Kontakt
+## Häufige Aufgaben
 
-### Forscher
-**Moritz Treu**  
-Hochschule für Angewandte Wissenschaften Hamburg  
-Fakultät Technik und Informatik  
-📧 [moritz.treu@haw-hamburg.de](mailto:moritz.treu@haw-hamburg.de)
+Embedding‑Modell wechseln (Ollama)
+```env
+OLLAMA_EMBED_MODEL=all-minilm
+```
+Dokumente neu indizieren: `data/rag/chunks.json`/`docs.json` archivieren/löschen, Upload erneut durchführen.
 
-### Institution
-**HAW Hamburg**  
-Berliner Tor 7  
-20099 Hamburg, Deutschland  
-🌐 [www.haw-hamburg.de](https://www.haw-hamburg.de)
+Antwortstil anpassen
+- Beratung: `src/lib/llm.ts` – Basis‑Systemprompt ändern
+- Dialog: `src/app/api/dialog/message/route.ts` – `systemPrompt`/Richtlinien
+- Strenger RAG: `src/app/api/rag/ask/route.ts` – `systemOverride`
 
-### Projektrepository
-🔗 **GitHub**: [github.com/your-username/formulariq](https://github.com/your-username/formulariq)  
-📖 **Dokumentation**: [formulariq.vercel.app/docs](https://formulariq.vercel.app/docs)
+—
 
----
+## Troubleshooting
 
-**Copyright © 2024 HAW Hamburg - FormularIQ Forschungsprojekt**
+„GROQ_API_KEY fehlt“
+- `.env.local` setzen, Dev‑Server neu starten, `GET /api/debug/llm` prüfen
 
-*Entwickelt für wissenschaftliche Zwecke im Bereich Human-Computer Interaction und KI-gestützte Benutzerschnittstellen.*
+„Ollama embeddings failed“
+- Läuft Ollama (`OLLAMA_HOST`)? Modell gepullt? Port erreichbar? Logs prüfen
+
+RAG‑Suche liefert 0 Treffer
+- `RAG_MIN_SCORE` zu hoch? Falsches Embedding‑Modell (Dimensions‑Mismatch) → neu indizieren
+
+„Nicht gefunden“ bei `/api/rag/ask`
+- Erwartet im strengen Modus; falls bekanntes Wissen fehlt: Dokumente/Chunks prüfen
+
+—
+
+## Datenschutz & Sicherheit (Kurz)
+
+- Anonymisierte Studiennutzung; keine persistente User‑Tracking‑IDs
+- API‑Keys als Umgebungsvariablen; keine Logs von Secrets
+- Transportverschlüsselung (Produktivbetrieb) und minimal notwendige Datenerfassung
+
+—
+
+## Lizenz / Zitation
+
+Forschungs-/Lehrzwecke. Bitte im Kontext „FormularIQ – LLM‑gestützte Formularbearbeitung, HAW Hamburg“ referenzieren.
+

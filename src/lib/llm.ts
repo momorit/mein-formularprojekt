@@ -1,4 +1,11 @@
-// src/lib/llm.ts - Groq-only generation (Ollama remains for RAG embeddings in rag/* only)
+// src/lib/llm.ts
+// Zweck: Zentrale LLM-Anbindung für Textgenerierung via Groq Chat Completions.
+//  - Eingabe: prompt (Pflicht), optionaler Kontext, Dialogmodus-Flag, optionales systemOverride
+//  - Ausgabe: String-Antwort des Modells
+//  - Modelle: Gesteuert über GROQ_MODEL (+ GROQ_MODEL_FALLBACKS), Default 'llama3-8b-8192'
+//  - Fehlerfälle: Fehlender API-Key, Rate-Limits, Modellfehler → klare Fehlermeldungen
+// Hinweis: Embeddings/Generierung für RAG laufen lokal über Ollama (siehe src/lib/rag/*)
+// Env: GROQ_API_KEY (erforderlich), GROQ_MODEL, GROQ_MODEL_FALLBACKS
 import Groq from 'groq-sdk';
 
 let groqClient: Groq | null = null;

@@ -1,4 +1,7 @@
-// src/app/api/ui/snippets/route.ts - LLM-generated UI snippets
+// src/app/api/ui/snippets/route.ts
+// Zweck: Kleine, kontextsensitive UI‑Texte (Intro/How‑to/Tipp) per LLM generieren.
+//  - Variante A/B: unterschiedliche Prompts
+//  - Fallbacks: sinnvolle Default‑Texte bei LLM‑Ausfall
 export const runtime = 'nodejs'
 import { NextRequest, NextResponse } from 'next/server'
 import { callLLM } from '@/lib/llm'

@@ -1,3 +1,5 @@
+// src/app/api/rag/delete/route.ts
+// Zweck: Indiziertes Dokument samt Chunks löschen.
 export const runtime = 'nodejs'
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -13,4 +15,3 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: err?.message || 'Delete failed' }, { status: 500 })
   }
 }
-

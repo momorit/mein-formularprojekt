@@ -1,3 +1,9 @@
+// src/app/api/generate-instructions/route.ts
+// Zweck: LLM‑generierte, knappe Feldhinweise (JSON‑only) für Variante A + kurze Welcome‑Message.
+//  - Eingabe: context (frei), feste Felddefinitionen (Demo)
+//  - LLM: callLLM → reines JSON parsen (Codefences werden entfernt)
+//  - Fallback: sinnvolle Default‑Hinweise pro Feld
+//  - Ausgabe: fields[] inkl. hint + welcome_message
 import { NextRequest, NextResponse } from 'next/server'
 export const runtime = 'nodejs'
 import { callLLM } from '@/lib/llm'

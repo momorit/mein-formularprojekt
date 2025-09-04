@@ -1,5 +1,8 @@
-// Lightweight Ollama client for local embeddings and generation
-// Uses OLLAMA_HOST (default http://localhost:11434)
+// src/lib/rag/ollama.ts
+// Zweck: Minimaler HTTP-Client zu Ollama für lokale Embeddings (und optional Generierung).
+//  - Embeddings: POST /api/embeddings { model, prompt }
+//  - Generate:  POST /api/generate   { model, prompt, temperature }
+// Env: OLLAMA_HOST (Default http://localhost:11434), OLLAMA_EMBED_MODEL
 
 const OLLAMA_HOST = process.env.OLLAMA_HOST || 'http://localhost:11434';
 

@@ -1,3 +1,6 @@
+// src/app/api/dialog/start/route.ts
+// Zweck: Dialog (Variante B) initialisieren, kurze Begrüßung + erste Frage (1/4).
+//  - LLM: dialogMode mit knappen Stilregeln; Fallback-Text falls LLM ausfällt
 import { NextRequest, NextResponse } from 'next/server'
 import { callLLM } from '@/lib/llm'
 

@@ -1,4 +1,9 @@
-// src/app/api/chat/route.ts - FIXED MIT LLM
+// src/app/api/chat/route.ts
+// Zweck: Allgemeiner KI‑Chat zur Formularhilfe (Variante A Seitenleiste).
+//  - Kontext: bereits ausgefüllte Felder + verkürzter Verlauf + optionaler RAG‑Kontext
+//  - Prompt: deutsch, feldnah, 2–5 Sätze, keine Listen/Markdown
+//  - LLM: Groq (callLLM); Fallback: deterministische Antworten bei Ausfall
+//  - Antwort: optional mit RAG‑Quellen (Score + Snippet)
 export const runtime = 'nodejs'
 import { NextRequest, NextResponse } from 'next/server'
 import { callLLM } from '@/lib/llm'

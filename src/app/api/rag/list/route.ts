@@ -1,3 +1,5 @@
+// src/app/api/rag/list/route.ts
+// Zweck: Metadaten aller indizierten Dokumente auflisten.
 export const runtime = 'nodejs'
 
 import { NextResponse } from 'next/server'
@@ -11,4 +13,3 @@ export async function GET() {
     return NextResponse.json({ ok: false, error: err?.message || 'List failed' }, { status: 500 })
   }
 }
-

@@ -1,3 +1,6 @@
+// src/app/api/rag/upload/route.ts
+// Zweck: Dateien (PDF/DOCX/TXT) indizieren: parse → chunk → embed (Ollama) → persist (JSON).
+//  - Rückgabe: Doc‑Metadaten inkl. Chunkcount, optionale PDF‑Seitenzahl
 export const runtime = 'nodejs'
 
 import { NextRequest, NextResponse } from 'next/server'

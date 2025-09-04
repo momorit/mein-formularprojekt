@@ -1,4 +1,8 @@
-// src/components/VariantA.tsx - FLOW FIXED
+// src/components/VariantA.tsx
+// Zweck: Sichtbares Formular (Variante A) mit LLM‑generierten Hinweisen und Chat‑Assistent.
+//  - /api/generate-instructions erstellt Felder + knappe Hinweise (JSON)
+//  - /api/ui/snippets erzeugt kurze UI‑Texte (Intro/How‑to/Tipp)
+//  - Chat fragt /api/chat (LLM + optionaler RAG‑Kontext)
 'use client'
 
 import React, { useState, useEffect } from 'react'

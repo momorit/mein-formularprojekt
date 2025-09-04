@@ -1,3 +1,8 @@
+// src/app/rag/page.tsx
+// Zweck: RAG‑Admin/Debug‑UI – Upload, Liste, Vorschau, Suche, strenger RAG‑Chat.
+// Hinweise:
+//  - Upload indiziert lokal via /api/rag/upload (Ollama Embeddings erforderlich)
+//  - 'Chat mit RAG' nutzt /api/rag/ask mit striktem Kontext‑Zwang
 'use client'
 
 import { useEffect, useState } from 'react'

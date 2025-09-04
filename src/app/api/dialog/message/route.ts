@@ -1,4 +1,8 @@
 // src/app/api/dialog/message/route.ts
+// Zweck: Flexibler Dialog-Handler (Variante B) mit Follow‑up‑Erkennung, Fortschrittslogik
+//        und optionaler RAG‑Kontextbeilage. Nutzt Groq (callLLM) mit strikten Stilregeln.
+//  - Erkennung: Nachfrage/Weiter/Antwort → unterschiedlicher Prompt‑Pfad
+//  - Speicher: Antworten per Session, Abschlusszustand, deterministische Fallbacks
 export const runtime = 'nodejs'
 import { NextRequest, NextResponse } from 'next/server'
 import { callLLM } from '@/lib/llm'
@@ -37,7 +41,7 @@ function glossaryAnswer(message: string): string | null {
   return null
 }
 
-// ——— Stil-/Verhaltensleitlinien (knapp, natürlich) ———
+// ——— Stil-/Verhaltensleitlinien  ———
 const styleDirectives = `
 Sprich natürlich und präzise in 1–3 Sätzen.
 Keine Überschriften, Labels, Aufzählungen oder Emojis.

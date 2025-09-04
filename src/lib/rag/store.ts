@@ -1,3 +1,10 @@
+// src/lib/rag/store.ts
+// Zweck: Datei-basierter Vektor-Store (JSON) für RAG-Chunks inkl. Embeddings.
+//  - Dateien: data/rag/chunks.json, data/rag/docs.json (konfigurierbar via RAG_DATA_DIR)
+//  - Operationen: addDocument, listDocuments, deleteDocument, searchTopK
+//  - Suche: Cosine-Similarity in-memory; Dimensionsprüfung und Score-Filter
+//  - Kontextformatierung: Quellenangaben + Snippets, Längenbegrenzung
+// Env: RAG_DATA_DIR, RAG_TOP_K, RAG_MIN_SCORE, RAG_MAX_CONTEXT_CHARS
 import { promises as fs } from 'fs';
 import path from 'path';
 import crypto from 'crypto';

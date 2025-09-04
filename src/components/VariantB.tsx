@@ -1,4 +1,8 @@
-// src/components/VariantB.tsx - FLEXIBLER DIALOG MIT NACHFRAGEN
+// src/components/VariantB.tsx
+// Zweck: Flexibler Dialog (Variante B) mit Nachfragen, Fortschritt und Abschluss.
+//  - /api/dialog/start liefert Begrüßung + erste Frage
+//  - /api/dialog/message steuert Follow‑up/Weiter/Antwort‑Zweige (LLM + RAG)
+//  - RAG‑Quellen werden im UI separat angezeigt
 'use client'
 
 import React, { useState, useEffect, useRef } from 'react'

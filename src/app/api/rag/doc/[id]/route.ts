@@ -1,3 +1,5 @@
+// src/app/api/rag/doc/[id]/route.ts
+// Zweck: Vorschau (erster Auszug) eines Dokumentes anhand der gespeicherten Chunks.
 export const runtime = 'nodejs'
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -33,4 +35,3 @@ export async function GET(_req: NextRequest, ctx: { params: { id: string } }) {
     return NextResponse.json({ ok: false, error: err?.message || 'Preview failed' }, { status: 500 })
   }
 }
-

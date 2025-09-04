@@ -1,5 +1,10 @@
-// Parsing utilities for PDF, DOCX, and plain text
-// Note: pdf-parse and mammoth are optional deps; route should handle absence gracefully
+// src/lib/rag/parse.ts
+// Zweck: Robustes Text-Parsing für PDF, DOCX und Plaintext als Grundlage für RAG.
+//  - PDF: pdf-parse (CJS via createRequire), liefert res.text; wir normalisieren stark
+//  - DOCX: mammoth.extractRawText; Fallback bei Abwesenheit
+//  - TXT/sonstiges: Dateiinhalt als Text
+// Normalisierung: De-Hyphenation, Steuerzeichen entfernen, Unicode-NFKC, Leerraum-Konsolidierung
+// Fehler: Klare, deutsche Fehlermeldungen für fehlende OCR/Module
 
 import { createRequire } from 'node:module'
 

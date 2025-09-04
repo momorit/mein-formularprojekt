@@ -1,3 +1,8 @@
+// src/app/api/rag/ask/route.ts
+// Zweck: Strenger RAG‑QA Endpunkt – Antworten ausschließlich aus Dokumentenkontext.
+//  - Retrieval: searchTopK(query) → formatContextFromHits
+//  - Prompt: System zwingt zu „Nicht gefunden“, wenn Info nicht im Kontext steht; Quellen zitieren
+//  - LLM: Groq (callLLM), während Embeddings/Index lokal bleiben
 export const runtime = 'nodejs'
 
 import { NextRequest, NextResponse } from 'next/server'
