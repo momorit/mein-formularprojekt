@@ -1,4 +1,7 @@
-// src/lib/api.ts - Komplette API-Client Implementation mit allen Fixes
+// src/lib/api.ts
+// Zweck: Leichter Client für die internen Next.js API‑Routen aus dem Frontend.
+//  - Kapselt Fetch‑Aufrufe und vereinheitlicht Fehlerbehandlung
+//  - Enthält Helfer für Variante A/B, Dialog und Study
 const API_BASE = process.env.NODE_ENV === 'production' ? '' : 'http://localhost:8000';
 
 interface APIResponse<T = any> {

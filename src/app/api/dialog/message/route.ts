@@ -1,6 +1,12 @@
 // src/app/api/dialog/message/route.ts
+// Zweck: Flexibler Dialog-Handler (Variante B) mit Follow‑up‑Erkennung, Fortschrittslogik
+//        und optionaler RAG‑Kontextbeilage. Nutzt Groq (callLLM) mit strikten Stilregeln.
+//  - Erkennung: Nachfrage/Weiter/Antwort → unterschiedlicher Prompt‑Pfad
+//  - Speicher: Antworten per Session, Abschlusszustand, deterministische Fallbacks
+export const runtime = 'nodejs'
 import { NextRequest, NextResponse } from 'next/server'
 import { callLLM } from '@/lib/llm'
+import { searchTopK, formatContextFromHits } from '@/lib/rag/store'
 
 interface DialogSession {
   sessionId: string
@@ -14,27 +20,47 @@ interface DialogSession {
 
 const sessions = new Map<string, DialogSession>()
 
-// ——— Stil-/Verhaltensleitlinien (knapp, natürlich) ———
+// Simple glossary for robust fallbacks
+function glossaryAnswer(message: string): string | null {
+  const m = (message || '').toLowerCase()
+  if (m.includes('wdvs')) {
+    return 'WDVS bedeutet Wärmedämmverbundsystem: Dämmplatten (z. B. Mineralwolle) werden außen auf die Fassade geklebt/dübeliert und mit Putzschichten abgeschlossen – das verbessert den Wärmeschutz deutlich.'
+  }
+  if (m.includes('u-wert') || m.includes('u wert') || m.includes('uwert')) {
+    return 'Der U‑Wert (W/m²·K) beschreibt den Wärmeverlust durch ein Bauteil. Je niedriger, desto besser; ungedämmte Fassaden der 1960er liegen oft um 1,6–1,8 W/m²·K.'
+  }
+  if (m.includes('mineralwolle')) {
+    return 'Mineralwolle ist ein nichtbrennbarer Dämmstoff mit guter Wärme- und Schalldämmung; 140 mm ist eine gängige WDVS‑Stärke im Bestand.'
+  }
+  if (m.includes('dämmmaterial') || m.includes('daemmmaterial') || m.includes('dämmstoffe') || m.includes('daemmstoffe') || m.includes('materialien')) {
+    return 'Gängige Dämmmaterialien für WDVS sind Mineralwolle, EPS (expandiertes Polystyrol), XPS (extrudiertes Polystyrol), Holzfaserplatten und seltener Phenolharzplatten – Auswahl nach Brandschutz, Diffusion und Oberfläche.'
+  }
+  if (m.includes('klinker') || m.includes('rotklinker')) {
+    return 'Klinker ist eine harte, wasserabweisende Ziegelfassade; bei WDVS sind geeignete Kleber/Dübel und ggf. Vorbehandlung wichtig.'
+  }
+  return null
+}
+
+// ——— Stil-/Verhaltensleitlinien  ———
 const styleDirectives = `
-Sprich natürlich, knapp und präzise (1–3 Sätze).
-Keine Überschriften/Labels wie "Bestätigung:" oder "Nächste Frage:".
-Erfinde nichts; nutze nur vorhandene Infos oder ausdrücklich genannte Angaben.
-Höchstens EINE kurze Rückfrage, nur wenn wirklich nötig.
-Fokussiere ausschließlich auf die vier Formularfelder und deren Bestätigung/Korrektur.
-Alle Antworten auf Deutsch.
+Sprich natürlich und präzise in 1–3 Sätzen.
+Keine Überschriften, Labels, Aufzählungen oder Emojis.
+Paraphrasiere kurz zur Bestätigung, dann weiterleiten oder gezielt nachfragen (max. 1 Rückfrage).
+Bleibe strikt beim aktuellen Feld; keine Aussagen zu anderen Feldern.
+Nutze bereitgestellten Kontext, erfinde nichts; erwähne Szenario‑Details nur wenn nötig zur Bestätigung.
+Antworte auf Deutsch.
 `.trim()
 
 // ——— System Prompt ———
 const systemPrompt = `
-Du bist ein Energieberater in einem geführten Dialog, der vier Formularfelder nacheinander klärt.
+Rolle: Du bist ein beratender Energieexperte in einem geführten Formular‑Dialog (Variante B). Ziel: vier Felder klären – 1) Gebäudeseite, 2) Dämmmaterial + Stärke, 3) Fassadenmaterial/Besonderheiten, 4) Heizungsart.
 ${styleDirectives}
 
-Regeln:
-- Bei Rückfragen des Nutzers zur aktuellen Frage: bleibe bei dieser Frage und beantworte nur die Nachfrage.
-- Bei klarer Antwort/Bestätigung: kurz bestätigen und direkt zur nächsten Frage überleiten.
-- Bei Unsicherheit: eine einzige gezielte Klärungsfrage stellen.
-- Bei "weiter" ohne Antwort: zur nächsten Frage überleiten (ohne Inhalte zu erfinden).
-- Am Ende: kurz sagen, dass das Formular ausgefüllt wurde und jetzt weitergeleitet wird.
+Dialoglogik:
+- Bestätige die Nutzereingabe knapp in eigenen Worten und leite natürlich zur passenden nächsten Aktion über (nächste Frage oder kurze Rückfrage).
+- Stelle Folgefragen als echte Fragen (Fragezeichen), keine Behauptungen.
+- Bei fachlichen Nachfragen: kurz beantworten und elegant zur aktuellen Frage zurückführen.
+- Nutze nur Kontext/Nutzereingaben; wenn unklar: sag es knapp. Wiederhole keine Szenario‑Details unnötig.
 `.trim()
 
 // ——— Helper ———
@@ -66,15 +92,45 @@ function detectProgressIntent(message: string): boolean {
   return progress.some(k => m === k || m.includes(k))
 }
 
+function detectYesNo(message: string): 'yes' | 'no' | null {
+  const m = norm(message)
+  const yes = ['ja', 'jep', 'jo', 'genau', 'passt', 'stimmt', 'korrekt', 'okay', 'ok']
+  const no = ['nein', 'nee', 'nope', 'nicht', 'keines', 'keine']
+  if (yes.some(x => m === x || m.startsWith(x + ' '))) return 'yes'
+  if (no.some(x => m === x || m.startsWith(x + ' '))) return 'no'
+  return null
+}
+
 function isLikelyAnswer(message: string): boolean {
   const m = norm(message)
+  const yn = detectYesNo(m)
+  if (yn) return true
   const alnumCount = (m.match(/[a-z0-9äöüß]/g) || []).length
-  return alnumCount >= 3 && !detectFollowUpQuestion(m) && !detectProgressIntent(m)
+  return alnumCount >= 2 && !detectFollowUpQuestion(m) && !detectProgressIntent(m)
 }
 
 function buildHistorySnippet(history: DialogSession['conversationHistory']) {
   const last = history.slice(-6).map(h => `${h.role.toUpperCase()}: ${h.content}`).join('\n')
   return last ? `\nVERLAUF (gekürzt):\n${last}\n` : ''
+}
+
+function cleanLLM(text: string): string {
+  if (!text) return text
+  // Trim and normalize whitespace
+  let t = String(text).trim().replace(/[ \t]+/g, ' ')
+  // Split into sentences (simple heuristic)
+  const parts = t.split(/(?<=[.!?])\s+/).filter(Boolean)
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const p of parts) {
+    const key = p.toLowerCase()
+    if (!seen.has(key)) {
+      seen.add(key)
+      out.push(p)
+    }
+    if (out.length >= 3) break
+  }
+  return out.join(' ')
 }
 
 // ——— POST ———
@@ -124,8 +180,6 @@ export async function POST(request: NextRequest) {
     // Abgeschlossen?
     if (session.questionStatus === 'completed') {
       const prompt = [
-        systemPrompt,
-        `KONTEXT: ${session.context}`,
         `STATUS: Dialog abgeschlossen.`,
         `ANTWORTEN: ${JSON.stringify(session.answers, null, 2)}`,
         buildHistorySnippet(session.conversationHistory),
@@ -133,7 +187,7 @@ export async function POST(request: NextRequest) {
         `AUFGABE: In 1–2 Sätzen bestätigen, dass das Formular ausgefüllt wurde und jetzt weitergeleitet wird.`
       ].join('\n\n')
 
-      const llmResponse = await callLLM(prompt, '', true)
+      const llmResponse = await callLLM(prompt, '', true, systemPrompt)
       session.conversationHistory.push({ role: 'assistant', content: llmResponse, ts: Date.now() })
 
       return NextResponse.json({
@@ -153,20 +207,31 @@ export async function POST(request: NextRequest) {
     let saveAnswer = false
     let savedAnswerText = ''
 
+    // Retrieve RAG context for the user's message
+    let ragHits: any[] = []
+    let ragCtx = ''
+    try {
+      const hits = await searchTopK(String(message).slice(0, 2000))
+      ragHits = hits
+      if (hits.length > 0) {
+        ragCtx = formatContextFromHits(hits)
+      }
+    } catch (e) {
+      console.warn('Dialog RAG retrieval failed:', e)
+    }
+
     // Priorität: Follow-up vor Progress
     if (isFollowUp) {
-      // Rückfrage: bei der Frage bleiben, nicht springen
+      // Rückfrage: zuerst direkt beantworten, dann zur aktuellen Frage zurückführen
       prompt = [
-        systemPrompt,
-        `KONTEXT: ${session.context}`,
         `AKTUELLE FRAGE (${idx + 1}/${total}): "${currentQ}"`,
         buildHistorySnippet(session.conversationHistory),
         `NUTZER (Rückfrage): ${message}`,
         `ANTWORT-RICHTLINIEN:
-- Beantworte nur die Nachfrage.
-- Kein Fortschritt. Keine neue Frage.
-- Keine Labels/Listen. 1–3 Sätze.
-- Eine kurze Anschlussfrage ist erlaubt, z. B.: "Möchten Sie das so eintragen oder noch etwas dazu klären?"`
+- Beantworte die Nachfrage direkt und konkret (1–2 Sätze).
+- Danach führe in 1 Satz natürlich zur aktuellen Frage zurück (kein Fortschritt, nur Bezug).
+- Spiegele mindestens ein Schlüsselwort des Nutzers in der Antwort.
+- Keine Listen/Labels, insgesamt 1–3 Sätze.`
       ].join('\n\n')
     } else if (isProgress) {
       // Weiter ohne Antwort speichern
@@ -174,22 +239,18 @@ export async function POST(request: NextRequest) {
       if (nextIndex < total) {
         const nextQ = session.mainQuestions[nextIndex]
         prompt = [
-          systemPrompt,
-          `KONTEXT: ${session.context}`,
           `BISHERIGE ANTWORTEN: ${JSON.stringify(session.answers, null, 2)}`,
           buildHistorySnippet(session.conversationHistory),
           `NUTZER (Weiter): ${message}`,
           `AUFGABE:
 - Kurz bestätigen, dass wir fortfahren.
-- Stelle die nächste Frage natürlich in 1–2 Sätzen.`,
+- Stelle die nächste Frage natürlich in 1–2 Sätzen (als Frage, nicht als Aussage).`,
           `NÄCHSTE FRAGE (${nextIndex + 1}/${total}): "${nextQ}"`
         ].join('\n\n')
         advance = true
       } else {
         // Abschluss
         prompt = [
-          systemPrompt,
-          `KONTEXT: ${session.context}`,
           `ANTWORTEN: ${JSON.stringify(session.answers, null, 2)}`,
           buildHistorySnippet(session.conversationHistory),
           `NUTZER: ${message}`,
@@ -206,22 +267,18 @@ export async function POST(request: NextRequest) {
       if (nextIndex < total) {
         const nextQ = session.mainQuestions[nextIndex]
         prompt = [
-          systemPrompt,
-          `KONTEXT: ${session.context}`,
           `AKTUELLE FRAGE (${idx + 1}/${total}): "${currentQ}"`,
           `NUTZER-ANGABE: "${message}"`,
           `AUFGABE:
 - Kurz bestätigen (natürlich, ohne Labels).
 - In 1 Satz optional eine knappe fachliche Notiz (nur wenn sinnvoll).
-- Dann natürlich zur nächsten Frage überleiten (1 Satz).`,
+- Dann natürlich zur nächsten Frage überleiten (1 Satz), als Frage formuliert.`,
           `NÄCHSTE FRAGE (${nextIndex + 1}/${total}): "${nextQ}"`
         ].join('\n\n')
         advance = true
       } else {
         // Letzte Antwort -> Abschlussformulierung
         prompt = [
-          systemPrompt,
-          `KONTEXT: ${session.context}`,
           `LETZTE FRAGE (${idx + 1}/${total}): "${currentQ}"`,
           `NUTZER-ANGABE: "${message}"`,
           `BISHERIGE ANTWORTEN: ${JSON.stringify(session.answers, null, 2)}`,
@@ -234,8 +291,6 @@ export async function POST(request: NextRequest) {
     } else {
       // Unklar: eine gezielte Rückfrage, ohne Fortschritt
       prompt = [
-        systemPrompt,
-        `KONTEXT: ${session.context}`,
         `AKTUELLE FRAGE (${idx + 1}/${total}): "${currentQ}"`,
         buildHistorySnippet(session.conversationHistory),
         `NUTZER: ${message}`,
@@ -245,7 +300,54 @@ export async function POST(request: NextRequest) {
       ].join('\n\n')
     }
 
-    const llmResponse = await callLLM(prompt, '', true)
+    // Try LLM; fallback to deterministic messages if it fails
+    let llmResponse: string
+    let usedLLM = true
+    let llmErrorMsg: string | undefined
+    try {
+      llmResponse = await callLLM(prompt, ragCtx, true, systemPrompt, { provider: 'groq' })
+    } catch (llmErr) {
+      console.error('⚠️ LLM unavailable for dialog; using fallback:', llmErr)
+      usedLLM = false
+      llmErrorMsg = llmErr instanceof Error ? llmErr.message : String(llmErr)
+
+      // Build simple, on-track fallback response
+      if (isFollowUp) {
+        const gloss = glossaryAnswer(message)
+        if (gloss) {
+          llmResponse = `${gloss} Kurz zurück zur aktuellen Frage: ${currentQ}`
+        } else {
+          llmResponse = `Danke für die Rückfrage. Kurz zurück zur aktuellen Frage: ${currentQ}`
+        }
+      } else if (isProgress) {
+        const nextIndex = idx + 1
+        if (nextIndex < total) {
+          const nextQ = session.mainQuestions[nextIndex]
+          llmResponse = `Alles klar, wir machen weiter. Nächste Frage: ${nextQ}`
+          advance = true
+        } else {
+          llmResponse = 'Vielen Dank. Das Formular ist ausgefüllt und wird jetzt weitergeleitet.'
+          markCompleted = true
+        }
+      } else if (isLikelyAnswer(message)) {
+        saveAnswer = true
+        savedAnswerText = message
+        const nextIndex = idx + 1
+        if (nextIndex < total) {
+          const nextQ = session.mainQuestions[nextIndex]
+          llmResponse = `Danke, verstanden. Nächste Frage: ${nextQ}`
+          advance = true
+        } else {
+          llmResponse = 'Danke, verstanden. Das Formular ist ausgefüllt und wird jetzt weitergeleitet.'
+          markCompleted = true
+        }
+      } else {
+        llmResponse = `Könnten Sie das bitte präzisieren? Zurzeit sind wir bei: ${currentQ}`
+      }
+    }
+
+    // Clean repetition and enforce brevity
+    llmResponse = cleanLLM(llmResponse)
 
     if (saveAnswer) {
       // Speichere neutral als frage_1..frage_4 (du kannst hier gern sprechende Keys verwenden)
@@ -269,13 +371,18 @@ export async function POST(request: NextRequest) {
       total_questions: total,
       dialog_complete: session.questionStatus === 'completed',
       answers_collected: session.answers,
-      can_ask_followup: session.questionStatus !== 'completed'
+      can_ask_followup: session.questionStatus !== 'completed',
+      llm_used: usedLLM,
+      ...(usedLLM ? {} : { llm_error: llmErrorMsg }),
+      rag_used: Array.isArray(ragHits) && ragHits.length > 0,
+      rag_hits: (ragHits || []).map(h => ({ id: h.id, source: h.source, page: h.page, score: Number((h.score ?? 0).toFixed?.(2) ?? 0) }))
     })
   } catch (error) {
     console.error('❌ Flexible Dialog API error:', error)
     return NextResponse.json({
       response: 'Entschuldigung, es gab einen Fehler. Können Sie Ihre Nachricht wiederholen?',
-      session_id: 'error'
+      session_id: 'error',
+      llm_used: false
     }, { status: 500 })
   }
 }

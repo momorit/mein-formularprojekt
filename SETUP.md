@@ -1,164 +1,100 @@
-# Setup Anweisungen - LLM-gestützte Formularbearbeitung
+# Setup – Next.js App mit integrierten API Routes
 
-## Projekt Struktur
+Dieser Stand nutzt ausschließlich Next.js (App Router) mit integrierten API‑Routen. Es gibt kein separates Backend (FastAPI/Ollama) mehr.
+
+## Projektstruktur (vereinfacht)
 
 ```
 project-root/
-├── frontend/ (Next.js)
-├── backend/ (FastAPI)
-└── LLM Output/ (wird automatisch erstellt)
+├── src/app/                 # Pages, Layout, API Routes
+│   └── api/...              # Server-Only Endpoints (Chat, Dialog, Fragebögen, Studie)
+├── src/components/          # UI & Feature-Komponenten
+├── src/lib/                 # Utils & Server-Libs (LLM, API-Helpers)
+├── public/                  # Statische Assets
+├── next.config.mjs          # Next.js Konfiguration
+└── README.md / SETUP.md     # Doku
 ```
 
 ## Voraussetzungen
 
-1. **Node.js** (Version 18+)
-2. **Python** (Version 3.8+)
-3. **Ollama** installiert und laufend mit LLaMA3 Modell
+1. Node.js 18+
+2. Groq API Key (für LLM): `GROQ_API_KEY`
+3. Optional: Google Cloud Storage (für persistente Speicherung)
 
-### Ollama Setup
-```bash
-# Ollama installieren (falls noch nicht vorhanden)
-curl -fsSL https://ollama.ai/install.sh | sh
-
-# LLaMA3 Modell herunterladen
-ollama pull llama3
-
-# Ollama starten (läuft als Service)
-ollama serve
-```
-
-## Installation
-
-### 1. Frontend (Next.js)
+## Installation & Start
 
 ```bash
-# In das Frontend-Verzeichnis wechseln
-cd frontend
-
 # Dependencies installieren
 npm install
 
-# Development Server starten
+# Dev-Server starten (http://localhost:3000)
 npm run dev
 ```
 
-Das Frontend läuft dann auf `http://localhost:3000`
+## Umgebungsvariablen
 
-### 2. Backend (FastAPI)
+Erstelle `.env.local` im Projektwurzelverzeichnis:
 
-```bash
-# In das Backend-Verzeichnis wechseln
-cd backend
+```
+# LLM (Groq)
+GROQ_API_KEY=...dein_key...
 
-# Virtual Environment erstellen (empfohlen)
-python -m venv venv
-
-# Virtual Environment aktivieren
-# Windows:
-venv\Scripts\activate
-# Linux/Mac:
-source venv/bin/activate
-
-# Dependencies installieren
-pip install -r requirements.txt
-
-# FastAPI Server starten
-python main.py
+# Optional: Google Cloud Storage
+GOOGLE_CLOUD_PROJECT_ID=your-project-id
+GOOGLE_CLOUD_BUCKET_NAME=your-bucket
+# Entweder Base64 des JSON oder das JSON direkt
+GOOGLE_CLOUD_CREDENTIALS={"type":"service_account",...}
+# oder
+# GOOGLE_CLOUD_CREDENTIALS=BASE64_ENCODED_JSON
 ```
 
-Das Backend läuft dann auf `http://localhost:8000`
+Ohne GCS-Variablen werden Daten strukturiert in den Server-Logs ausgegeben (Vercel‑kompatibel).
 
 ## Nutzung
 
-### Variante A - Sichtbares Formular
-1. Öffne `http://localhost:3000`
-2. Klicke auf "Variante A starten"
-3. Gib optional Kontextinformationen ein
-4. Klicke auf "Anweisungen generieren"
-5. Fülle das generierte Formular aus
-6. Nutze den Chat für Hilfe
-7. Speichere als JSON
+- Variante A – Sichtbares Formular: `http://localhost:3000/form-a`
+- Variante B – Dialog-System: `http://localhost:3000/form-b`
+- Studienflow: `http://localhost:3000/study`
 
-### Variante B - Dialog-basiert
-1. Öffne `http://localhost:3000`
-2. Klicke auf "Variante B starten"
-3. Optional: PDF hochladen oder Kontext eingeben
-4. Klicke auf "Dialog starten"
-5. Beantworte die Fragen Schritt für Schritt
-6. Nutze "?" für Rückfragen
-7. Speichere die Ergebnisse
+Die App speichert Form-/Dialog-/Fragebogen‑Daten über Next.js API Routes unter `/api/...`.
 
-## Dateien Struktur
+## Wichtige API‑Endpoints
 
-### Neue/Geänderte Dateien:
+- `/api/health` – Health Check
+- `/api/generate-instructions` – Formularanweisungen (Variante A)
+- `/api/chat` – Chat‑Hilfe (LLM, Variante A)
+- `/api/dialog/start|message|save` – Dialogsteuerung (Variante B)
+- `/api/questionnaire/save` – Fragebogen‑Daten
+- `/api/study/save` – Gesamt‑Studiendaten (mit optionalem GCS)
 
-1. **src/app/form-b/page.tsx** - Dialog-Interface (Variante B)
-2. **src/lib/api.ts** - Erweiterte API-Funktionen
-3. **backend/main.py** - Vollständiges FastAPI Backend
-4. **backend/requirements.txt** - Python Dependencies
-5. **src/app/page.tsx** - Aktualisierte Hauptseite
+Debug/Diagnose:
+- `/api/debug/llm` – Testet LLM‑Konnektivität (Groq)
+- `/api/debug/gcs` – Testet GCS‑Konnektivität (nur falls Variablen gesetzt)
 
-### Ausgabe-Ordner:
-- **LLM Output/** - Alle JSON-Ausgaben werden hier gespeichert
-  - `output_*.json` (Variante A)
-  - `dialog_output_*.json` (Variante B)
+## Häufige Probleme
 
-## Debugging
+1) LLM antwortet nicht
+- Prüfe `GROQ_API_KEY` in `.env.local`
+- `GET /api/debug/llm` aufrufen und Rückgabe ansehen
 
-### Häufige Probleme:
+2) Google Cloud Storage speichert nicht
+- Prüfe Variablen (`/api/debug/gcs`)
+- Service‑Account‑Rolle: `Storage Object Admin` auf den Bucket
 
-1. **Ollama nicht erreichbar**
-   - Prüfe: `ollama list` (zeigt installierte Modelle)
-   - Starte: `ollama serve`
-
-2. **CORS-Fehler**
-   - Backend und Frontend müssen beide laufen
-   - Frontend: `localhost:3000`
-   - Backend: `localhost:8000`
-
-3. **PDF-Upload Probleme**
-   - Stelle sicher, dass nur PDF-Dateien hochgeladen werden
-   - Prüfe Backend-Logs für detaillierte Fehlermeldungen
-
-4. **LLM-Antworten unvollständig**
-   - Das passiert manchmal - die App hat Fallback-Mechanismen
-   - Prüfe Backend-Logs für Details
-
-## Entwicklung
-
-### Backend erweitern:
-- Neue Endpoints in `backend/main.py` hinzufügen
-- Pydantic Models für Request/Response definieren
-
-### Frontend erweitern:
-- Neue API-Funktionen in `src/lib/api.ts`
-- UI-Komponenten in `src/components/ui/`
-
-## Troubleshooting
-
-### Backend startet nicht:
+3) Build/Start-Probleme
 ```bash
-# Dependencies neu installieren
-pip install -r requirements.txt --force-reinstall
-
-# Python-Version prüfen
-python --version
+rm -rf .next node_modules
+npm install
+npm run dev
 ```
 
-### Frontend startet nicht:
-```bash
-# Dependencies neu installieren
-npm install --force
+## Entwicklungshinweise
 
-# Cache leeren
-npm run build
-```
+- Server‑Only Logik (LLM, GCS) liegt in API‑Routes bzw. `src/lib/llm.ts`
+- Client‑Komponenten befinden sich unter `src/components/`
+- Für Studienfluss siehe `src/app/study/page.tsx`
 
-### LLM antwortet nicht:
-```bash
-# Ollama Status prüfen
-ollama ps
+## Deployment
 
-# Modell testen
-ollama run llama3 "Hallo, kannst du mir helfen?"
-```
+- Empfohlen: Vercel. Env‑Vars im Dashboard setzen.
+- Ohne GCS werden die Daten sicher in Logs ausgegeben (Export möglich).

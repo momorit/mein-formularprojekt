@@ -1,4 +1,8 @@
-// src/components/VariantA.tsx - FLOW FIXED
+// src/components/VariantA.tsx
+// Zweck: Sichtbares Formular (Variante A) mit LLM‑generierten Hinweisen und Chat‑Assistent.
+//  - /api/generate-instructions erstellt Felder + knappe Hinweise (JSON)
+//  - /api/ui/snippets erzeugt kurze UI‑Texte (Intro/How‑to/Tipp)
+//  - Chat fragt /api/chat (LLM + optionaler RAG‑Kontext)
 'use client'
 
 import React, { useState, useEffect } from 'react'
@@ -49,6 +53,28 @@ export default function VariantA({ onComplete, startTime }: VariantAProps) {
   const [isChatLoading, setIsChatLoading] = useState(false)
   const [isFormGenerated, setIsFormGenerated] = useState(false)
   const [formFields, setFormFields] = useState<FormField[]>([])
+  const [uiSnippets, setUiSnippets] = useState<{ start_intro?: string; howto?: string; scenario_short?: string; tip_text?: string }>({})
+
+  useEffect(() => {
+    ;(async () => {
+      try {
+        const res = await fetch('/api/ui/snippets', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ variant: 'A', context: 'Mehrfamilienhaus Baujahr 1965, Eingangsfassade Südseite, WDVS 140mm Mineralwolle, Ölheizung, Mieterin EG rechts 57.5m²' })
+        })
+        if (res.ok) {
+          const data = await res.json()
+          setUiSnippets({
+            start_intro: data.start_intro,
+            howto: data.howto,
+            scenario_short: data.scenario_short,
+            tip_text: data.tip_text,
+          })
+        }
+      } catch {}
+    })()
+  }, [])
 
   const generateFormInstructions = async () => {
     setIsGenerating(true)
@@ -77,17 +103,7 @@ export default function VariantA({ onComplete, startTime }: VariantAProps) {
       
       setChatHistory([{
         role: 'assistant',
-        message: `Willkommen! Ich helfe Ihnen beim Ausfüllen des Formulars für Ihre Gebäude-Energieberatung.
-
-Das Formular ist jetzt bereit und enthält Hinweise zu jedem Feld. Bei schwierigen Feldern (markiert mit ⚠️) können Sie mich gerne um detaillierte Hilfe bitten.
-
-Ihr Szenario: Sie besitzen ein Mehrfamilienhaus (Baujahr 1965) in der Siedlungsstraße 23. 
-Es hat eine Rotklinkerfassade und 10 Wohneinheiten. Sie planen eine WDVS-Sanierung 
-der Eingangsfassade zur Straße (Südseite) mit 140mm Mineralwolle-Dämmung. 
-Das Gebäude hat eine Ölheizung im Keller. Sie müssen für eine Mieterin 
-(EG rechts, 57,5m²) die mögliche Mieterhöhung berechnen.
-
-Beginnen Sie einfach mit dem Ausfüllen und fragen Sie bei Unsicherheiten!`,
+        message: data.welcome_message || 'Willkommen! Das Formular enthält Hinweise pro Feld. Der KI‑Chat hilft bei Bedarf.',
         timestamp: new Date()
       }])
       
@@ -126,7 +142,8 @@ Beginnen Sie einfach mit dem Ausfüllen und fragen Sie bei Unsicherheiten!`,
       body: JSON.stringify({ 
         message: currentMessage,
         context: 'Mehrfamilienhaus Baujahr 1965, Eingangsfassade Südseite, WDVS-Sanierung 140mm Mineralwolle, Ölheizung, Mieterin EG rechts 57.5m²',
-        formValues: formValues // Aktueller Formular-Zustand
+        formValues: formValues, // Aktueller Formular-Zustand
+        history: chatHistory.map(h => ({ role: h.role, message: h.message }))
       })
     })
     
@@ -311,40 +328,14 @@ const handleSubmit = async (e: React.FormEvent) => {
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="bg-blue-50 p-6 rounded-lg">
-                <h3 className="text-lg font-semibold text-blue-800 mb-3">📋 Ihr Szenario</h3>
-                <p className="text-blue-900 mb-3">
-                  Sie besitzen ein Mehrfamilienhaus (Baujahr 1965) in der Siedlungsstraße 23. 
-                  Es hat eine Rotklinkerfassade und 10 Wohneinheiten. Sie planen eine WDVS-Sanierung 
-                  der Eingangsfassade zur Straße (Südseite) mit 140mm Mineralwolle-Dämmung. 
-                  Das Gebäude hat eine Ölheizung im Keller. Sie müssen für eine Mieterin 
-                  (EG rechts, 57,5m²) die mögliche Mieterhöhung berechnen.
-                </p>
-                <p className="text-blue-800 text-sm">
-                  <strong>Ziel:</strong> Erfassung der Gebäudedaten für eine Energieberatung zur Berechnung 
-                  möglicher Mieterhöhungen nach der geplanten Sanierung.
-                </p>
+                <h3 className="text-lg font-semibold text-blue-800 mb-3">📋 Kurzinfo</h3>
+                <p className="text-blue-900 mb-1">{uiSnippets.start_intro || 'Sichtbares Formular mit kompakten Hinweisen und KI‑Chat bei Bedarf.'}</p>
+                <p className="text-blue-900">{uiSnippets.scenario_short || 'Kurzfassung des Szenarios verfügbar.'}</p>
               </div>
 
               <div className="bg-green-50 p-6 rounded-lg">
-                <h3 className="text-lg font-semibold text-green-800 mb-3">💡 So funktioniert Variante A</h3>
-                <ul className="space-y-2 text-green-700">
-                  <li className="flex items-start space-x-2">
-                    <span className="text-green-600 mt-1">•</span>
-                    <span>Sie sehen alle Formularfelder gleichzeitig</span>
-                  </li>
-                  <li className="flex items-start space-x-2">
-                    <span className="text-green-600 mt-1">•</span>
-                    <span>Jedes Feld hat Ausfüllhinweise</span>
-                  </li>
-                  <li className="flex items-start space-x-2">
-                    <span className="text-green-600 mt-1">•</span>
-                    <span>Schwierige Felder sind markiert (⚠️)</span>
-                  </li>
-                  <li className="flex items-start space-x-2">
-                    <span className="text-green-600 mt-1">•</span>
-                    <span>KI-Chat-Assistent hilft bei Fragen</span>
-                  </li>
-                </ul>
+                <h3 className="text-lg font-semibold text-green-800 mb-3">💡 Vorgehen</h3>
+                <p className="text-green-800">{uiSnippets.howto || 'Füllen Sie die Felder aus, beachten Sie die Hinweise und nutzen Sie bei Bedarf den KI‑Chat.'}</p>
               </div>
 
               <Button 
@@ -477,9 +468,8 @@ const handleSubmit = async (e: React.FormEvent) => {
                     </Button>
                   </div>
 
-                  <div className="text-xs text-gray-500 bg-yellow-50 p-2 rounded border">
-                    💡 <strong>Tipp:</strong> Fragen Sie z.B. "Wie berechne ich die Fassadenfläche?" 
-                    oder "Was bedeutet WDVS?"
+                  <div className="text-xs text-gray-700 bg-yellow-50 p-2 rounded border">
+                    <strong>Tipp:</strong> {uiSnippets.tip_text || 'Fragen Sie bei Unsicherheiten kurz im KI‑Chat nach.'}
                   </div>
                 </div>
               </CardContent>

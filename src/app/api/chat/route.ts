@@ -1,42 +1,97 @@
-// src/app/api/chat/route.ts - FIXED MIT LLM
+// src/app/api/chat/route.ts
+// Zweck: Allgemeiner KI‑Chat zur Formularhilfe (Variante A Seitenleiste).
+//  - Kontext: bereits ausgefüllte Felder + verkürzter Verlauf + optionaler RAG‑Kontext
+//  - Prompt: deutsch, feldnah, 2–5 Sätze, keine Listen/Markdown
+//  - LLM: Groq (callLLM); Fallback: deterministische Antworten bei Ausfall
+//  - Antwort: optional mit RAG‑Quellen (Score + Snippet)
+export const runtime = 'nodejs'
 import { NextRequest, NextResponse } from 'next/server'
 import { callLLM } from '@/lib/llm'
+import { searchTopK, formatContextFromHits } from '@/lib/rag/store'
+
+function sanitizeSnippet(s: string): string {
+  return s.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '').slice(0, 300)
+}
 
 export async function POST(request: NextRequest) {
   try {
-    const { message, context, formValues } = await request.json()
+    const { message, context, formValues, history } = await request.json()
     
     console.log('💬 Chat API called:', { message, hasContext: !!context })
     
     // Kontext für bessere LLM-Antworten aufbauen
-    const enhancedContext = `
-FORMULAR-KONTEXT: Gebäude-Energieberatung für Mehrfamilienhaus
-SZENARIO: Baujahr 1965, WDVS-Sanierung Eingangsfassade Südseite, 140mm Mineralwolle
+    const filled = formValues ? Object.entries(formValues)
+      .filter(([_, value]) => value && String(value).trim())
+      .map(([key, value]) => `- ${key}: ${value}`)
+      .join('\n') : 'Noch keine Felder ausgefüllt'
+
+    const lastTurns = Array.isArray(history)
+      ? history.slice(-6).map((h: any) => `${h.role?.toUpperCase()}: ${h.message || h.content || ''}`).join('\n')
+      : ''
+
+    let enhancedContext = `
+SZENARIO:
+Mehrfamilienhaus, Baujahr 1965, Rotklinkerfassade, 10 WE.
+Geplante Maßnahme: WDVS an der Eingangsfassade (Südseite) mit 140mm Mineralwolle.
+Heizung: Ölheizung im Keller.
+Aufgabe: Gebäude-Energieberatung und korrekte Formularbefüllung.
 
 BEREITS AUSGEFÜLLTE FELDER:
-${formValues ? Object.entries(formValues)
-  .filter(([key, value]) => value && String(value).trim())
-  .map(([key, value]) => `- ${key}: ${value}`)
-  .join('\n') : 'Noch keine Felder ausgefüllt'}
+${filled}
 
-NUTZER-FRAGE: ${message}
+VERLAUF (gekürzt):
+${lastTurns}
+`
 
-AUFGABE: Beantworte die Frage hilfreich und spezifisch. Nutze das Szenario zur Unterstützung.
+    // RAG: relevante Dokumentpassagen beifügen (falls vorhanden)
+    let ragHits: any[] = []
+    try {
+      const hits = await searchTopK(String(message || '').slice(0, 2000))
+      ragHits = hits
+      if (ragHits.length > 0) {
+        const ragCtx = formatContextFromHits(ragHits)
+        enhancedContext += `\n\n${ragCtx}`
+      }
+    } catch (ragErr) {
+      console.warn('RAG retrieval failed (continuing without RAG):', ragErr)
+    }
+
+    // Präziser Prompt: konkret, feldnah, deutsch
+    const prompt = `
+Beantworte die NUTZER-FRAGE präzise und feldnah auf Deutsch.
+- Beziehe dich, wo sinnvoll, auf konkrete Formularfelder (mit Bezeichnung).
+- Nenne Einheiten oder typische Wertebereiche, falls relevant (z.B. U-Wert in W/m²·K).
+- Wenn die Frage unklar ist: stelle GENAU EINE gezielte Rückfrage.
+- Stil: 2–5 Sätze, keine Emojis, keine Aufzählungen/Listen, keine Markdown, kein Floskel-Overhead.
+
+NUTZER-FRAGE:
+${message}
+`
+
+    const systemOverride = `
+Antwortregeln: natürlich, höflich, sachlich; keine Emojis/Listen/Markdown.
+Wenn der Nutzer nur ein Stichwort liefert (z.B. "Südseite"), interpretiere es fachlich korrekt (z.B. Himmelsrichtung: Süden) und erkläre in 1–2 Sätzen die Relevanz fürs Formular.
+Wenn möglich, schlage eine plausible Eintragung oder nächsten Schritt vor (z.B. Feldname + kurzer Hinweis).
+Beziehe dich möglichst wörtlich auf zentrale Begriffe des Nutzers, damit der Bezug klar ist.
 `
 
     try {
-      const llmResponse = await callLLM(
-        message,
-        enhancedContext,
-        false // Chat-Modus, nicht Dialog-Modus
-      )
+      const llmResponse = await callLLM(prompt, enhancedContext, false, systemOverride, { provider: 'groq' })
       
       console.log('✅ LLM Response generated successfully')
       
       return NextResponse.json({
         response: llmResponse,
         context_understanding: "LLM mit Formular-Kontext",
-        llm_used: true
+        llm_used: true,
+        rag_used: Array.isArray(ragHits) && ragHits.length > 0,
+        rag_hits: (ragHits || []).map(h => ({
+          id: h.id,
+          source: h.source,
+          page: h.page,
+          score: typeof h.score === 'number' ? Number(h.score.toFixed(2)) : undefined,
+          snippet: typeof h.text === 'string' ? sanitizeSnippet(h.text) : undefined,
+        })),
       })
       
     } catch (llmError) {
@@ -48,7 +103,8 @@ AUFGABE: Beantworte die Frage hilfreich und spezifisch. Nutze das Szenario zur U
       return NextResponse.json({
         response: fallbackResponse,
         context_understanding: "Fallback-System",
-        llm_used: false
+        llm_used: false,
+        llm_error: llmError instanceof Error ? llmError.message : String(llmError)
       })
     }
     
@@ -64,6 +120,12 @@ AUFGABE: Beantworte die Frage hilfreich und spezifisch. Nutze das Szenario zur U
 
 function generateIntelligentFallback(message: string, formValues: any): string {
   const lowerMessage = message.toLowerCase()
+  if (lowerMessage.includes('wdvs')) {
+    return `WDVS bedeutet Wärmedämmverbundsystem: Dämmplatten (z. B. Mineralwolle) werden außen auf die Fassade montiert und mit Putzschichten abgeschlossen, um den Wärmeschutz deutlich zu verbessern.`
+  }
+  if (lowerMessage.includes('u-wert') || lowerMessage.includes('u wert') || lowerMessage.includes('uwert')) {
+    return `Der U‑Wert (W/m²·K) gibt an, wie viel Wärme durch ein Bauteil verloren geht. Je niedriger, desto besser; ungedämmte Fassaden der 1960er liegen oft um 1,6–1,8 W/m²·K.`
+  }
   
   // Spezifische Hilfeantworten basierend auf dem Szenario
   if (lowerMessage.includes('gebäude') || lowerMessage.includes('fassade')) {
@@ -73,7 +135,7 @@ Das Gebäude ist ein Mehrfamilienhaus aus **Baujahr 1965** mit Rotklinkerfassade
   }
   
   if (lowerMessage.includes('dämmung') || lowerMessage.includes('material')) {
-    return `Für Ihr Vorhaben ist **140mm Mineralwolle-Dämmung** vorgesehen. Dies ist eine bewährte Lösung für WDVS-Sanierungen und bietet gute Dämmeigenschaften.`
+    return `Für WDVS werden häufig Mineralwolle, EPS (expandiertes Polystyrol), XPS (extrudiertes Polystyrol) oder Holzfaser verwendet. 140 mm Mineralwolle ist im Bestand eine gängige, brandsichere Wahl.`
   }
   
   if (lowerMessage.includes('heizung') || lowerMessage.includes('energie')) {
